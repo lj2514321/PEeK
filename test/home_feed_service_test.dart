@@ -88,6 +88,47 @@ void main() {
       ),
     );
   });
+
+  test(
+    'refreshes continue watching without reloading recommendations',
+    () async {
+      final library = _FakeLibraryService(
+        recommendations: const [
+          MediaItem(
+            id: 'recommendation-id',
+            name: '每日推荐',
+            kind: MediaItemKind.movie,
+          ),
+        ],
+        resumeItems: const [
+          MediaItem(id: 'resume-id', name: '继续观看', kind: MediaItemKind.movie),
+        ],
+        latestMovies: const [
+          MediaItem(id: 'movie-id', name: '最新电影', kind: MediaItemKind.movie),
+        ],
+      );
+      final service = HomeFeedService(library);
+      final currentFeed = await service.load(account);
+
+      library.resetRequestCounts();
+      final refreshed = await service.refreshContinueWatching(
+        account,
+        currentFeed,
+      );
+
+      expect(library.recommendationRequests, 0);
+      expect(library.resumeRequests, 1);
+      expect(library.latestMovieRequests, 0);
+      expect(library.latestEpisodeRequests, 0);
+      expect(library.lastResumeForceRefresh, isTrue);
+      expect(
+        refreshed.dailyRecommendations,
+        same(currentFeed.dailyRecommendations),
+      );
+      expect(refreshed.latestMovies, same(currentFeed.latestMovies));
+      expect(refreshed.latestEpisodes, same(currentFeed.latestEpisodes));
+    },
+  );
 }
 
 class _FakeLibraryService extends MediaLibraryService {
@@ -106,6 +147,19 @@ class _FakeLibraryService extends MediaLibraryService {
   final List<MediaItem> latestEpisodes;
   final MediaLibraryException? resumeItemsError;
   final MediaLibraryException? latestMoviesError;
+  int recommendationRequests = 0;
+  int resumeRequests = 0;
+  int latestMovieRequests = 0;
+  int latestEpisodeRequests = 0;
+  bool? lastResumeForceRefresh;
+
+  void resetRequestCounts() {
+    recommendationRequests = 0;
+    resumeRequests = 0;
+    latestMovieRequests = 0;
+    latestEpisodeRequests = 0;
+    lastResumeForceRefresh = null;
+  }
 
   @override
   Future<List<MediaItem>> getRecommendations(
@@ -113,6 +167,7 @@ class _FakeLibraryService extends MediaLibraryService {
     int limit = 6,
     bool forceRefresh = false,
   }) async {
+    recommendationRequests += 1;
     return recommendations;
   }
 
@@ -122,6 +177,8 @@ class _FakeLibraryService extends MediaLibraryService {
     int limit = 18,
     bool forceRefresh = false,
   }) async {
+    resumeRequests += 1;
+    lastResumeForceRefresh = forceRefresh;
     if (resumeItemsError != null) throw resumeItemsError!;
     return resumeItems;
   }
@@ -132,6 +189,7 @@ class _FakeLibraryService extends MediaLibraryService {
     int limit = 18,
     bool forceRefresh = false,
   }) async {
+    latestMovieRequests += 1;
     if (latestMoviesError != null) throw latestMoviesError!;
     return latestMovies;
   }
@@ -142,6 +200,7 @@ class _FakeLibraryService extends MediaLibraryService {
     int limit = 18,
     bool forceRefresh = false,
   }) async {
+    latestEpisodeRequests += 1;
     return latestEpisodes;
   }
 }

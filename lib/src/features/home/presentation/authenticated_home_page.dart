@@ -85,6 +85,28 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     }
   }
 
+  Future<void> _refreshContinueWatching() async {
+    final currentFeed = _feed;
+    if (currentFeed == null) {
+      await _load();
+      return;
+    }
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      final feed = await ref
+          .read(homeFeedProvider)
+          .refreshContinueWatching(widget.account, currentFeed);
+      if (mounted) setState(() => _feed = feed);
+    } on MediaLibraryException catch (error) {
+      if (error.authenticationExpired) {
+        await widget.onSessionExpired();
+      }
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
   Future<void> _openDetails(MediaItem item) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -92,7 +114,7 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
             MediaDetailPage(account: widget.account, initialItem: item),
       ),
     );
-    if (mounted) await _load(forceRefresh: true);
+    if (mounted) await _refreshContinueWatching();
   }
 
   Future<void> _continuePlayback(MediaItem item) async {
@@ -113,7 +135,7 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           ),
         ),
       );
-      if (mounted) await _load(forceRefresh: true);
+      if (mounted) await _refreshContinueWatching();
     } on PlaybackServiceException catch (error) {
       if (mounted) _showPlaybackError(error.message);
     } on Object catch (error) {
