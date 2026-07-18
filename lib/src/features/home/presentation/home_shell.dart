@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/network/session_expiry_coordinator.dart';
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
 import 'package:embyplayer/src/features/home/presentation/authenticated_home_page.dart';
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
 import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
+import 'package:embyplayer/src/features/servers/presentation/server_accounts_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,7 +27,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   int _selectedIndex = 0;
   DiscoveredServer? _discoveredServer;
   AuthenticatedServer? _authenticatedServer;
+  ServerAccountState _accountState = const ServerAccountState();
+  String? _busyProfileId;
   bool _clearingExpiredSession = false;
+  late final StreamSubscription<SessionExpiryEvent> _sessionExpirySubscription;
 
   static const _destinations = [
     _AppDestination('首页', Icons.home_outlined, Icons.home_rounded),
@@ -40,17 +46,30 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   void initState() {
     super.initState();
+    _sessionExpirySubscription = ref
+        .read(sessionExpiryProvider)
+        .events
+        .listen((event) => unawaited(_handleSessionExpired(event)));
     Future<void>.microtask(_restoreSession);
   }
 
+  @override
+  void dispose() {
+    _sessionExpirySubscription.cancel();
+    super.dispose();
+  }
+
   Future<void> _restoreSession() async {
-    final account = await ref
+    final state = await ref
         .read(serverAuthenticationProvider)
-        .restoreSession();
-    if (!mounted || account == null) return;
+        .restoreSessionState();
+    if (!mounted) return;
     setState(() {
-      _discoveredServer = account.server;
-      _authenticatedServer = account;
+      _accountState = state;
+      _authenticatedServer = state.activeSession;
+      _discoveredServer =
+          state.activeSession?.server ??
+          (state.accounts.isEmpty ? null : state.accounts.first.profile.server);
     });
   }
 
@@ -61,41 +80,137 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       builder: (context) => const AddServerDialog(),
     );
     if (result == null || !mounted) return;
-
-    final previousAccount = _authenticatedServer;
-    if (previousAccount != null) {
-      await ref.read(serverAuthenticationProvider).logout(previousAccount);
-      if (!mounted) return;
-    }
-
-    setState(() {
-      _discoveredServer = result;
-      _authenticatedServer = null;
-    });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('已找到 ${result.kind.label} 服务器：${result.name}')),
     );
     await _showLoginDialog(result);
   }
 
-  Future<void> _showLoginDialog([DiscoveredServer? discovered]) async {
+  Future<AuthenticatedServer?> _showLoginDialog([
+    DiscoveredServer? discovered,
+    String? initialUsername,
+  ]) async {
     final server = discovered ?? _discoveredServer;
-    if (server == null) return;
+    if (server == null) return null;
 
     final result = await showDialog<AuthenticatedServer>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.58),
-      builder: (context) => LoginDialog(server: server),
+      builder: (context) =>
+          LoginDialog(server: server, initialUsername: initialUsername),
     );
-    if (result == null || !mounted) return;
+    if (result == null || !mounted) return null;
+
+    final state = await ref
+        .read(serverAuthenticationProvider)
+        .restoreSessionState();
+    if (!mounted) return result;
 
     setState(() {
+      _accountState = state;
       _discoveredServer = result.server;
       _authenticatedServer = result;
     });
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('已安全登录：${result.userName}')));
+    return result;
+  }
+
+  Future<void> _switchAccount(ServerAccountEntry entry) async {
+    final session = entry.session;
+    if (session == null ||
+        session.profileId == _authenticatedServer?.profileId) {
+      return;
+    }
+    await _runAccountAction(entry.profile.id, () async {
+      await ref.read(serverAuthenticationProvider).activate(session);
+      final state = await ref
+          .read(serverAuthenticationProvider)
+          .restoreSessionState();
+      if (!mounted) return;
+      setState(() {
+        _accountState = state;
+        _authenticatedServer = session;
+        _discoveredServer = session.server;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已切换到 ${session.server.name} · ${session.userName}'),
+        ),
+      );
+    });
+  }
+
+  Future<void> _loginAccount(ServerAccountEntry entry) async {
+    await _runAccountAction(entry.profile.id, () async {
+      await _showLoginDialog(entry.profile.server, entry.profile.userName);
+    });
+  }
+
+  Future<void> _logoutAccount(ServerAccountEntry entry) async {
+    final session = entry.session;
+    if (session == null) return;
+    await _runAccountAction(entry.profile.id, () async {
+      final wasActive = session.profileId == _authenticatedServer?.profileId;
+      await ref.read(serverAuthenticationProvider).logout(session);
+      final state = await ref
+          .read(serverAuthenticationProvider)
+          .restoreSessionState();
+      if (!mounted) return;
+      setState(() {
+        _accountState = state;
+        if (wasActive) {
+          _authenticatedServer = null;
+          _discoveredServer = session.server;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已退出 ${entry.profile.userName}，服务器资料仍然保留。')),
+      );
+    });
+  }
+
+  Future<void> _removeAccount(ServerAccountEntry entry) async {
+    await _runAccountAction(entry.profile.id, () async {
+      final wasActive = entry.profile.id == _authenticatedServer?.profileId;
+      await ref.read(serverAuthenticationProvider).remove(entry.profile);
+      final state = await ref
+          .read(serverAuthenticationProvider)
+          .restoreSessionState();
+      if (!mounted) return;
+      setState(() {
+        _accountState = state;
+        if (wasActive) {
+          _authenticatedServer = null;
+          _discoveredServer = state.accounts.isEmpty
+              ? null
+              : state.accounts.first.profile.server;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已移除 ${entry.profile.name} 的本地资料。')),
+      );
+    });
+  }
+
+  Future<void> _runAccountAction(
+    String profileId,
+    Future<void> Function() action,
+  ) async {
+    if (_busyProfileId != null) return;
+    setState(() => _busyProfileId = profileId);
+    try {
+      await action();
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法完成服务器账户操作，请稍后重试。')));
+      }
+    } finally {
+      if (mounted) setState(() => _busyProfileId = null);
+    }
   }
 
   void _selectDestination(int index) {
@@ -113,21 +228,39 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     });
   }
 
-  Future<void> _handleSessionExpired() async {
+  Future<void> _handleSessionExpired([SessionExpiryEvent? event]) async {
+    final coordinator = ref.read(sessionExpiryProvider);
     final account = _authenticatedServer;
-    if (account == null || _clearingExpiredSession) return;
+    if (account == null) {
+      if (event != null) coordinator.acknowledge(event);
+      return;
+    }
+    if (event != null && !event.matches(account.accessToken)) {
+      coordinator.acknowledge(event);
+      return;
+    }
+    if (_clearingExpiredSession) return;
     _clearingExpiredSession = true;
     try {
       await ref.read(serverAuthenticationProvider).logout(account);
     } on Object {
       // The in-memory session still needs to be cleared if secure storage fails.
     }
-    if (!mounted) return;
+    final state = await ref
+        .read(serverAuthenticationProvider)
+        .restoreSessionState();
+    if (!mounted) {
+      if (event != null) coordinator.acknowledge(event);
+      return;
+    }
     setState(() {
+      _accountState = state;
       _authenticatedServer = null;
+      _discoveredServer = account.server;
       _selectedIndex = 0;
       _clearingExpiredSession = false;
     });
+    if (event != null) coordinator.acknowledge(event);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('登录已失效，请重新登录服务器。')));
@@ -170,6 +303,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                               server: _discoveredServer,
                               account: _authenticatedServer,
                               onSearch: _openSearch,
+                              onAccount: () => _selectDestination(3),
                             ),
                             Expanded(
                               child: AnimatedSwitcher(
@@ -217,10 +351,15 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                     onGoHome: () => _selectDestination(0),
                                     onSessionExpired: _handleSessionExpired,
                                   ),
-                                  _ => _UnavailablePage(
-                                    key: ValueKey(_selectedIndex),
-                                    destination: _destinations[_selectedIndex],
-                                    account: _authenticatedServer,
+                                  _ => ServerAccountsPage(
+                                    key: const ValueKey('server-accounts'),
+                                    state: _accountState,
+                                    busyProfileId: _busyProfileId,
+                                    onAddServer: _showAddServerDialog,
+                                    onSwitch: _switchAccount,
+                                    onLogin: _loginAccount,
+                                    onLogout: _logoutAccount,
+                                    onRemove: _removeAccount,
                                     onGoHome: () => _selectDestination(0),
                                   ),
                                 },
@@ -422,6 +561,7 @@ class _TopCommandBar extends StatelessWidget {
     required this.server,
     required this.account,
     required this.onSearch,
+    required this.onAccount,
   });
 
   final bool compact;
@@ -429,6 +569,7 @@ class _TopCommandBar extends StatelessWidget {
   final DiscoveredServer? server;
   final AuthenticatedServer? account;
   final VoidCallback onSearch;
+  final VoidCallback onAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -463,6 +604,7 @@ class _TopCommandBar extends StatelessWidget {
                 server: server,
                 account: account,
                 compact: compact,
+                onTap: onAccount,
               ),
             ],
           ),
@@ -550,11 +692,13 @@ class _AccountStatus extends StatelessWidget {
     required this.server,
     required this.account,
     required this.compact,
+    required this.onTap,
   });
 
   final DiscoveredServer? server;
   final AuthenticatedServer? account;
   final bool compact;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -567,44 +711,54 @@ class _AccountStatus extends StatelessWidget {
         : '未连接';
 
     return Semantics(
-      label: '连接状态：$label',
-      child: Container(
-        height: 44,
-        padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
-        decoration: BoxDecoration(
+      button: true,
+      label: '连接状态：$label。打开服务器与账户设置',
+      child: Tooltip(
+        message: '服务器与账户',
+        child: Material(
           color: AppColors.surfaceLow,
           borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: connected
-                    ? AppColors.success.withValues(alpha: 0.15)
-                    : AppColors.surfaceHigh,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                connected ? Icons.person_rounded : Icons.dns_outlined,
-                size: 15,
-                color: connected ? AppColors.success : AppColors.textTertiary,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              height: 44,
+              padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: connected
+                          ? AppColors.success.withValues(alpha: 0.15)
+                          : AppColors.surfaceHigh,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      connected ? Icons.person_rounded : Icons.dns_outlined,
+                      size: 15,
+                      color: connected
+                          ? AppColors.success
+                          : AppColors.textTertiary,
+                    ),
+                  ),
+                  if (!compact) ...[
+                    const SizedBox(width: 9),
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (!compact) ...[
-              const SizedBox(width: 9),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -1363,75 +1517,6 @@ class _CapabilityChip extends StatelessWidget {
             style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _UnavailablePage extends StatelessWidget {
-  const _UnavailablePage({
-    super.key,
-    required this.destination,
-    required this.account,
-    required this.onGoHome,
-  });
-
-  final _AppDestination destination;
-  final AuthenticatedServer? account;
-  final VoidCallback onGoHome;
-
-  @override
-  Widget build(BuildContext context) {
-    final connected = account != null;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Container(
-          width: 520,
-          padding: const EdgeInsets.all(36),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceLow,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceHigh,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Icon(
-                  destination.selectedIcon,
-                  color: AppColors.spotlight,
-                  size: 29,
-                ),
-              ),
-              const SizedBox(height: 22),
-              Text(
-                connected ? '${destination.label}正在接入' : '先连接你的媒体服务器',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                connected
-                    ? '服务器已经就绪。下一阶段会在这里读取真实媒体内容。'
-                    : '完成服务器检测和登录后，${destination.label}会在这里显示。',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: onGoHome,
-                icon: const Icon(Icons.arrow_back_rounded),
-                label: const Text('返回首页'),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

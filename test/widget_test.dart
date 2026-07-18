@@ -43,4 +43,20 @@ void main() {
     expect(find.text('服务器地址'), findsOneWidget);
     expect(find.text('检测并继续'), findsOneWidget);
   });
+
+  testWidgets('opens the server account center from settings', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const ProviderScope(child: EmbyPlayerApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('server-accounts-page')), findsOneWidget);
+    expect(find.text('服务器与账户'), findsOneWidget);
+    expect(find.text('还没有保存的服务器'), findsOneWidget);
+  });
 }

@@ -85,8 +85,20 @@ class ServerAuthenticationService {
     return _tokenStore.readSession();
   }
 
+  Future<ServerAccountState> restoreSessionState() {
+    return _tokenStore.readSessionState();
+  }
+
+  Future<void> activate(AuthenticatedServer account) {
+    return _tokenStore.activateSession(account);
+  }
+
   Future<void> logout(AuthenticatedServer account) {
-    return _tokenStore.clearSession(account: account);
+    return _tokenStore.signOut(account);
+  }
+
+  Future<void> remove(ServerProfile profile) {
+    return _tokenStore.removeProfile(profile);
   }
 
   Uri _appendPath(Uri base, String path) {

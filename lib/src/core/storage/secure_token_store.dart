@@ -10,22 +10,24 @@ class SecureTokenStore {
 
   final FlutterSecureStorage _storage;
 
-  static const _activeSessionKey = 'active_server_session_v1';
+  static const _legacyActiveSessionKey = 'active_server_session_v1';
+  static const _accountDirectoryKey = 'server_account_directory_v2';
+  static const _activeProfileKey = 'active_server_profile_v2';
 
   Future<void> write({
     required String serverId,
     required String userId,
     required String token,
   }) {
-    return _storage.write(key: _key(serverId, userId), value: token);
+    return _storage.write(key: _tokenKey(serverId, userId), value: token);
   }
 
   Future<String?> read({required String serverId, required String userId}) {
-    return _storage.read(key: _key(serverId, userId));
+    return _storage.read(key: _tokenKey(serverId, userId));
   }
 
   Future<void> delete({required String serverId, required String userId}) {
-    return _storage.delete(key: _key(serverId, userId));
+    return _storage.delete(key: _tokenKey(serverId, userId));
   }
 
   Future<void> writeSession(AuthenticatedServer account) async {
@@ -34,77 +36,121 @@ class SecureTokenStore {
       userId: account.userId,
       token: account.accessToken,
     );
-    await _storage.write(
-      key: _activeSessionKey,
-      value: jsonEncode({
-        'kind': account.server.kind.name,
-        'name': account.server.name,
-        'version': account.server.version,
-        'serverId': account.server.serverId,
-        'apiBaseUri': account.server.apiBaseUri.toString(),
-        'userId': account.userId,
-        'userName': account.userName,
-        'deviceId': account.deviceId,
-      }),
-    );
+    final profiles = await _readProfilesWithMigration();
+    final profile = ServerProfile.fromSession(account);
+    final index = profiles.indexWhere((item) => item.id == profile.id);
+    if (index == -1) {
+      profiles.add(profile);
+    } else {
+      profiles[index] = profile;
+    }
+    await _writeProfiles(profiles);
+    await _storage.write(key: _activeProfileKey, value: profile.id);
+    await _storage.delete(key: _legacyActiveSessionKey);
+  }
+
+  Future<ServerAccountState> readSessionState() async {
+    try {
+      final profiles = await _readProfilesWithMigration();
+      final activeProfileId = await _storage.read(key: _activeProfileKey);
+      final accounts = <ServerAccountEntry>[];
+      AuthenticatedServer? activeSession;
+
+      for (final profile in profiles) {
+        final token = await read(
+          serverId: profile.serverId,
+          userId: profile.userId,
+        );
+        final session = token == null || token.isEmpty
+            ? null
+            : AuthenticatedServer(
+                server: profile.server,
+                userId: profile.userId,
+                userName: profile.userName,
+                deviceId: profile.deviceId,
+                accessToken: token,
+              );
+        accounts.add(ServerAccountEntry(profile: profile, session: session));
+        if (profile.id == activeProfileId) activeSession = session;
+      }
+
+      return ServerAccountState(
+        accounts: List.unmodifiable(accounts),
+        activeSession: activeSession,
+      );
+    } on Object {
+      return const ServerAccountState();
+    }
   }
 
   Future<AuthenticatedServer?> readSession() async {
+    return (await readSessionState()).activeSession;
+  }
+
+  Future<List<AuthenticatedServer>> readSessions() async {
+    final state = await readSessionState();
+    return state.accounts
+        .map((entry) => entry.session)
+        .whereType<AuthenticatedServer>()
+        .toList(growable: false);
+  }
+
+  Future<void> activateSession(AuthenticatedServer account) async {
+    final token = await read(
+      serverId: account.server.serverId,
+      userId: account.userId,
+    );
+    if (token == null || token.isEmpty) {
+      throw StateError('Cannot activate a signed-out server account.');
+    }
+    final profiles = await _readProfilesWithMigration();
+    final profile = ServerProfile.fromSession(account);
+    final index = profiles.indexWhere((item) => item.id == profile.id);
+    if (index == -1) {
+      profiles.add(profile);
+      await _writeProfiles(profiles);
+    } else if (!_sameProfile(profiles[index], profile)) {
+      profiles[index] = profile;
+      await _writeProfiles(profiles);
+    }
+    await _storage.write(key: _activeProfileKey, value: profile.id);
+  }
+
+  Future<void> signOut(AuthenticatedServer account) async {
+    await _readProfilesWithMigration();
     try {
-      final raw = await _storage.read(key: _activeSessionKey);
-      if (raw == null || raw.isEmpty) return null;
-      final data = jsonDecode(raw);
-      if (data is! Map<String, dynamic>) return null;
-
-      final serverId = data['serverId'];
-      final userId = data['userId'];
-      final baseUri = Uri.tryParse('${data['apiBaseUri']}');
-      if (serverId is! String ||
-          serverId.isEmpty ||
-          userId is! String ||
-          userId.isEmpty ||
-          baseUri == null ||
-          !baseUri.hasScheme ||
-          (baseUri.scheme != 'http' && baseUri.scheme != 'https')) {
-        return null;
+      await delete(serverId: account.server.serverId, userId: account.userId);
+    } finally {
+      final activeProfileId = await _storage.read(key: _activeProfileKey);
+      if (activeProfileId == account.profileId) {
+        await _storage.delete(key: _activeProfileKey);
       }
-      final token = await read(serverId: serverId, userId: userId);
-      if (token == null || token.isEmpty) return null;
+      await _storage.delete(key: _legacyActiveSessionKey);
+    }
+  }
 
-      final kind = data['kind'] == ServerKind.emby.name
-          ? ServerKind.emby
-          : ServerKind.jellyfin;
-      final server = DiscoveredServer(
-        kind: kind,
-        name: _string(data['name'], kind.label),
-        version: _string(data['version'], ''),
-        serverId: serverId,
-        apiBaseUri: baseUri,
-      );
-      final storedDeviceId = data['deviceId'];
-      final deviceId = storedDeviceId is String && storedDeviceId.isNotEmpty
-          ? storedDeviceId
-          : await getOrCreateDeviceId();
-      return AuthenticatedServer(
-        server: server,
-        userId: userId,
-        userName: _string(data['userName'], '用户'),
-        deviceId: deviceId,
-        accessToken: token,
-      );
-    } on Object {
-      return null;
+  Future<void> removeProfile(ServerProfile profile) async {
+    final profiles = await _readProfilesWithMigration();
+    profiles.removeWhere((item) => item.id == profile.id);
+    try {
+      await delete(serverId: profile.serverId, userId: profile.userId);
+    } finally {
+      await _writeProfiles(profiles);
+      final activeProfileId = await _storage.read(key: _activeProfileKey);
+      if (activeProfileId == profile.id) {
+        await _storage.delete(key: _activeProfileKey);
+      }
+      await _storage.delete(key: _legacyActiveSessionKey);
     }
   }
 
   Future<void> clearSession({AuthenticatedServer? account}) async {
-    try {
-      if (account != null) {
-        await delete(serverId: account.server.serverId, userId: account.userId);
-      }
-    } finally {
-      await _storage.delete(key: _activeSessionKey);
+    if (account == null) {
+      await _storage.delete(key: _activeProfileKey);
+      await _storage.delete(key: _legacyActiveSessionKey);
+      return;
     }
+    await signOut(account);
   }
 
   Future<String> getOrCreateDeviceId() async {
@@ -121,7 +167,106 @@ class SecureTokenStore {
     return id;
   }
 
-  String _key(String serverId, String userId) {
+  Future<List<ServerProfile>> _readProfilesWithMigration() async {
+    final raw = await _storage.read(key: _accountDirectoryKey);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        return _decodeProfiles(raw);
+      } on FormatException {
+        return <ServerProfile>[];
+      }
+    }
+
+    final legacy = await _readLegacyProfile();
+    if (legacy == null) return <ServerProfile>[];
+    await _writeProfiles([legacy]);
+    await _storage.write(key: _activeProfileKey, value: legacy.id);
+    await _storage.delete(key: _legacyActiveSessionKey);
+    return [legacy];
+  }
+
+  Future<ServerProfile?> _readLegacyProfile() async {
+    final raw = await _storage.read(key: _legacyActiveSessionKey);
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return null;
+    final deviceId = _string(decoded['deviceId'], await getOrCreateDeviceId());
+    return _profileFromJson({...decoded, 'deviceId': deviceId});
+  }
+
+  List<ServerProfile> _decodeProfiles(String raw) {
+    final decoded = jsonDecode(raw);
+    final values = decoded is Map<String, dynamic> ? decoded['profiles'] : null;
+    if (values is! List) return <ServerProfile>[];
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map(_profileFromJson)
+        .whereType<ServerProfile>()
+        .toList(growable: true);
+  }
+
+  ServerProfile? _profileFromJson(Map<String, dynamic> data) {
+    final serverId = _string(data['serverId'], '');
+    final userId = _string(data['userId'], '');
+    final apiBaseUri = Uri.tryParse('${data['apiBaseUri']}');
+    if (serverId.isEmpty ||
+        userId.isEmpty ||
+        apiBaseUri == null ||
+        !apiBaseUri.hasScheme ||
+        (apiBaseUri.scheme != 'http' && apiBaseUri.scheme != 'https')) {
+      return null;
+    }
+    final kind = data['kind'] == ServerKind.emby.name
+        ? ServerKind.emby
+        : ServerKind.jellyfin;
+    return ServerProfile(
+      id: serverProfileId(serverId, userId),
+      kind: kind,
+      name: _string(data['name'], kind.label),
+      version: _string(data['version'], ''),
+      apiBaseUri: apiBaseUri,
+      serverId: serverId,
+      userId: userId,
+      userName: _string(data['userName'], '用户'),
+      deviceId: _string(data['deviceId'], ''),
+    );
+  }
+
+  Future<void> _writeProfiles(List<ServerProfile> profiles) {
+    return _storage.write(
+      key: _accountDirectoryKey,
+      value: jsonEncode({
+        'version': 2,
+        'profiles': [for (final profile in profiles) _profileJson(profile)],
+      }),
+    );
+  }
+
+  Map<String, String> _profileJson(ServerProfile profile) {
+    return {
+      'id': profile.id,
+      'kind': profile.kind.name,
+      'name': profile.name,
+      'version': profile.version,
+      'apiBaseUri': profile.apiBaseUri.toString(),
+      'serverId': profile.serverId,
+      'userId': profile.userId,
+      'userName': profile.userName,
+      'deviceId': profile.deviceId,
+    };
+  }
+
+  bool _sameProfile(ServerProfile first, ServerProfile second) {
+    return first.id == second.id &&
+        first.kind == second.kind &&
+        first.name == second.name &&
+        first.version == second.version &&
+        first.apiBaseUri == second.apiBaseUri &&
+        first.userName == second.userName &&
+        first.deviceId == second.deviceId;
+  }
+
+  String _tokenKey(String serverId, String userId) {
     return 'server_token_${serverId}_$userId';
   }
 

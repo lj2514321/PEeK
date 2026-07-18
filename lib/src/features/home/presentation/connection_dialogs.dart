@@ -117,21 +117,28 @@ class _AddServerDialogState extends ConsumerState<AddServerDialog> {
 }
 
 class LoginDialog extends ConsumerStatefulWidget {
-  const LoginDialog({super.key, required this.server});
+  const LoginDialog({super.key, required this.server, this.initialUsername});
 
   final DiscoveredServer server;
+  final String? initialUsername;
 
   @override
   ConsumerState<LoginDialog> createState() => _LoginDialogState();
 }
 
 class _LoginDialogState extends ConsumerState<LoginDialog> {
-  final _usernameController = TextEditingController();
+  late final TextEditingController _usernameController;
   final _passwordController = TextEditingController();
   final _usernameFocus = FocusNode();
   bool _loading = false;
   bool _showPassword = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameController = TextEditingController(text: widget.initialUsername);
+  }
 
   @override
   void dispose() {
