@@ -1,0 +1,240 @@
+import 'package:flutter/material.dart';
+
+abstract final class AppColors {
+  static const canvas = Color(0xFF070810);
+  static const canvasLift = Color(0xFF11152A);
+  static const surfaceLow = Color(0xB3141928);
+  static const surface = Color(0xCC1A2031);
+  static const surfaceHigh = Color(0xE0252B3F);
+  static const glassSurface = Color(0xA6171D2C);
+  static const glassStrong = Color(0xDD20263A);
+  static const glassSelected = Color(0xC92B3150);
+  static const outline = Colors.transparent;
+
+  static const textPrimary = Color(0xFFF4F2ED);
+  static const textSecondary = Color(0xFFAEB4C0);
+  static const textTertiary = Color(0xFF9299A7);
+
+  static const spotlight = Color(0xFFFFD27D);
+  static const onSpotlight = Color(0xFF19140B);
+  static const indigo = Color(0xFF928BFF);
+  static const cyan = Color(0xFF6EDCE8);
+  static const success = Color(0xFF58C99A);
+  static const error = Color(0xFFFF8585);
+}
+
+abstract final class AppMotion {
+  static const fast = Duration(milliseconds: 180);
+  static const standard = Duration(milliseconds: 240);
+  static const slow = Duration(milliseconds: 320);
+
+  static Duration responsive(BuildContext context, Duration duration) {
+    return MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
+  }
+}
+
+abstract final class AppTheme {
+  static ThemeData dark() {
+    const colorScheme = ColorScheme.dark(
+      primary: AppColors.spotlight,
+      onPrimary: AppColors.onSpotlight,
+      secondary: AppColors.indigo,
+      onSecondary: AppColors.textPrimary,
+      surface: AppColors.surface,
+      onSurface: AppColors.textPrimary,
+      error: AppColors.error,
+      onError: AppColors.canvas,
+      outline: AppColors.outline,
+    );
+
+    final baseTextTheme =
+        Typography.material2021(platform: TargetPlatform.windows).white.apply(
+          fontFamily: 'Segoe UI Variable Text',
+          fontFamilyFallback: const ['Microsoft YaHei UI', 'sans-serif'],
+          bodyColor: AppColors.textPrimary,
+          displayColor: AppColors.textPrimary,
+        );
+
+    final outline = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(10),
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: AppColors.canvas,
+      canvasColor: AppColors.canvas,
+      focusColor: AppColors.indigo.withValues(alpha: 0.24),
+      hoverColor: AppColors.textPrimary.withValues(alpha: 0.055),
+      splashColor: AppColors.textPrimary.withValues(alpha: 0.08),
+      textTheme: baseTextTheme.copyWith(
+        displayLarge: baseTextTheme.displayLarge?.copyWith(
+          fontFamily: 'Segoe UI Variable Display',
+          fontFamilyFallback: const ['Microsoft YaHei UI', 'sans-serif'],
+          fontSize: 48,
+          height: 1.08,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -1.4,
+        ),
+        headlineMedium: baseTextTheme.headlineMedium?.copyWith(
+          fontFamily: 'Segoe UI Variable Display',
+          fontFamilyFallback: const ['Microsoft YaHei UI', 'sans-serif'],
+          fontSize: 28,
+          height: 1.2,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.6,
+        ),
+        headlineSmall: baseTextTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
+        ),
+        titleLarge: baseTextTheme.titleLarge?.copyWith(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+        titleMedium: baseTextTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+        bodyLarge: baseTextTheme.bodyLarge?.copyWith(
+          fontSize: 16,
+          height: 1.58,
+          color: AppColors.textSecondary,
+        ),
+        bodyMedium: baseTextTheme.bodyMedium?.copyWith(
+          fontSize: 14,
+          height: 1.5,
+          color: AppColors.textSecondary,
+        ),
+        labelSmall: baseTextTheme.labelSmall?.copyWith(
+          fontFamily: 'Cascadia Mono',
+          fontFamilyFallback: const ['Consolas', 'monospace'],
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.15,
+          color: AppColors.textTertiary,
+        ),
+      ),
+      dividerColor: AppColors.outline,
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.surfaceLow,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        labelStyle: const TextStyle(color: AppColors.textSecondary),
+        hintStyle: const TextStyle(color: AppColors.textTertiary),
+        prefixIconColor: AppColors.textTertiary,
+        suffixIconColor: AppColors.textTertiary,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.indigo, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+          foregroundColor: AppColors.onSpotlight,
+          backgroundColor: AppColors.spotlight,
+          disabledBackgroundColor: AppColors.surfaceHigh,
+          disabledForegroundColor: AppColors.textTertiary,
+          shape: outline,
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          foregroundColor: AppColors.textPrimary,
+          backgroundColor: AppColors.glassSurface,
+          side: BorderSide.none,
+          shape: outline,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          foregroundColor: AppColors.textSecondary,
+          shape: outline,
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          foregroundColor: AppColors.textSecondary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: Colors.transparent,
+        indicatorColor: AppColors.glassSelected,
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        selectedIconTheme: const IconThemeData(
+          color: AppColors.spotlight,
+          size: 23,
+        ),
+        unselectedIconTheme: const IconThemeData(
+          color: AppColors.textTertiary,
+          size: 22,
+        ),
+        selectedLabelTextStyle: const TextStyle(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+        unselectedLabelTextStyle: const TextStyle(
+          color: AppColors.textTertiary,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      navigationBarTheme: const NavigationBarThemeData(
+        height: 72,
+        backgroundColor: AppColors.glassStrong,
+        indicatorColor: AppColors.glassSelected,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.glassStrong,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titleTextStyle: baseTextTheme.headlineSmall?.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.surfaceHigh,
+        contentTextStyle: const TextStyle(color: AppColors.textPrimary),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.spotlight,
+      ),
+      cardTheme: CardThemeData(
+        color: AppColors.glassSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+    );
+  }
+}
