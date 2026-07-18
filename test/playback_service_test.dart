@@ -26,11 +26,34 @@ void main() {
             'Path': 'https://media.example.test/live/master.m3u8',
             'IsRemote': true,
             'SupportsDirectPlay': true,
+            'RunTimeTicks': 72000000000,
             'RequiredHttpHeaders': {
               'Referer': 'https://media.example.test/',
               'User-Agent': 'Projection Booth',
             },
             'DefaultAudioStreamIndex': 1,
+            'DefaultSubtitleStreamIndex': 2,
+            'MediaStreams': [
+              {
+                'Index': 1,
+                'Type': 'Audio',
+                'DisplayTitle': '中文 AAC 5.1',
+                'Language': 'chi',
+                'Codec': 'aac',
+                'ChannelLayout': '5.1',
+                'IsDefault': true,
+              },
+              {
+                'Index': 2,
+                'Type': 'Subtitle',
+                'DisplayTitle': '简体中文 SRT',
+                'Language': 'chi',
+                'Codec': 'srt',
+                'IsExternal': true,
+                'IsTextSubtitleStream': true,
+                'DeliveryUrl': '/Videos/item-id/Subtitles/2/Stream.srt',
+              },
+            ],
           },
         ],
       }, onRequest: (options) => request = options),
@@ -48,7 +71,82 @@ void main() {
     expect(plan.httpHeaders['Referer'], 'https://media.example.test/');
     expect(plan.httpHeaders.containsKey('X-Emby-Token'), isFalse);
     expect(plan.startPosition, const Duration(minutes: 12));
+    expect(plan.duration, const Duration(hours: 2));
     expect(plan.audioStreamIndex, 1);
+    expect(plan.subtitleStreamIndex, 2);
+    expect(plan.audioTracks.single.label, '中文 AAC 5.1');
+    expect(plan.audioTracks.single.channels, '5.1');
+    expect(plan.subtitleTracks.single.isExternal, isTrue);
+    expect(
+      plan.subtitleTracks.single.deliveryUri?.path,
+      '/Videos/item-id/Subtitles/2/Stream.srt',
+    );
+    expect(
+      plan.subtitleTracks.single.deliveryUri?.queryParameters['api_key'],
+      'secret-token',
+    );
+  });
+
+  test('requests selected server tracks when rebuilding a plan', () async {
+    RequestOptions? request;
+    final service = PlaybackService(
+      _dioWithJsonResponse({
+        'PlaySessionId': 'track-session',
+        'MediaSources': [
+          {
+            'Id': 'source-id',
+            'Protocol': 'File',
+            'Container': 'mkv',
+            'SupportsDirectPlay': true,
+            'DefaultAudioStreamIndex': 1,
+            'DefaultSubtitleStreamIndex': 2,
+          },
+        ],
+      }, onRequest: (options) => request = options),
+    );
+
+    final plan = await service.createPlan(
+      account,
+      item,
+      startPosition: const Duration(minutes: 20),
+      audioStreamIndex: 3,
+      subtitleStreamIndex: -1,
+      mediaSourceId: 'source-id',
+    );
+
+    final body = request?.data as Map<String, dynamic>;
+    expect(body['AudioStreamIndex'], 3);
+    expect(body['SubtitleStreamIndex'], -1);
+    expect(body['MediaSourceId'], 'source-id');
+    expect(body['StartTimeTicks'], 12000000000);
+    expect(plan.audioStreamIndex, 3);
+    expect(plan.subtitleStreamIndex, isNull);
+  });
+
+  test('skips direct stream sources without a stream url', () async {
+    final service = PlaybackService(
+      _dioWithJsonResponse({
+        'PlaySessionId': 'session-id',
+        'MediaSources': [
+          {
+            'Id': 'broken-source',
+            'Protocol': 'File',
+            'SupportsDirectStream': true,
+          },
+          {
+            'Id': 'working-source',
+            'Protocol': 'File',
+            'Container': 'mkv',
+            'SupportsDirectPlay': true,
+          },
+        ],
+      }),
+    );
+
+    final plan = await service.createPlan(account, item);
+
+    expect(plan.mediaSourceId, 'working-source');
+    expect(plan.method, PlaybackMethod.directPlay);
   });
 
   test('creates authenticated server stream for a local file', () async {
@@ -209,6 +307,9 @@ void main() {
         position: const Duration(seconds: 42),
         isPaused: false,
         volume: 80,
+        audioStreamIndex: 4,
+        subtitlesDisabled: true,
+        playbackRate: 1.5,
       ),
     );
 
@@ -217,6 +318,9 @@ void main() {
     expect(body['PositionTicks'], 420000000);
     expect(body['PlayMethod'], 'DirectPlay');
     expect(body['EventName'], 'TimeUpdate');
+    expect(body['AudioStreamIndex'], 4);
+    expect(body['SubtitleStreamIndex'], isNull);
+    expect(body['PlaybackRate'], 1.5);
   });
 }
 

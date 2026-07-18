@@ -31,7 +31,7 @@
 - [x] Jellyfin/Emby PlaybackInfo 适配
 - [x] media_kit/libmpv 视频画面和基础控制器
 - [x] 原码、直传与转码计划
-- [ ] 音轨、字幕、倍速和全屏
+- [x] 音轨、字幕、倍速和全屏
 - [x] Started/Progress/Stopped 上报
 - [ ] 断点续播和自动下一集
 

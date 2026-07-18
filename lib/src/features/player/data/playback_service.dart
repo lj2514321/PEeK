@@ -12,6 +12,9 @@ class PlaybackService {
     AuthenticatedServer account,
     MediaItem item, {
     Duration? startPosition,
+    int? audioStreamIndex,
+    int? subtitleStreamIndex,
+    String? mediaSourceId,
   }) async {
     final resumeAt = startPosition ?? item.resumePosition;
     final uri = _appendPath(
@@ -22,6 +25,9 @@ class PlaybackService {
       account: account,
       uri: uri,
       startPosition: resumeAt,
+      audioStreamIndex: audioStreamIndex,
+      subtitleStreamIndex: subtitleStreamIndex,
+      mediaSourceId: mediaSourceId,
     );
     final rawSources = data['MediaSources'];
     final playSessionId = _readString(data, 'PlaySessionId');
@@ -36,13 +42,15 @@ class PlaybackService {
     if (sources.isEmpty) {
       throw const PlaybackServiceException('服务器没有返回可播放的媒体源。');
     }
-    final source = _selectSource(sources);
+    final source = _selectSource(sources, preferredId: mediaSourceId);
     return _buildPlan(
       account: account,
       item: item,
       source: source,
       playSessionId: playSessionId,
       startPosition: resumeAt,
+      requestedAudioStreamIndex: audioStreamIndex,
+      requestedSubtitleStreamIndex: subtitleStreamIndex,
     );
   }
 
@@ -50,6 +58,9 @@ class PlaybackService {
     required AuthenticatedServer account,
     required Uri uri,
     required Duration startPosition,
+    required int? audioStreamIndex,
+    required int? subtitleStreamIndex,
+    required String? mediaSourceId,
   }) async {
     DioException? primaryError;
     try {
@@ -58,6 +69,9 @@ class PlaybackService {
         data: {
           'UserId': account.userId,
           'StartTimeTicks': _ticks(startPosition),
+          'AudioStreamIndex': ?audioStreamIndex,
+          'SubtitleStreamIndex': ?subtitleStreamIndex,
+          'MediaSourceId': ?mediaSourceId,
           'MaxStreamingBitrate': 160000000,
           'EnableDirectPlay': true,
           'EnableDirectStream': true,
@@ -88,6 +102,10 @@ class PlaybackService {
       queryParameters: {
         'UserId': account.userId,
         'StartTimeTicks': '${_ticks(startPosition)}',
+        if (audioStreamIndex != null) 'AudioStreamIndex': '$audioStreamIndex',
+        if (subtitleStreamIndex != null)
+          'SubtitleStreamIndex': '$subtitleStreamIndex',
+        'MediaSourceId': ?mediaSourceId,
         'MaxStreamingBitrate': '160000000',
         'IsPlayback': 'true',
         'AutoOpenLiveStream': 'true',
@@ -149,15 +167,17 @@ class PlaybackService {
       'CanSeek': true,
       'ItemId': plan.itemId,
       'MediaSourceId': plan.mediaSourceId,
-      'AudioStreamIndex': plan.audioStreamIndex,
-      'SubtitleStreamIndex': plan.subtitleStreamIndex,
+      'AudioStreamIndex': snapshot.audioStreamIndex ?? plan.audioStreamIndex,
+      'SubtitleStreamIndex': snapshot.subtitlesDisabled
+          ? null
+          : snapshot.subtitleStreamIndex ?? plan.subtitleStreamIndex,
       'IsPaused': snapshot.isPaused,
       'IsMuted': snapshot.volume <= 0,
       'PositionTicks': _ticks(snapshot.position),
       'VolumeLevel': snapshot.volume.round().clamp(0, 100),
       'PlayMethod': _playMethodName(plan.method),
       'PlaySessionId': plan.playSessionId,
-      'PlaybackRate': 1.0,
+      'PlaybackRate': snapshot.playbackRate,
     };
     if (eventName != null) body['EventName'] = eventName;
     try {
@@ -174,7 +194,18 @@ class PlaybackService {
     }
   }
 
-  Map<String, dynamic> _selectSource(List<Map<String, dynamic>> sources) {
+  Map<String, dynamic> _selectSource(
+    List<Map<String, dynamic>> sources, {
+    String? preferredId,
+  }) {
+    if (preferredId != null) {
+      for (final source in sources) {
+        if (_readString(source, 'Id') == preferredId &&
+            _sourceIsPlayable(source)) {
+          return source;
+        }
+      }
+    }
     for (final source in sources) {
       if (_externalUri(source) != null) return source;
     }
@@ -182,12 +213,23 @@ class PlaybackService {
       if (source['SupportsDirectPlay'] == true) return source;
     }
     for (final source in sources) {
-      if (source['SupportsDirectStream'] == true) return source;
+      if (source['SupportsDirectStream'] == true &&
+          _readString(source, 'DirectStreamUrl').isNotEmpty) {
+        return source;
+      }
     }
     for (final source in sources) {
       if (_readString(source, 'TranscodingUrl').isNotEmpty) return source;
     }
     throw const PlaybackServiceException('当前媒体源无法直放、直传或转码。');
+  }
+
+  bool _sourceIsPlayable(Map<String, dynamic> source) {
+    return _externalUri(source) != null ||
+        source['SupportsDirectPlay'] == true ||
+        (source['SupportsDirectStream'] == true &&
+            _readString(source, 'DirectStreamUrl').isNotEmpty) ||
+        _readString(source, 'TranscodingUrl').isNotEmpty;
   }
 
   PlaybackPlan _buildPlan({
@@ -196,9 +238,28 @@ class PlaybackService {
     required Map<String, dynamic> source,
     required String playSessionId,
     required Duration startPosition,
+    required int? requestedAudioStreamIndex,
+    required int? requestedSubtitleStreamIndex,
   }) {
     final mediaSourceId = _readString(source, 'Id', fallback: item.id);
     final requiredHeaders = _readHeaders(source['RequiredHttpHeaders']);
+    final duration = _durationFromTicks(source['RunTimeTicks']) ?? item.runTime;
+    final tracks = _readTracks(source['MediaStreams'], account);
+    final audioTracks = tracks
+        .where((track) => track.kind == PlaybackTrackKind.audio)
+        .toList(growable: false);
+    final subtitleTracks = tracks
+        .where((track) => track.kind == PlaybackTrackKind.subtitle)
+        .toList(growable: false);
+    final selectedAudioStreamIndex =
+        requestedAudioStreamIndex ??
+        _readInt(source['DefaultAudioStreamIndex']);
+    final rawSubtitleStreamIndex =
+        requestedSubtitleStreamIndex ??
+        _readInt(source['DefaultSubtitleStreamIndex']);
+    final selectedSubtitleStreamIndex = rawSubtitleStreamIndex == -1
+        ? null
+        : rawSubtitleStreamIndex;
     final external = _externalUri(source);
     if (external != null) {
       return PlaybackPlan(
@@ -209,8 +270,11 @@ class PlaybackService {
         method: PlaybackMethod.directPlay,
         httpHeaders: requiredHeaders,
         startPosition: startPosition,
-        audioStreamIndex: _readInt(source['DefaultAudioStreamIndex']),
-        subtitleStreamIndex: _readInt(source['DefaultSubtitleStreamIndex']),
+        duration: duration,
+        audioTracks: audioTracks,
+        subtitleTracks: subtitleTracks,
+        audioStreamIndex: selectedAudioStreamIndex,
+        subtitleStreamIndex: selectedSubtitleStreamIndex,
       );
     }
 
@@ -229,6 +293,11 @@ class PlaybackService {
         method: PlaybackMethod.directStream,
         requiredHeaders: requiredHeaders,
         startPosition: startPosition,
+        duration: duration,
+        audioTracks: audioTracks,
+        subtitleTracks: subtitleTracks,
+        audioStreamIndex: selectedAudioStreamIndex,
+        subtitleStreamIndex: selectedSubtitleStreamIndex,
       );
     }
 
@@ -257,6 +326,11 @@ class PlaybackService {
         method: PlaybackMethod.directPlay,
         requiredHeaders: requiredHeaders,
         startPosition: startPosition,
+        duration: duration,
+        audioTracks: audioTracks,
+        subtitleTracks: subtitleTracks,
+        audioStreamIndex: selectedAudioStreamIndex,
+        subtitleStreamIndex: selectedSubtitleStreamIndex,
       );
     }
 
@@ -272,6 +346,11 @@ class PlaybackService {
         method: PlaybackMethod.transcode,
         requiredHeaders: requiredHeaders,
         startPosition: startPosition,
+        duration: duration,
+        audioTracks: audioTracks,
+        subtitleTracks: subtitleTracks,
+        audioStreamIndex: selectedAudioStreamIndex,
+        subtitleStreamIndex: selectedSubtitleStreamIndex,
       );
     }
 
@@ -288,6 +367,11 @@ class PlaybackService {
     required PlaybackMethod method,
     required Map<String, String> requiredHeaders,
     required Duration startPosition,
+    required Duration? duration,
+    required List<PlaybackTrackInfo> audioTracks,
+    required List<PlaybackTrackInfo> subtitleTracks,
+    required int? audioStreamIndex,
+    required int? subtitleStreamIndex,
   }) {
     return PlaybackPlan(
       itemId: item.id,
@@ -297,8 +381,76 @@ class PlaybackService {
       method: method,
       httpHeaders: {..._serverHeaders(account), ...requiredHeaders},
       startPosition: startPosition,
-      audioStreamIndex: _readInt(source['DefaultAudioStreamIndex']),
-      subtitleStreamIndex: _readInt(source['DefaultSubtitleStreamIndex']),
+      duration: duration,
+      audioTracks: audioTracks,
+      subtitleTracks: subtitleTracks,
+      audioStreamIndex: audioStreamIndex,
+      subtitleStreamIndex: subtitleStreamIndex,
+    );
+  }
+
+  List<PlaybackTrackInfo> _readTracks(
+    Object? value,
+    AuthenticatedServer account,
+  ) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map<String, dynamic>>()
+        .map((stream) {
+          final type = _readString(stream, 'Type').toLowerCase();
+          final kind = switch (type) {
+            'audio' => PlaybackTrackKind.audio,
+            'subtitle' => PlaybackTrackKind.subtitle,
+            _ => null,
+          };
+          final index = _readInt(stream['Index']);
+          if (kind == null || index == null) return null;
+          final title = _nullableString(stream, 'Title');
+          final language = _nullableString(stream, 'Language');
+          final codec = _nullableString(stream, 'Codec');
+          final displayTitle =
+              _nullableString(stream, 'DisplayTitle') ??
+              title ??
+              language ??
+              '${kind == PlaybackTrackKind.audio ? '音轨' : '字幕'} ${index + 1}';
+          final deliveryUrl = _nullableString(stream, 'DeliveryUrl');
+          return PlaybackTrackInfo(
+            index: index,
+            kind: kind,
+            label: displayTitle,
+            title: title,
+            language: language,
+            codec: codec,
+            channels:
+                _nullableString(stream, 'ChannelLayout') ??
+                _nullableString(stream, 'Channels'),
+            isDefault: stream['IsDefault'] == true,
+            isForced: stream['IsForced'] == true,
+            isExternal: stream['IsExternal'] == true,
+            isText: stream['IsTextSubtitleStream'] == true,
+            deliveryUri: deliveryUrl == null
+                ? null
+                : _authenticatedDeliveryUri(account, deliveryUrl),
+          );
+        })
+        .whereType<PlaybackTrackInfo>()
+        .toList(growable: false);
+  }
+
+  Uri _authenticatedDeliveryUri(AuthenticatedServer account, String value) {
+    final uri = _resolveServerUri(account.server.apiBaseUri, value);
+    final base = account.server.apiBaseUri;
+    final sameServer =
+        uri.scheme == base.scheme &&
+        uri.host == base.host &&
+        uri.port == base.port;
+    if (!sameServer ||
+        uri.queryParameters.containsKey('api_key') ||
+        uri.queryParameters.containsKey('X-Emby-Token')) {
+      return uri;
+    }
+    return uri.replace(
+      queryParameters: {...uri.queryParameters, 'api_key': account.accessToken},
     );
   }
 
@@ -368,6 +520,16 @@ class PlaybackService {
   }
 
   int? _readInt(Object? value) => value is num ? value.toInt() : null;
+
+  String? _nullableString(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
+  Duration? _durationFromTicks(Object? value) {
+    final ticks = _readInt(value);
+    return ticks == null ? null : Duration(microseconds: ticks ~/ 10);
+  }
 
   int _ticks(Duration value) => value.inMicroseconds * 10;
 

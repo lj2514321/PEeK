@@ -12,12 +12,12 @@
 - 服务器与登录持久化、媒体库分页浏览和本地缓存
 - 电影、剧集、演员详情、相似推荐和全局搜索
 - STRM、原码、直传与转码播放计划及播放进度上报
-- `media_kit/libmpv` 视频画面和基础播放控制
+- `media_kit/libmpv` 影院控制层、快捷键、全屏、倍速与音字幕轨道
 - 统一服务器、媒体条目和播放计划模型
 - Riverpod、Dio、Drift、安全凭据存储及 media_kit 依赖
 - 基础组件测试
 
-下一阶段将继续完善首页内容聚合、图片磁盘缓存、音轨/字幕控制与自动下一集。详细边界见 [架构说明](docs/ARCHITECTURE.md) 和 [开发路线](docs/ROADMAP.md)。
+下一阶段将继续完善首页内容聚合、图片磁盘缓存与自动下一集。详细边界见 [架构说明](docs/ARCHITECTURE.md)、[开发路线](docs/ROADMAP.md) 和 [播放验证矩阵](docs/PLAYBACK_TEST_MATRIX.md)。
 
 视觉与交互实现遵循 [PEeK 设计系统](design-system/default/MASTER.md)，首页状态与响应式规则见 [首页规范](design-system/default/pages/home.md)。
 
