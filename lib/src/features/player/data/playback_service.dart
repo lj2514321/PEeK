@@ -1,12 +1,16 @@
 import 'package:dio/dio.dart';
+import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 
 class PlaybackService {
-  PlaybackService(this._dio);
+  PlaybackService(this._dio, [PlaybackSettingsStore? settingsStore])
+    : _settingsStore = settingsStore ?? MemoryPlaybackSettingsStore();
 
   final Dio _dio;
+  final PlaybackSettingsStore _settingsStore;
 
   Future<PlaybackPlan> createPlan(
     AuthenticatedServer account,
@@ -17,6 +21,7 @@ class PlaybackService {
     String? mediaSourceId,
   }) async {
     final resumeAt = startPosition ?? item.resumePosition;
+    final settings = await _readSettings();
     final uri = _appendPath(
       account.server.apiBaseUri,
       'Items/${item.id}/PlaybackInfo',
@@ -28,6 +33,7 @@ class PlaybackService {
       audioStreamIndex: audioStreamIndex,
       subtitleStreamIndex: subtitleStreamIndex,
       mediaSourceId: mediaSourceId,
+      maxStreamingBitrate: settings.maxStreamingBitrate.bitsPerSecond,
     );
     final rawSources = data['MediaSources'];
     final playSessionId = _readString(data, 'PlaySessionId');
@@ -61,6 +67,7 @@ class PlaybackService {
     required int? audioStreamIndex,
     required int? subtitleStreamIndex,
     required String? mediaSourceId,
+    required int maxStreamingBitrate,
   }) async {
     DioException? primaryError;
     try {
@@ -72,7 +79,7 @@ class PlaybackService {
           'AudioStreamIndex': ?audioStreamIndex,
           'SubtitleStreamIndex': ?subtitleStreamIndex,
           'MediaSourceId': ?mediaSourceId,
-          'MaxStreamingBitrate': 160000000,
+          'MaxStreamingBitrate': maxStreamingBitrate,
           'EnableDirectPlay': true,
           'EnableDirectStream': true,
           'EnableTranscoding': true,
@@ -80,7 +87,7 @@ class PlaybackService {
           'AllowAudioStreamCopy': true,
           'IsPlayback': true,
           'AutoOpenLiveStream': true,
-          'DeviceProfile': _deviceProfile,
+          'DeviceProfile': _deviceProfileFor(maxStreamingBitrate),
         },
         options: Options(
           contentType: Headers.jsonContentType,
@@ -106,7 +113,7 @@ class PlaybackService {
         if (subtitleStreamIndex != null)
           'SubtitleStreamIndex': '$subtitleStreamIndex',
         'MediaSourceId': ?mediaSourceId,
-        'MaxStreamingBitrate': '160000000',
+        'MaxStreamingBitrate': '$maxStreamingBitrate',
         'IsPlayback': 'true',
         'AutoOpenLiveStream': 'true',
       },
@@ -125,6 +132,14 @@ class PlaybackService {
       rethrow;
     } on DioException catch (fallbackError) {
       throw _playbackInfoException(fallbackError, primaryError: primaryError);
+    }
+  }
+
+  Future<PlaybackSettings> _readSettings() async {
+    try {
+      return await _settingsStore.read();
+    } on Object {
+      return const PlaybackSettings();
     }
   }
 
@@ -650,6 +665,10 @@ class PlaybackService {
       {'Format': 'dvdsub', 'Method': 'Embed'},
     ],
   };
+
+  Map<String, dynamic> _deviceProfileFor(int maxStreamingBitrate) {
+    return {..._deviceProfile, 'MaxStreamingBitrate': maxStreamingBitrate};
+  }
 }
 
 class PlaybackServiceException implements Exception {

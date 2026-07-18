@@ -6,6 +6,7 @@ import 'package:embyplayer/src/core/storage/secure_token_store.dart';
 import 'package:embyplayer/src/features/home/data/home_feed_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_preparation_service.dart';
+import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/data/server_authentication_service.dart';
 import 'package:embyplayer/src/features/servers/data/server_discovery_service.dart';
@@ -55,8 +56,15 @@ final homeFeedProvider = Provider<HomeFeedService>((ref) {
   return HomeFeedService(ref.watch(mediaLibraryProvider));
 });
 
+final playbackSettingsStoreProvider = Provider<PlaybackSettingsStore>((ref) {
+  return JsonPlaybackSettingsStore();
+});
+
 final playbackServiceProvider = Provider<PlaybackService>((ref) {
-  return PlaybackService(ref.watch(dioProvider));
+  return PlaybackService(
+    ref.watch(dioProvider),
+    ref.watch(playbackSettingsStoreProvider),
+  );
 });
 
 final playbackPreparationProvider = Provider<PlaybackPreparationService>((ref) {

@@ -1,5 +1,7 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
+import 'package:embyplayer/src/features/settings/presentation/playback_settings_section.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
 
@@ -13,6 +15,11 @@ class ServerAccountsPage extends StatelessWidget {
     required this.onLogout,
     required this.onRemove,
     required this.onGoHome,
+    this.playbackSettings = const PlaybackSettings(),
+    this.playbackSettingsLoading = false,
+    this.playbackSettingsSaving = false,
+    this.playbackSettingsError,
+    this.onPlaybackBitrateChanged,
     this.busyProfileId,
   });
 
@@ -23,6 +30,11 @@ class ServerAccountsPage extends StatelessWidget {
   final Future<void> Function(ServerAccountEntry account) onLogout;
   final Future<void> Function(ServerAccountEntry account) onRemove;
   final VoidCallback onGoHome;
+  final PlaybackSettings playbackSettings;
+  final bool playbackSettingsLoading;
+  final bool playbackSettingsSaving;
+  final String? playbackSettingsError;
+  final ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged;
   final String? busyProfileId;
 
   @override
@@ -53,6 +65,16 @@ class ServerAccountsPage extends StatelessWidget {
                 children: [
                   _PageHeader(compact: compact, onAddServer: onAddServer),
                   const SizedBox(height: 24),
+                  PlaybackSettingsSection(
+                    settings: playbackSettings,
+                    loading: playbackSettingsLoading,
+                    saving: playbackSettingsSaving,
+                    error: playbackSettingsError,
+                    onBitrateChanged: onPlaybackBitrateChanged,
+                  ),
+                  const SizedBox(height: 32),
+                  Text('服务器与账户', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 14),
                   _ActiveSourceStage(
                     state: state,
                     compact: compact,
@@ -183,10 +205,10 @@ class _PageHeader extends StatelessWidget {
           ).textTheme.labelSmall?.copyWith(color: AppColors.spotlight),
         ),
         const SizedBox(height: 8),
-        Text('服务器与账户', style: Theme.of(context).textTheme.headlineMedium),
+        Text('设置', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 8),
         const Text(
-          '在不同 Jellyfin 与 Emby 片库之间切换，凭据只保存在这台设备。',
+          '调整播放质量，并管理保存在这台设备上的 Jellyfin 与 Emby 放映源。',
           style: TextStyle(color: AppColors.textSecondary),
         ),
       ],

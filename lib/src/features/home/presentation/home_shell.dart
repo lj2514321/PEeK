@@ -8,6 +8,7 @@ import 'package:embyplayer/src/core/network/session_expiry_coordinator.dart';
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
 import 'package:embyplayer/src/features/home/presentation/authenticated_home_page.dart';
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:embyplayer/src/features/servers/presentation/server_accounts_page.dart';
@@ -28,6 +29,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   DiscoveredServer? _discoveredServer;
   AuthenticatedServer? _authenticatedServer;
   ServerAccountState _accountState = const ServerAccountState();
+  PlaybackSettings _playbackSettings = const PlaybackSettings();
+  bool _playbackSettingsLoading = true;
+  bool _playbackSettingsSaving = false;
+  String? _playbackSettingsError;
   String? _busyProfileId;
   bool _clearingExpiredSession = false;
   late final StreamSubscription<SessionExpiryEvent> _sessionExpirySubscription;
@@ -51,6 +56,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         .events
         .listen((event) => unawaited(_handleSessionExpired(event)));
     Future<void>.microtask(_restoreSession);
+    Future<void>.microtask(_restorePlaybackSettings);
   }
 
   @override
@@ -71,6 +77,50 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           state.activeSession?.server ??
           (state.accounts.isEmpty ? null : state.accounts.first.profile.server);
     });
+  }
+
+  Future<void> _restorePlaybackSettings() async {
+    try {
+      final settings = await ref.read(playbackSettingsStoreProvider).read();
+      if (!mounted) return;
+      setState(() {
+        _playbackSettings = settings;
+        _playbackSettingsLoading = false;
+        _playbackSettingsError = null;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _playbackSettingsLoading = false;
+        _playbackSettingsError = '无法读取播放设置，已使用原画优先。';
+      });
+    }
+  }
+
+  Future<void> _changePlaybackBitrate(PlaybackBitrate bitrate) async {
+    if (_playbackSettingsLoading ||
+        _playbackSettingsSaving ||
+        bitrate == _playbackSettings.maxStreamingBitrate) {
+      return;
+    }
+    final previous = _playbackSettings;
+    final updated = previous.copyWith(maxStreamingBitrate: bitrate);
+    setState(() {
+      _playbackSettings = updated;
+      _playbackSettingsSaving = true;
+      _playbackSettingsError = null;
+    });
+    try {
+      await ref.read(playbackSettingsStoreProvider).write(updated);
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _playbackSettings = previous;
+        _playbackSettingsError = '无法保存播放设置，已恢复之前的选择。';
+      });
+    } finally {
+      if (mounted) setState(() => _playbackSettingsSaving = false);
+    }
   }
 
   Future<void> _showAddServerDialog() async {
@@ -361,6 +411,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                     onLogout: _logoutAccount,
                                     onRemove: _removeAccount,
                                     onGoHome: () => _selectDestination(0),
+                                    playbackSettings: _playbackSettings,
+                                    playbackSettingsLoading:
+                                        _playbackSettingsLoading,
+                                    playbackSettingsSaving:
+                                        _playbackSettingsSaving,
+                                    playbackSettingsError:
+                                        _playbackSettingsError,
+                                    onPlaybackBitrateChanged: (bitrate) =>
+                                        unawaited(
+                                          _changePlaybackBitrate(bitrate),
+                                        ),
                                   ),
                                 },
                               ),

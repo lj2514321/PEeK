@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
+import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -123,6 +125,38 @@ void main() {
     expect(plan.subtitleStreamIndex, isNull);
   });
 
+  test(
+    'applies the persisted bitrate to playback info and device profile',
+    () async {
+      RequestOptions? request;
+      final service = PlaybackService(
+        _dioWithJsonResponse({
+          'PlaySessionId': 'quality-session',
+          'MediaSources': [
+            {
+              'Id': 'source-id',
+              'Protocol': 'File',
+              'Container': 'mkv',
+              'SupportsDirectPlay': true,
+            },
+          ],
+        }, onRequest: (options) => request = options),
+        MemoryPlaybackSettingsStore(
+          const PlaybackSettings(maxStreamingBitrate: PlaybackBitrate.mbps20),
+        ),
+      );
+
+      await service.createPlan(account, item);
+
+      final body = request?.data as Map<String, dynamic>;
+      expect(body['MaxStreamingBitrate'], 20000000);
+      expect(
+        (body['DeviceProfile'] as Map<String, dynamic>)['MaxStreamingBitrate'],
+        20000000,
+      );
+    },
+  );
+
   test('skips direct stream sources without a stream url', () async {
     final service = PlaybackService(
       _dioWithJsonResponse({
@@ -243,10 +277,19 @@ void main() {
           ),
         );
 
-      final plan = await PlaybackService(dio).createPlan(account, item);
+      final plan = await PlaybackService(
+        dio,
+        MemoryPlaybackSettingsStore(
+          const PlaybackSettings(maxStreamingBitrate: PlaybackBitrate.mbps10),
+        ),
+      ).createPlan(account, item);
 
       expect(methods, ['POST', 'GET']);
       expect(fallbackRequest?.uri.queryParameters['UserId'], 'user-id');
+      expect(
+        fallbackRequest?.uri.queryParameters['MaxStreamingBitrate'],
+        '10000000',
+      );
       expect(plan.playSessionId, 'fallback-session');
       expect(plan.streamUri.path, '/fallback.m3u8');
     },

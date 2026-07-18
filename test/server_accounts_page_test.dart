@@ -1,4 +1,5 @@
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:embyplayer/src/features/servers/presentation/server_accounts_page.dart';
 import 'package:flutter/material.dart';
@@ -38,7 +39,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final study = state.accounts[1];
-    await tester.tap(find.byKey(ValueKey('switch-${study.profile.id}')));
+    final switchButton = find.byKey(ValueKey('switch-${study.profile.id}'));
+    await tester.ensureVisible(switchButton);
+    await tester.pumpAndSettle();
+    await tester.tap(switchButton);
     await tester.pump();
 
     expect(switchedProfileId, study.profile.id);
@@ -65,12 +69,36 @@ void main() {
 
     expect(loginProfileId, bedroom.profile.id);
   });
+
+  testWidgets('selects a maximum streaming bitrate', (tester) async {
+    PlaybackBitrate? selected;
+    await tester.pumpWidget(
+      _app(
+        state: _state(),
+        playbackSettings: const PlaybackSettings(
+          maxStreamingBitrate: PlaybackBitrate.mbps20,
+        ),
+        onPlaybackBitrateChanged: (value) => selected = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final option = find.byKey(const ValueKey('playback-bitrate-mbps10'));
+    await tester.ensureVisible(option);
+    await tester.tap(option);
+    await tester.pump();
+
+    expect(selected, PlaybackBitrate.mbps10);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Widget _app({
   required ServerAccountState state,
   Future<void> Function(ServerAccountEntry)? onSwitch,
   Future<void> Function(ServerAccountEntry)? onLogin,
+  PlaybackSettings playbackSettings = const PlaybackSettings(),
+  ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged,
 }) {
   return MaterialApp(
     theme: AppTheme.dark(),
@@ -83,6 +111,8 @@ Widget _app({
         onLogout: (_) async {},
         onRemove: (_) async {},
         onGoHome: () {},
+        playbackSettings: playbackSettings,
+        onPlaybackBitrateChanged: onPlaybackBitrateChanged,
       ),
     ),
   );

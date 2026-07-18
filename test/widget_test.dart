@@ -1,4 +1,7 @@
 import 'package:embyplayer/src/app/app.dart';
+import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -58,5 +61,28 @@ void main() {
     expect(find.byKey(const ValueKey('server-accounts-page')), findsOneWidget);
     expect(find.text('服务器与账户'), findsOneWidget);
     expect(find.text('还没有保存的服务器'), findsOneWidget);
+  });
+
+  testWidgets('persists playback quality from settings', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = MemoryPlaybackSettingsStore();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [playbackSettingsStoreProvider.overrideWithValue(store)],
+        child: const EmbyPlayerApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('playback-bitrate-mbps20')));
+    await tester.pumpAndSettle();
+
+    expect(store.settings.maxStreamingBitrate, PlaybackBitrate.mbps20);
+    expect(find.text('已自动保存'), findsOneWidget);
   });
 }
