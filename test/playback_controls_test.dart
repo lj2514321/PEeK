@@ -22,6 +22,7 @@ void main() {
       expect(find.byKey(const ValueKey('player-audio')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-subtitle')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-fullscreen')), findsOneWidget);
+      expect(find.byKey(const ValueKey('player-diagnostics')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-episodes')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -42,6 +43,7 @@ void main() {
     var previousCount = 0;
     var nextCount = 0;
     var episodesCount = 0;
+    var diagnosticsCount = 0;
     Duration? previewPosition;
     Duration? seekPosition;
     double? selectedRate;
@@ -57,6 +59,7 @@ void main() {
         onPrevious: () => previousCount++,
         onNext: () => nextCount++,
         onEpisodes: () => episodesCount++,
+        onDiagnostics: () => diagnosticsCount++,
         onRateChanged: (value) => selectedRate = value,
       ),
     );
@@ -68,6 +71,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('player-previous')));
     await tester.tap(find.byKey(const ValueKey('player-next')));
     await tester.tap(find.byKey(const ValueKey('player-episodes')));
+    await tester.tap(find.byKey(const ValueKey('player-diagnostics')));
     await tester.drag(
       find.byKey(const ValueKey('player-seek')),
       const Offset(90, 0),
@@ -84,6 +88,7 @@ void main() {
     expect(previousCount, 1);
     expect(nextCount, 1);
     expect(episodesCount, 1);
+    expect(diagnosticsCount, 1);
     expect(previewPosition, isNotNull);
     expect(seekPosition, isNotNull);
     expect(selectedRate, 1.5);
@@ -160,6 +165,7 @@ Widget _controlsApp({
   VoidCallback? onPrevious,
   VoidCallback? onNext,
   VoidCallback? onEpisodes,
+  VoidCallback? onDiagnostics,
   ValueChanged<double>? onRateChanged,
 }) {
   return MaterialApp(
@@ -198,6 +204,7 @@ Widget _controlsApp({
         onPrevious: onPrevious ?? () {},
         onNext: onNext ?? () {},
         onEpisodes: onEpisodes ?? () {},
+        onDiagnostics: onDiagnostics ?? () {},
         onFullScreen: onFullScreen ?? () {},
       ),
     ),

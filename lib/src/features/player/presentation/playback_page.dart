@@ -5,11 +5,15 @@ import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/features/player/data/playback_diagnostic_log.dart';
+import 'package:embyplayer/src/features/player/data/playback_diagnostics_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
+import 'package:embyplayer/src/features/player/domain/playback_diagnostics.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_controls.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_diagnostics_panel.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
@@ -56,6 +60,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Timer? _progressTimer;
   Timer? _controlsTimer;
   Timer? _nextEpisodeTimer;
+  Timer? _diagnosticsTimer;
+  late final PlaybackDiagnosticLog _diagnosticLog;
+  final PlaybackDiagnosticsService _diagnosticsService =
+      const PlaybackDiagnosticsService();
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -78,7 +86,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   bool _closing = false;
   bool _changingSource = false;
   bool _fullScreen = false;
+  bool _diagnosticsVisible = false;
+  bool _diagnosticsLoading = false;
+  bool _diagnosticsReading = false;
   String? _error;
+  PlaybackDiagnosticsSnapshot? _diagnostics;
   int? _nextEpisodeCountdown;
 
   static const _autoNextSeconds = 8;
@@ -91,6 +103,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   @override
   void initState() {
     super.initState();
+    _diagnosticLog = ref.read(playbackDiagnosticLogProvider);
     AppChrome.enterImmersive();
     _duration = widget.plan.duration ?? Duration.zero;
     _position = widget.plan.startPosition;
@@ -139,6 +152,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       }),
       _player.stream.error.listen((message) {
         if (mounted && message.isNotEmpty) {
+          _writeDiagnosticLog('player_error', fields: {'message': message});
           setState(() => _error = '播放器无法继续播放：$message');
           _showControls();
         }
@@ -149,9 +163,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _openInitialMedia() async {
     try {
       await _openMedia(_plan, play: true);
+      _writeDiagnosticLog('playback_opened');
       await _safeReportStarted();
       _startProgressTimer();
     } catch (error) {
+      _writeDiagnosticLog(
+        'playback_open_failed',
+        fields: {'message': error.toString()},
+      );
       if (mounted) setState(() => _error = '无法打开媒体：$error');
     }
   }
@@ -191,13 +210,16 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   void _showControls() {
     if (!mounted) return;
+    if (_diagnosticsVisible) return;
     if (!_controlsVisible) setState(() => _controlsVisible = true);
     _scheduleControlsHide();
   }
 
   void _scheduleControlsHide() {
     _controlsTimer?.cancel();
-    if (!_playing || _changingSource || _error != null) return;
+    if (!_playing || _changingSource || _error != null || _diagnosticsVisible) {
+      return;
+    }
     _controlsTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && _playing && !_changingSource && _error == null) {
         setState(() => _controlsVisible = false);
@@ -273,11 +295,129 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _handleEscape() async {
+    if (_diagnosticsVisible) {
+      _closeDiagnostics();
+      return;
+    }
     if (_fullScreen) {
       await _toggleFullScreen();
     } else {
       await _close();
     }
+  }
+
+  void _toggleDiagnostics() {
+    if (_diagnosticsVisible) {
+      _closeDiagnostics();
+      return;
+    }
+    _controlsTimer?.cancel();
+    setState(() {
+      _diagnosticsVisible = true;
+      _controlsVisible = false;
+    });
+    _writeDiagnosticLog('diagnostics_opened');
+    unawaited(_refreshDiagnostics());
+    _diagnosticsTimer?.cancel();
+    _diagnosticsTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => unawaited(_refreshDiagnostics()),
+    );
+  }
+
+  void _closeDiagnostics() {
+    _diagnosticsTimer?.cancel();
+    _diagnosticsTimer = null;
+    if (!mounted) return;
+    setState(() {
+      _diagnosticsVisible = false;
+      _diagnosticsLoading = false;
+    });
+    _showControls();
+  }
+
+  Future<void> _refreshDiagnostics() async {
+    if (!_diagnosticsVisible ||
+        _diagnosticsReading ||
+        _playerDisposed ||
+        _closing) {
+      return;
+    }
+    _diagnosticsReading = true;
+    if (mounted) setState(() => _diagnosticsLoading = true);
+    final video = _track.video;
+    final audio = _track.audio;
+    try {
+      final snapshot = await _diagnosticsService.collect(
+        readProperty: _readMpvProperty,
+        plan: _plan,
+        requestedDecodingMode: widget.hardwareDecodingMode,
+        serverKind: widget.account.server.kind.name,
+        serverVersion: widget.account.server.version,
+        position: _position,
+        bufferedUntil: _buffer,
+        buffering: _buffering,
+        videoCodec: video.codec,
+        audioCodec: audio.codec,
+        fallbackWidth: video.w,
+        fallbackHeight: video.h,
+        fallbackFrameRate: video.fps,
+        fallbackVideoBitrate: video.bitrate,
+        fallbackAudioBitrate: audio.bitrate,
+      );
+      if (mounted && _diagnosticsVisible) {
+        setState(() => _diagnostics = snapshot);
+      }
+    } finally {
+      _diagnosticsReading = false;
+      if (mounted) setState(() => _diagnosticsLoading = false);
+    }
+  }
+
+  Future<String?> _readMpvProperty(String property) async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer || _playerDisposed) return null;
+    try {
+      return await platform.getProperty(property);
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<void> _copyDiagnostics() async {
+    final snapshot = _diagnostics;
+    if (snapshot == null) return;
+    await Clipboard.setData(
+      ClipboardData(
+        text: snapshot.toClipboardText(platform: Platform.operatingSystem),
+      ),
+    );
+    _writeDiagnosticLog('diagnostics_copied');
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('已复制脱敏播放诊断信息。')));
+  }
+
+  void _writeDiagnosticLog(
+    String event, {
+    Map<String, Object?> fields = const {},
+  }) {
+    unawaited(
+      _diagnosticLog.write(
+        event,
+        fields: {
+          'serverKind': widget.account.server.kind.name,
+          'serverVersion': widget.account.server.version,
+          'playbackMethod': _plan.method.name,
+          'sourceProtocol': _plan.streamUri.scheme,
+          'hardwarePreference': widget.hardwareDecodingMode.name,
+          ...fields,
+        },
+        secrets: [widget.account.accessToken, ..._plan.httpHeaders.values],
+      ),
+    );
   }
 
   Future<void> _showAudioTracks() {
@@ -524,6 +664,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           );
       await _safeReportStopped();
       _plan = nextPlan;
+      if (_diagnosticsVisible) _diagnostics = null;
       _selectedAudioStreamIndex = nextPlan.audioStreamIndex;
       _selectedSubtitleStreamIndex = nextPlan.subtitleStreamIndex;
       _subtitlesDisabled = subtitleStreamIndex == -1;
@@ -531,11 +672,21 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _reportedStopped = false;
       _duration = nextPlan.duration ?? _duration;
       await _openMedia(nextPlan, play: wasPlaying);
+      _writeDiagnosticLog('playback_plan_rebuilt');
+      if (_diagnosticsVisible) unawaited(_refreshDiagnostics());
       await _safeReportStarted();
     } on PlaybackServiceException catch (error) {
+      _writeDiagnosticLog(
+        'playback_plan_rebuild_failed',
+        fields: {'message': error.message},
+      );
       if (mounted) setState(() => _error = '切换轨道失败：${error.message}');
       if (wasPlaying) await _player.play();
     } on Object catch (error) {
+      _writeDiagnosticLog(
+        'playback_plan_rebuild_failed',
+        fields: {'message': error.toString()},
+      );
       if (mounted) setState(() => _error = '切换轨道失败：$error');
       if (wasPlaying) await _player.play();
     } finally {
@@ -725,6 +876,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           );
       await _safeReportStopped();
       _plan = nextPlan;
+      if (_diagnosticsVisible) _diagnostics = null;
       _item = target;
       _queue = queue.select(index);
       _selectedAudioStreamIndex = nextPlan.audioStreamIndex;
@@ -737,15 +889,25 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _previewPosition = null;
       _buffer = Duration.zero;
       await _openMedia(nextPlan, play: true);
+      _writeDiagnosticLog('queue_item_opened');
+      if (_diagnosticsVisible) unawaited(_refreshDiagnostics());
       await _player.setVolume(preservedVolume);
       await _player.setRate(preservedRate);
       await _safeReportStarted();
       _startProgressTimer();
     } on PlaybackServiceException catch (error) {
+      _writeDiagnosticLog(
+        'queue_item_open_failed',
+        fields: {'message': error.message},
+      );
       if (mounted) setState(() => _error = '无法播放所选剧集：${error.message}');
       if (wasPlaying) await _player.play();
       _startProgressTimer();
     } on Object catch (error) {
+      _writeDiagnosticLog(
+        'queue_item_open_failed',
+        fields: {'message': error.toString()},
+      );
       if (mounted) setState(() => _error = '无法播放所选剧集：$error');
       if (wasPlaying) await _player.play();
       _startProgressTimer();
@@ -789,6 +951,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _progressTimer?.cancel();
     _controlsTimer?.cancel();
     _nextEpisodeTimer?.cancel();
+    _diagnosticsTimer?.cancel();
+    _writeDiagnosticLog('playback_closed');
     await _safeReportStopped();
     if (_fullScreen && Platform.isWindows) {
       try {
@@ -814,6 +978,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _progressTimer?.cancel();
     _controlsTimer?.cancel();
     _nextEpisodeTimer?.cancel();
+    _diagnosticsTimer?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -867,6 +1032,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
             const SingleActivator(LogicalKeyboardKey.keyF): () {
               unawaited(_toggleFullScreen());
             },
+            const SingleActivator(LogicalKeyboardKey.keyD, control: true):
+                _toggleDiagnostics,
             const SingleActivator(LogicalKeyboardKey.keyP): () {
               final queue = _queue;
               if (queue != null && queue.hasPrevious) {
@@ -886,11 +1053,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           child: Focus(
             autofocus: true,
             child: MouseRegion(
-              cursor: _controlsVisible
+              cursor: _controlsVisible || _diagnosticsVisible
                   ? SystemMouseCursors.basic
                   : SystemMouseCursors.none,
-              onEnter: (_) => _showControls(),
-              onHover: (_) => _showControls(),
+              onEnter: (_) {
+                if (!_diagnosticsVisible) _showControls();
+              },
+              onHover: (_) {
+                if (!_diagnosticsVisible) _showControls();
+              },
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _showControls,
@@ -923,7 +1094,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                     PlaybackControls(
                       title: _item.name,
                       method: _plan.method,
-                      visible: _controlsVisible || !_playing,
+                      visible:
+                          (_controlsVisible || !_playing) &&
+                          !_diagnosticsVisible,
                       playing: _playing,
                       buffering: _buffering,
                       changingSource: _changingSource,
@@ -965,8 +1138,53 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                         }
                       },
                       onEpisodes: () => unawaited(_showEpisodes()),
+                      onDiagnostics: _toggleDiagnostics,
                       onFullScreen: () => unawaited(_toggleFullScreen()),
                     ),
+                    if (_diagnosticsVisible)
+                      Positioned.fill(
+                        child: SafeArea(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final compact = constraints.maxWidth < 720;
+                              final maxHeight = (constraints.maxHeight - 24)
+                                  .clamp(220.0, 680.0)
+                                  .toDouble();
+                              return Align(
+                                alignment: Alignment.topRight,
+                                child: Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    compact ? 12 : 24,
+                                    12,
+                                    compact ? 12 : 24,
+                                    12,
+                                  ),
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: compact ? 520 : 470,
+                                      maxHeight: maxHeight,
+                                    ),
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () {},
+                                      onDoubleTap: () {},
+                                      child: PlaybackDiagnosticsPanel(
+                                        snapshot: _diagnostics,
+                                        loading: _diagnosticsLoading,
+                                        onCopy: () =>
+                                            unawaited(_copyDiagnostics()),
+                                        onRefresh: () =>
+                                            unawaited(_refreshDiagnostics()),
+                                        onClose: _closeDiagnostics,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                     if (_nextEpisodeCountdown != null && _queue?.next != null)
                       NextEpisodeCountdown(
                         item: _queue!.next!,

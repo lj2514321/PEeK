@@ -231,6 +231,31 @@ void main() {
     expect(plan.streamUri.queryParameters['Static'], 'false');
   });
 
+  test('keeps server-provided transcoding reasons in the plan', () async {
+    final service = PlaybackService(
+      _dioWithJsonResponse({
+        'PlaySessionId': 'transcode-session',
+        'TranscodingReasons': ['VideoCodecNotSupported'],
+        'MediaSources': [
+          {
+            'Id': 'source-id',
+            'Protocol': 'File',
+            'TranscodingUrl': '/Videos/item-id/master.m3u8',
+            'TranscodingReasons': ['AudioCodecNotSupported'],
+          },
+        ],
+      }),
+    );
+
+    final plan = await service.createPlan(account, item);
+
+    expect(plan.method, PlaybackMethod.transcode);
+    expect(plan.transcodingReasons, [
+      'VideoCodecNotSupported',
+      'AudioCodecNotSupported',
+    ]);
+  });
+
   test(
     'falls back to legacy GET playback info when POST is rejected',
     () async {

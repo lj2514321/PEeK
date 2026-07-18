@@ -38,6 +38,7 @@ class PlaybackControls extends StatelessWidget {
     required this.onPrevious,
     required this.onNext,
     required this.onEpisodes,
+    required this.onDiagnostics,
     required this.onFullScreen,
   });
 
@@ -72,6 +73,7 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onEpisodes;
+  final VoidCallback onDiagnostics;
   final VoidCallback onFullScreen;
 
   @override
@@ -90,6 +92,7 @@ class PlaybackControls extends StatelessWidget {
               method: method,
               changingSource: changingSource,
               onBack: onBack,
+              onDiagnostics: onDiagnostics,
             ),
           ),
         ),
@@ -149,12 +152,14 @@ class _PlaybackTopBar extends StatelessWidget {
     required this.method,
     required this.changingSource,
     required this.onBack,
+    required this.onDiagnostics,
   });
 
   final String title;
   final PlaybackMethod method;
   final bool changingSource;
   final VoidCallback onBack;
+  final VoidCallback onDiagnostics;
 
   @override
   Widget build(BuildContext context) {
@@ -212,6 +217,12 @@ class _PlaybackTopBar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
+                _ControlIconButton(
+                  key: const ValueKey('player-diagnostics'),
+                  tooltip: '播放诊断（Ctrl+D）',
+                  icon: Icons.monitor_heart_outlined,
+                  onPressed: onDiagnostics,
+                ),
                 _MethodBadge(method: method),
               ],
             ),

@@ -46,6 +46,7 @@ class PlaybackPlan {
     this.subtitleTracks = const [],
     this.audioStreamIndex,
     this.subtitleStreamIndex,
+    this.transcodingReasons = const [],
   });
 
   final String itemId;
@@ -60,6 +61,7 @@ class PlaybackPlan {
   final List<PlaybackTrackInfo> subtitleTracks;
   final int? audioStreamIndex;
   final int? subtitleStreamIndex;
+  final List<String> transcodingReasons;
 }
 
 class PlaybackSessionSnapshot {

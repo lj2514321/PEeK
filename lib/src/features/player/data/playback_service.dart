@@ -49,6 +49,10 @@ class PlaybackService {
       throw const PlaybackServiceException('服务器没有返回可播放的媒体源。');
     }
     final source = _selectSource(sources, preferredId: mediaSourceId);
+    final transcodingReasons = <String>{
+      ..._readStringList(data['TranscodingReasons']),
+      ..._readStringList(source['TranscodingReasons']),
+    }.toList(growable: false);
     return _buildPlan(
       account: account,
       item: item,
@@ -57,6 +61,7 @@ class PlaybackService {
       startPosition: resumeAt,
       requestedAudioStreamIndex: audioStreamIndex,
       requestedSubtitleStreamIndex: subtitleStreamIndex,
+      transcodingReasons: transcodingReasons,
     );
   }
 
@@ -269,6 +274,7 @@ class PlaybackService {
     required Duration startPosition,
     required int? requestedAudioStreamIndex,
     required int? requestedSubtitleStreamIndex,
+    required List<String> transcodingReasons,
   }) {
     final mediaSourceId = _readString(source, 'Id', fallback: item.id);
     final requiredHeaders = _readHeaders(source['RequiredHttpHeaders']);
@@ -304,6 +310,7 @@ class PlaybackService {
         subtitleTracks: subtitleTracks,
         audioStreamIndex: selectedAudioStreamIndex,
         subtitleStreamIndex: selectedSubtitleStreamIndex,
+        transcodingReasons: transcodingReasons,
       );
     }
 
@@ -327,6 +334,7 @@ class PlaybackService {
         subtitleTracks: subtitleTracks,
         audioStreamIndex: selectedAudioStreamIndex,
         subtitleStreamIndex: selectedSubtitleStreamIndex,
+        transcodingReasons: transcodingReasons,
       );
     }
 
@@ -360,6 +368,7 @@ class PlaybackService {
         subtitleTracks: subtitleTracks,
         audioStreamIndex: selectedAudioStreamIndex,
         subtitleStreamIndex: selectedSubtitleStreamIndex,
+        transcodingReasons: transcodingReasons,
       );
     }
 
@@ -380,6 +389,7 @@ class PlaybackService {
         subtitleTracks: subtitleTracks,
         audioStreamIndex: selectedAudioStreamIndex,
         subtitleStreamIndex: selectedSubtitleStreamIndex,
+        transcodingReasons: transcodingReasons,
       );
     }
 
@@ -401,6 +411,7 @@ class PlaybackService {
     required List<PlaybackTrackInfo> subtitleTracks,
     required int? audioStreamIndex,
     required int? subtitleStreamIndex,
+    required List<String> transcodingReasons,
   }) {
     return PlaybackPlan(
       itemId: item.id,
@@ -415,7 +426,17 @@ class PlaybackService {
       subtitleTracks: subtitleTracks,
       audioStreamIndex: audioStreamIndex,
       subtitleStreamIndex: subtitleStreamIndex,
+      transcodingReasons: transcodingReasons,
     );
+  }
+
+  List<String> _readStringList(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Object>()
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
   }
 
   List<PlaybackTrackInfo> _readTracks(
