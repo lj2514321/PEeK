@@ -322,6 +322,27 @@ void main() {
     expect(body['SubtitleStreamIndex'], isNull);
     expect(body['PlaybackRate'], 1.5);
   });
+
+  test('marks a completed item as played', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<void>(requestOptions: options, statusCode: 204),
+            );
+          },
+        ),
+      );
+
+    await PlaybackService(dio).markPlayed(account, 'episode-id');
+
+    expect(request?.method, 'POST');
+    expect(request?.uri.path, '/Users/user-id/PlayedItems/episode-id');
+    expect(request?.headers['X-Emby-Token'], 'secret-token');
+  });
 }
 
 AuthenticatedServer _account(Uri baseUri) {

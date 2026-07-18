@@ -345,4 +345,56 @@ void main() {
     expect(request?.uri.queryParameters['IncludeItemTypes'], contains('Movie'));
     expect(page.items.single.name, '演员作品');
   });
+
+  test('loads every playable episode for a series queue', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {
+                  'TotalRecordCount': 2,
+                  'Items': [
+                    {
+                      'Id': 'episode-2',
+                      'Name': '第二集',
+                      'Type': 'Episode',
+                      'SeriesId': 'series-id',
+                      'ParentIndexNumber': 1,
+                      'IndexNumber': 2,
+                    },
+                    {
+                      'Id': 'episode-1',
+                      'Name': '第一集',
+                      'Type': 'Episode',
+                      'SeriesId': 'series-id',
+                      'ParentIndexNumber': 1,
+                      'IndexNumber': 1,
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final episodes = await MediaLibraryService(
+      dio,
+    ).getEpisodesForSeries(account, seriesId: 'series-id');
+
+    expect(request?.uri.path, '/Users/user-id/Items');
+    expect(request?.uri.queryParameters['ParentId'], 'series-id');
+    expect(request?.uri.queryParameters['Recursive'], 'true');
+    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Episode');
+    expect(request?.uri.queryParameters['IsMissing'], 'false');
+    expect(request?.uri.queryParameters['Limit'], '10000');
+    expect(episodes, hasLength(2));
+    expect(episodes.first.seriesId, 'series-id');
+  });
 }

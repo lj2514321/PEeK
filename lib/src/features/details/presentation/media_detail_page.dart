@@ -2,6 +2,7 @@ import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
+import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
@@ -75,19 +76,26 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
       _planningPlayback = true;
       _playbackError = null;
     });
+    final item = _item;
+    final queueFuture = _buildPlaybackQueue(item);
     try {
       final plan = await ref
           .read(playbackServiceProvider)
           .createPlan(
             widget.account,
-            _item,
+            item,
             startPosition: fromBeginning ? Duration.zero : null,
           );
+      final queue = await queueFuture;
       if (!mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (context) =>
-              PlaybackPage(account: widget.account, item: _item, plan: plan),
+          builder: (context) => PlaybackPage(
+            account: widget.account,
+            item: item,
+            plan: plan,
+            queue: queue,
+          ),
         ),
       );
       if (mounted) await _loadDetails(forceRefresh: true);
@@ -95,6 +103,23 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
       if (mounted) setState(() => _playbackError = error.message);
     } finally {
       if (mounted) setState(() => _planningPlayback = false);
+    }
+  }
+
+  Future<PlaybackQueue?> _buildPlaybackQueue(MediaItem item) async {
+    final seriesId = item.seriesId;
+    if (item.kind != MediaItemKind.episode ||
+        seriesId == null ||
+        seriesId.isEmpty) {
+      return null;
+    }
+    try {
+      final episodes = await ref
+          .read(mediaLibraryProvider)
+          .getEpisodesForSeries(widget.account, seriesId: seriesId);
+      return PlaybackQueue.fromEpisodes(current: item, episodes: episodes);
+    } on MediaLibraryException {
+      return null;
     }
   }
 

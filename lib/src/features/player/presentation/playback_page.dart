@@ -7,6 +7,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_controls.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -23,11 +24,13 @@ class PlaybackPage extends ConsumerStatefulWidget {
     required this.account,
     required this.item,
     required this.plan,
+    this.queue,
   });
 
   final AuthenticatedServer account;
   final MediaItem item;
   final PlaybackPlan plan;
+  final PlaybackQueue? queue;
 
   @override
   ConsumerState<PlaybackPage> createState() => _PlaybackPageState();
@@ -37,10 +40,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   late final Player _player = Player();
   late final VideoController _controller = VideoController(_player);
   late PlaybackPlan _plan = widget.plan;
+  late MediaItem _item = widget.item;
+  late PlaybackQueue? _queue = widget.queue;
 
   final _subscriptions = <StreamSubscription<dynamic>>[];
   Timer? _progressTimer;
   Timer? _controlsTimer;
+  Timer? _nextEpisodeTimer;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -64,6 +70,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   bool _changingSource = false;
   bool _fullScreen = false;
   String? _error;
+  int? _nextEpisodeCountdown;
+
+  static const _autoNextSeconds = 8;
 
   Duration get _effectiveDuration {
     if (_duration > Duration.zero) return _duration;
@@ -132,13 +141,18 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     try {
       await _openMedia(_plan, play: true);
       await _safeReportStarted();
-      _progressTimer = Timer.periodic(
-        const Duration(seconds: 10),
-        (_) => _safeReportProgress('TimeUpdate'),
-      );
+      _startProgressTimer();
     } catch (error) {
       if (mounted) setState(() => _error = '无法打开媒体：$error');
     }
+  }
+
+  void _startProgressTimer() {
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _safeReportProgress('TimeUpdate'),
+    );
   }
 
   Future<void> _openMedia(PlaybackPlan plan, {required bool play}) {
@@ -493,7 +507,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           .read(playbackServiceProvider)
           .createPlan(
             widget.account,
-            widget.item,
+            _item,
             startPosition: position,
             audioStreamIndex: audioStreamIndex,
             subtitleStreamIndex: subtitleStreamIndex,
@@ -605,10 +619,146 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     }
   }
 
-  Future<void> _finishCompletedPlayback() async {
-    _progressTimer?.cancel();
+  Future<void> _safeMarkPlayed() async {
+    try {
+      await ref
+          .read(playbackServiceProvider)
+          .markPlayed(widget.account, _item.id);
+    } catch (_) {
+      // The completed check-in can still mark the item on the server.
+    }
+  }
+
+  Future<void> _showEpisodes() async {
+    final queue = _queue;
+    if (queue == null || queue.items.isEmpty) return;
+    _controlsTimer?.cancel();
     _showControls();
+    final index = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      isScrollControlled: true,
+      builder: (context) => _EpisodeSheet(queue: queue),
+    );
+    if (index != null && mounted) {
+      await _playQueueIndex(index);
+    }
+    if (mounted) _scheduleControlsHide();
+  }
+
+  void _startNextEpisodeCountdown() {
+    final queue = _queue;
+    if (queue == null || !queue.hasNext || _closing || _changingSource) return;
+    _nextEpisodeTimer?.cancel();
+    setState(() {
+      _nextEpisodeCountdown = _autoNextSeconds;
+      _controlsVisible = true;
+    });
+    _nextEpisodeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _closing) {
+        timer.cancel();
+        return;
+      }
+      final remaining = (_nextEpisodeCountdown ?? 1) - 1;
+      if (remaining <= 0) {
+        timer.cancel();
+        setState(() => _nextEpisodeCountdown = null);
+        final queue = _queue;
+        if (queue != null) {
+          unawaited(_playQueueIndex(queue.currentIndex + 1, automatic: true));
+        }
+      } else {
+        setState(() => _nextEpisodeCountdown = remaining);
+      }
+    });
+  }
+
+  void _cancelNextEpisodeCountdown({bool showControls = true}) {
+    _nextEpisodeTimer?.cancel();
+    _nextEpisodeTimer = null;
+    if (mounted && _nextEpisodeCountdown != null) {
+      setState(() => _nextEpisodeCountdown = null);
+    }
+    if (showControls) _showControls();
+  }
+
+  Future<void> _playQueueIndex(int index, {bool automatic = false}) async {
+    final queue = _queue;
+    if (queue == null ||
+        index < 0 ||
+        index >= queue.items.length ||
+        index == queue.currentIndex ||
+        _changingSource ||
+        _closing) {
+      return;
+    }
+    final target = queue.items[index];
+    final wasPlaying = _playing;
+    final preservedVolume = _volume;
+    final preservedRate = _rate;
+    _cancelNextEpisodeCountdown(showControls: false);
+    _progressTimer?.cancel();
+    _controlsTimer?.cancel();
+    setState(() {
+      _changingSource = true;
+      _controlsVisible = true;
+      _error = null;
+    });
+    await _player.pause();
+    try {
+      final nextPlan = await ref
+          .read(playbackServiceProvider)
+          .createPlan(
+            widget.account,
+            target,
+            startPosition: automatic ? Duration.zero : null,
+          );
+      await _safeReportStopped();
+      _plan = nextPlan;
+      _item = target;
+      _queue = queue.select(index);
+      _selectedAudioStreamIndex = nextPlan.audioStreamIndex;
+      _selectedSubtitleStreamIndex = nextPlan.subtitleStreamIndex;
+      _subtitlesDisabled = nextPlan.subtitleStreamIndex == null;
+      _reportedStarted = false;
+      _reportedStopped = false;
+      _duration = nextPlan.duration ?? target.runTime ?? Duration.zero;
+      _position = nextPlan.startPosition;
+      _previewPosition = null;
+      _buffer = Duration.zero;
+      await _openMedia(nextPlan, play: true);
+      await _player.setVolume(preservedVolume);
+      await _player.setRate(preservedRate);
+      await _safeReportStarted();
+      _startProgressTimer();
+    } on PlaybackServiceException catch (error) {
+      if (mounted) setState(() => _error = '无法播放所选剧集：${error.message}');
+      if (wasPlaying) await _player.play();
+      _startProgressTimer();
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = '无法播放所选剧集：$error');
+      if (wasPlaying) await _player.play();
+      _startProgressTimer();
+    } finally {
+      if (mounted) {
+        setState(() => _changingSource = false);
+        _scheduleControlsHide();
+      }
+    }
+  }
+
+  Future<void> _finishCompletedPlayback() async {
+    if (_closing || _changingSource || _nextEpisodeCountdown != null) return;
+    _progressTimer?.cancel();
     await _safeReportStopped();
+    unawaited(_safeMarkPlayed());
+    if (!mounted || _closing) return;
+    if (_queue?.hasNext ?? false) {
+      _startNextEpisodeCountdown();
+    } else {
+      _showControls();
+    }
   }
 
   PlaybackSessionSnapshot _snapshot() {
@@ -629,6 +779,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     setState(() => _closing = true);
     _progressTimer?.cancel();
     _controlsTimer?.cancel();
+    _nextEpisodeTimer?.cancel();
     await _safeReportStopped();
     if (_fullScreen && Platform.isWindows) {
       try {
@@ -653,6 +804,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     AppChrome.leaveImmersive();
     _progressTimer?.cancel();
     _controlsTimer?.cancel();
+    _nextEpisodeTimer?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -706,6 +858,18 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
             const SingleActivator(LogicalKeyboardKey.keyF): () {
               unawaited(_toggleFullScreen());
             },
+            const SingleActivator(LogicalKeyboardKey.keyP): () {
+              final queue = _queue;
+              if (queue != null && queue.hasPrevious) {
+                unawaited(_playQueueIndex(queue.currentIndex - 1));
+              }
+            },
+            const SingleActivator(LogicalKeyboardKey.keyN): () {
+              final queue = _queue;
+              if (queue != null && queue.hasNext) {
+                unawaited(_playQueueIndex(queue.currentIndex + 1));
+              }
+            },
             const SingleActivator(LogicalKeyboardKey.escape): () {
               unawaited(_handleEscape());
             },
@@ -748,7 +912,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                           ),
                     ),
                     PlaybackControls(
-                      title: widget.item.name,
+                      title: _item.name,
                       method: _plan.method,
                       visible: _controlsVisible || !_playing,
                       playing: _playing,
@@ -762,6 +926,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                       fullScreen: _fullScreen,
                       audioLabel: _currentAudioLabel,
                       subtitleLabel: _currentSubtitleLabel,
+                      queueAvailable: (_queue?.items.length ?? 0) > 1,
+                      canPrevious: _queue?.hasPrevious ?? false,
+                      canNext: _queue?.hasNext ?? false,
                       onBack: () => unawaited(_close()),
                       onPlayPause: () => unawaited(_togglePlayPause()),
                       onSeekPreview: _previewSeek,
@@ -776,8 +943,39 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                       onRateChanged: (value) => unawaited(_setRate(value)),
                       onAudio: () => unawaited(_showAudioTracks()),
                       onSubtitle: () => unawaited(_showSubtitleTracks()),
+                      onPrevious: () {
+                        final queue = _queue;
+                        if (queue != null && queue.hasPrevious) {
+                          unawaited(_playQueueIndex(queue.currentIndex - 1));
+                        }
+                      },
+                      onNext: () {
+                        final queue = _queue;
+                        if (queue != null && queue.hasNext) {
+                          unawaited(_playQueueIndex(queue.currentIndex + 1));
+                        }
+                      },
+                      onEpisodes: () => unawaited(_showEpisodes()),
                       onFullScreen: () => unawaited(_toggleFullScreen()),
                     ),
+                    if (_nextEpisodeCountdown != null && _queue?.next != null)
+                      NextEpisodeCountdown(
+                        item: _queue!.next!,
+                        secondsRemaining: _nextEpisodeCountdown!,
+                        totalSeconds: _autoNextSeconds,
+                        onPlayNow: () {
+                          final queue = _queue;
+                          if (queue == null || !queue.hasNext) return;
+                          _cancelNextEpisodeCountdown(showControls: false);
+                          unawaited(
+                            _playQueueIndex(
+                              queue.currentIndex + 1,
+                              automatic: true,
+                            ),
+                          );
+                        },
+                        onCancel: _cancelNextEpisodeCountdown,
+                      ),
                     if (_error != null)
                       Center(
                         child: _PlaybackError(
@@ -798,6 +996,186 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       ),
     );
   }
+}
+
+class _EpisodeSheet extends StatelessWidget {
+  const _EpisodeSheet({required this.queue});
+
+  final PlaybackQueue queue;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: GlassSurface(
+            radius: 24,
+            blur: 28,
+            tint: AppColors.glassStrong,
+            elevated: true,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620, maxHeight: 640),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 20, 14, 12),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.video_collection_rounded,
+                          color: AppColors.spotlight,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '选集',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${queue.items.length} 集 · 当前第 ${queue.currentIndex + 1} 集',
+                                style: const TextStyle(
+                                  color: AppColors.textTertiary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '关闭',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
+                      itemCount: queue.items.length,
+                      itemBuilder: (context, index) {
+                        final item = queue.items[index];
+                        final selected = index == queue.currentIndex;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Material(
+                            color: selected
+                                ? AppColors.glassSelected
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              key: ValueKey('episode-$index'),
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: selected
+                                  ? null
+                                  : () => Navigator.of(context).pop(index),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 30,
+                                      child: selected
+                                          ? const Icon(
+                                              Icons.play_arrow_rounded,
+                                              color: AppColors.spotlight,
+                                            )
+                                          : Text(
+                                              '${index + 1}',
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: AppColors.textTertiary,
+                                                fontFamily: 'Cascadia Mono',
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _queueItemTitle(item),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            _queueItemStatus(item, selected),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: AppColors.textTertiary,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _queueItemTitle(MediaItem item) {
+  final season = item.parentIndexNumber;
+  final episode = item.indexNumber;
+  final prefix = season == 0
+      ? '特别篇${episode == null ? '' : ' ${episode.toString().padLeft(2, '0')}'}'
+      : season == null && episode == null
+      ? ''
+      : 'S${(season ?? 0).toString().padLeft(2, '0')}'
+            'E${(episode ?? 0).toString().padLeft(2, '0')}';
+  return prefix.isEmpty ? item.name : '$prefix · ${item.name}';
+}
+
+String _queueItemStatus(MediaItem item, bool selected) {
+  if (selected) return '正在播放';
+  if (item.resumePosition > Duration.zero) {
+    return '上次看到 ${_queueTime(item.resumePosition)}';
+  }
+  if (item.played) return '已播放';
+  return item.runTime == null ? '未播放' : '时长 ${_queueTime(item.runTime!)}';
+}
+
+String _queueTime(Duration value) {
+  final hours = value.inHours;
+  final minutes = value.inMinutes.remainder(60);
+  final seconds = value.inSeconds.remainder(60);
+  if (hours > 0) {
+    return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+  return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
 class _TrackSheet extends StatelessWidget {

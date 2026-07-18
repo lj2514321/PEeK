@@ -30,6 +30,7 @@ class MediaItem {
     this.indexNumber,
     this.parentIndexNumber,
     this.parentId,
+    this.seriesId,
     this.played = false,
     this.resumePosition = Duration.zero,
   });
@@ -53,6 +54,7 @@ class MediaItem {
   final int? indexNumber;
   final int? parentIndexNumber;
   final String? parentId;
+  final String? seriesId;
   final bool played;
   final Duration resumePosition;
 }

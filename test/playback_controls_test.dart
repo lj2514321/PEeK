@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_controls.dart';
+import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,6 +22,7 @@ void main() {
       expect(find.byKey(const ValueKey('player-audio')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-subtitle')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-fullscreen')), findsOneWidget);
+      expect(find.byKey(const ValueKey('player-episodes')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -37,6 +39,9 @@ void main() {
     var audioCount = 0;
     var subtitleCount = 0;
     var fullScreenCount = 0;
+    var previousCount = 0;
+    var nextCount = 0;
+    var episodesCount = 0;
     Duration? previewPosition;
     Duration? seekPosition;
     double? selectedRate;
@@ -49,6 +54,9 @@ void main() {
         onAudio: () => audioCount++,
         onSubtitle: () => subtitleCount++,
         onFullScreen: () => fullScreenCount++,
+        onPrevious: () => previousCount++,
+        onNext: () => nextCount++,
+        onEpisodes: () => episodesCount++,
         onRateChanged: (value) => selectedRate = value,
       ),
     );
@@ -57,6 +65,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('player-audio')));
     await tester.tap(find.byKey(const ValueKey('player-subtitle')));
     await tester.tap(find.byKey(const ValueKey('player-fullscreen')));
+    await tester.tap(find.byKey(const ValueKey('player-previous')));
+    await tester.tap(find.byKey(const ValueKey('player-next')));
+    await tester.tap(find.byKey(const ValueKey('player-episodes')));
     await tester.drag(
       find.byKey(const ValueKey('player-seek')),
       const Offset(90, 0),
@@ -70,6 +81,9 @@ void main() {
     expect(audioCount, 1);
     expect(subtitleCount, 1);
     expect(fullScreenCount, 1);
+    expect(previousCount, 1);
+    expect(nextCount, 1);
+    expect(episodesCount, 1);
     expect(previewPosition, isNotNull);
     expect(seekPosition, isNotNull);
     expect(selectedRate, 1.5);
@@ -87,7 +101,51 @@ void main() {
     await tester.pumpWidget(_controlsApp());
 
     expect(find.byKey(const ValueKey('player-volume')), findsNothing);
-    expect(find.text('12:34 / 2:00:00'), findsOneWidget);
+    expect(find.byKey(const ValueKey('player-previous')), findsNothing);
+    expect(find.byKey(const ValueKey('player-next')), findsNothing);
+    expect(find.byKey(const ValueKey('player-episodes')), findsOneWidget);
+    expect(find.text('12:34'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('shows responsive next episode countdown and actions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(375, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var playNowCount = 0;
+    var cancelCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: NextEpisodeCountdown(
+            item: const MediaItem(
+              id: 'episode-2',
+              name: '第二集',
+              kind: MediaItemKind.episode,
+              parentIndexNumber: 1,
+              indexNumber: 2,
+            ),
+            secondsRemaining: 6,
+            totalSeconds: 8,
+            onPlayNow: () => playNowCount++,
+            onCancel: () => cancelCount++,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('即将播放下一集'), findsOneWidget);
+    expect(find.text('S01E02 · 第二集'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('next-episode-play-now')));
+    await tester.tap(find.byKey(const ValueKey('next-episode-cancel')));
+    expect(playNowCount, 1);
+    expect(cancelCount, 1);
     expect(tester.takeException(), isNull);
   });
 }
@@ -99,6 +157,9 @@ Widget _controlsApp({
   VoidCallback? onAudio,
   VoidCallback? onSubtitle,
   VoidCallback? onFullScreen,
+  VoidCallback? onPrevious,
+  VoidCallback? onNext,
+  VoidCallback? onEpisodes,
   ValueChanged<double>? onRateChanged,
 }) {
   return MaterialApp(
@@ -120,6 +181,9 @@ Widget _controlsApp({
         fullScreen: false,
         audioLabel: '中文 AAC 5.1',
         subtitleLabel: '简体中文',
+        queueAvailable: true,
+        canPrevious: true,
+        canNext: true,
         onBack: () {},
         onPlayPause: onPlayPause ?? () {},
         onSeekPreview: onSeekPreview ?? (_) {},
@@ -131,6 +195,9 @@ Widget _controlsApp({
         onRateChanged: onRateChanged ?? (_) {},
         onAudio: onAudio ?? () {},
         onSubtitle: onSubtitle ?? () {},
+        onPrevious: onPrevious ?? () {},
+        onNext: onNext ?? () {},
+        onEpisodes: onEpisodes ?? () {},
         onFullScreen: onFullScreen ?? () {},
       ),
     ),

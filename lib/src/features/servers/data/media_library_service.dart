@@ -159,6 +159,46 @@ class MediaLibraryService {
     );
   }
 
+  Future<List<MediaItem>> getEpisodesForSeries(
+    AuthenticatedServer account, {
+    required String seriesId,
+    bool forceRefresh = false,
+  }) async {
+    final uri =
+        _appendPath(
+          account.server.apiBaseUri,
+          'Users/${account.userId}/Items',
+        ).replace(
+          queryParameters: {
+            'ParentId': seriesId,
+            'Recursive': 'true',
+            'IncludeItemTypes': 'Episode',
+            'IsMissing': 'false',
+            'SortBy': 'SortName',
+            'SortOrder': 'Ascending',
+            'Fields':
+                'Overview,PrimaryImageAspectRatio,ProductionYear,'
+                'RunTimeTicks,UserData,ParentId,SeriesId,SeriesName,'
+                'IndexNumber,ParentIndexNumber',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary',
+            'EnableUserData': 'true',
+            'EnableTotalRecordCount': 'true',
+            'StartIndex': '0',
+            'Limit': '10000',
+          },
+        );
+    final page = await _requestPage(
+      uri,
+      account,
+      cacheAge: _itemPageCacheAge,
+      forceRefresh: forceRefresh,
+    );
+    return page.items
+        .where((item) => item.kind == MediaItemKind.episode)
+        .toList(growable: false);
+  }
+
   Future<MediaItem> getItem(
     AuthenticatedServer account,
     String itemId, {
@@ -373,6 +413,7 @@ class MediaLibraryService {
       indexNumber: _readInt(data['IndexNumber']),
       parentIndexNumber: _readInt(data['ParentIndexNumber']),
       parentId: _readNullableString(data, 'ParentId'),
+      seriesId: _readNullableString(data, 'SeriesId'),
       played: played,
       resumePosition: resumeTicks == null
           ? Duration.zero
@@ -424,6 +465,7 @@ class MediaLibraryService {
       seriesName: _readNullableString(data, 'Series'),
       indexNumber: _readInt(data['IndexNumber']),
       parentIndexNumber: _readInt(data['ParentIndexNumber']),
+      seriesId: _readNullableString(data, 'SeriesId'),
     );
   }
 

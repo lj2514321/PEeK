@@ -155,6 +155,20 @@ class PlaybackService {
     return _report(account, 'Sessions/Playing/Stopped', snapshot);
   }
 
+  Future<void> markPlayed(AuthenticatedServer account, String itemId) async {
+    try {
+      await _dio.postUri<void>(
+        _appendPath(
+          account.server.apiBaseUri,
+          'Users/${account.userId}/PlayedItems/$itemId',
+        ),
+        options: Options(headers: _serverHeaders(account)),
+      );
+    } on DioException catch (error) {
+      throw _mapDioException(error, fallback: '无法标记为已播放。');
+    }
+  }
+
   Future<void> _report(
     AuthenticatedServer account,
     String path,

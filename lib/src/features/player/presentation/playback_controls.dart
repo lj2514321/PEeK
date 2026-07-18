@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter/material.dart';
 
 class PlaybackControls extends StatelessWidget {
@@ -20,6 +21,9 @@ class PlaybackControls extends StatelessWidget {
     required this.fullScreen,
     required this.audioLabel,
     required this.subtitleLabel,
+    required this.queueAvailable,
+    required this.canPrevious,
+    required this.canNext,
     required this.onBack,
     required this.onPlayPause,
     required this.onSeekPreview,
@@ -31,6 +35,9 @@ class PlaybackControls extends StatelessWidget {
     required this.onRateChanged,
     required this.onAudio,
     required this.onSubtitle,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onEpisodes,
     required this.onFullScreen,
   });
 
@@ -48,6 +55,9 @@ class PlaybackControls extends StatelessWidget {
   final bool fullScreen;
   final String audioLabel;
   final String subtitleLabel;
+  final bool queueAvailable;
+  final bool canPrevious;
+  final bool canNext;
   final VoidCallback onBack;
   final VoidCallback onPlayPause;
   final ValueChanged<Duration> onSeekPreview;
@@ -59,6 +69,9 @@ class PlaybackControls extends StatelessWidget {
   final ValueChanged<double> onRateChanged;
   final VoidCallback onAudio;
   final VoidCallback onSubtitle;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onEpisodes;
   final VoidCallback onFullScreen;
 
   @override
@@ -103,6 +116,9 @@ class PlaybackControls extends StatelessWidget {
                   fullScreen: fullScreen,
                   audioLabel: audioLabel,
                   subtitleLabel: subtitleLabel,
+                  queueAvailable: queueAvailable,
+                  canPrevious: canPrevious,
+                  canNext: canNext,
                   onPlayPause: onPlayPause,
                   onSeekPreview: onSeekPreview,
                   onSeek: onSeek,
@@ -113,6 +129,9 @@ class PlaybackControls extends StatelessWidget {
                   onRateChanged: onRateChanged,
                   onAudio: onAudio,
                   onSubtitle: onSubtitle,
+                  onPrevious: onPrevious,
+                  onNext: onNext,
+                  onEpisodes: onEpisodes,
                   onFullScreen: onFullScreen,
                 ),
               ),
@@ -214,6 +233,9 @@ class _PlaybackBottomBar extends StatelessWidget {
     required this.fullScreen,
     required this.audioLabel,
     required this.subtitleLabel,
+    required this.queueAvailable,
+    required this.canPrevious,
+    required this.canNext,
     required this.onPlayPause,
     required this.onSeekPreview,
     required this.onSeek,
@@ -224,6 +246,9 @@ class _PlaybackBottomBar extends StatelessWidget {
     required this.onRateChanged,
     required this.onAudio,
     required this.onSubtitle,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onEpisodes,
     required this.onFullScreen,
   });
 
@@ -236,6 +261,9 @@ class _PlaybackBottomBar extends StatelessWidget {
   final bool fullScreen;
   final String audioLabel;
   final String subtitleLabel;
+  final bool queueAvailable;
+  final bool canPrevious;
+  final bool canNext;
   final VoidCallback onPlayPause;
   final ValueChanged<Duration> onSeekPreview;
   final ValueChanged<Duration> onSeek;
@@ -246,6 +274,9 @@ class _PlaybackBottomBar extends StatelessWidget {
   final ValueChanged<double> onRateChanged;
   final VoidCallback onAudio;
   final VoidCallback onSubtitle;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onEpisodes;
   final VoidCallback onFullScreen;
 
   @override
@@ -254,6 +285,8 @@ class _PlaybackBottomBar extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 680;
         final veryCompact = constraints.maxWidth < 470;
+        final showQueueTransport =
+            queueAvailable && constraints.maxWidth >= 940;
         final padding = compact
             ? const EdgeInsets.fromLTRB(10, 0, 10, 10)
             : const EdgeInsets.fromLTRB(22, 0, 22, 18);
@@ -303,9 +336,37 @@ class _PlaybackBottomBar extends StatelessWidget {
                         onPressed: onSeekForward,
                       ),
                     ],
+                    if (showQueueTransport) ...[
+                      _ControlIconButton(
+                        key: const ValueKey('player-previous'),
+                        tooltip: '上一集（P）',
+                        icon: Icons.skip_previous_rounded,
+                        onPressed: canPrevious ? onPrevious : null,
+                      ),
+                      _ControlIconButton(
+                        key: const ValueKey('player-episodes'),
+                        tooltip: '选集',
+                        icon: Icons.video_collection_rounded,
+                        onPressed: onEpisodes,
+                      ),
+                      _ControlIconButton(
+                        key: const ValueKey('player-next'),
+                        tooltip: '下一集（N）',
+                        icon: Icons.skip_next_rounded,
+                        onPressed: canNext ? onNext : null,
+                      ),
+                    ] else if (queueAvailable)
+                      _ControlIconButton(
+                        key: const ValueKey('player-episodes'),
+                        tooltip: '选集',
+                        icon: Icons.video_collection_rounded,
+                        onPressed: onEpisodes,
+                      ),
                     const SizedBox(width: 4),
                     Text(
-                      '${_time(position)} / ${_time(duration)}',
+                      veryCompact
+                          ? _time(position)
+                          : '${_time(position)} / ${_time(duration)}',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontFamily: 'Cascadia Mono',
@@ -427,7 +488,7 @@ class _ControlIconButton extends StatelessWidget {
 
   final String tooltip;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool prominent;
 
   @override
@@ -561,6 +622,115 @@ class _BufferingIndicator extends StatelessWidget {
       ),
     );
   }
+}
+
+class NextEpisodeCountdown extends StatelessWidget {
+  const NextEpisodeCountdown({
+    super.key,
+    required this.item,
+    required this.secondsRemaining,
+    required this.totalSeconds,
+    required this.onPlayNow,
+    required this.onCancel,
+  });
+
+  final MediaItem item;
+  final int secondsRemaining;
+  final int totalSeconds;
+  final VoidCallback onPlayNow;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = totalSeconds <= 0
+        ? 0.0
+        : (secondsRemaining / totalSeconds).clamp(0.0, 1.0);
+    return SafeArea(
+      minimum: const EdgeInsets.all(18),
+      child: Center(
+        child: GlassSurface(
+          radius: 24,
+          blur: 28,
+          tint: const Color(0xE80D1018),
+          elevated: true,
+          padding: const EdgeInsets.all(22),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox.square(
+                  dimension: 66,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CircularProgressIndicator(
+                        key: const ValueKey('next-episode-progress'),
+                        value: progress,
+                        strokeWidth: 4,
+                        color: AppColors.spotlight,
+                        backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      ),
+                      Center(
+                        child: Text(
+                          '$secondsRemaining',
+                          style: const TextStyle(
+                            color: AppColors.spotlight,
+                            fontFamily: 'Cascadia Mono',
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text('即将播放下一集', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 7),
+                Text(
+                  _episodeTitle(item),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 20),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    OutlinedButton(
+                      key: const ValueKey('next-episode-cancel'),
+                      onPressed: onCancel,
+                      child: const Text('取消连播'),
+                    ),
+                    FilledButton.icon(
+                      key: const ValueKey('next-episode-play-now'),
+                      onPressed: onPlayNow,
+                      icon: const Icon(Icons.skip_next_rounded),
+                      label: const Text('立即播放'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _episodeTitle(MediaItem item) {
+  final season = item.parentIndexNumber;
+  final episode = item.indexNumber;
+  final prefix = season == null && episode == null
+      ? ''
+      : 'S${(season ?? 0).toString().padLeft(2, '0')}'
+            'E${(episode ?? 0).toString().padLeft(2, '0')} · ';
+  return '$prefix${item.name}';
 }
 
 IconData _volumeIcon(double volume) {
