@@ -5,7 +5,7 @@ import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('persists the selected streaming bitrate', () async {
+  test('persists the selected playback preferences', () async {
     final directory = await Directory.systemTemp.createTemp(
       'peek-playback-settings-',
     );
@@ -13,13 +13,17 @@ void main() {
     final store = JsonPlaybackSettingsStore(directory: directory);
 
     await store.write(
-      const PlaybackSettings(maxStreamingBitrate: PlaybackBitrate.mbps20),
+      const PlaybackSettings(
+        maxStreamingBitrate: PlaybackBitrate.mbps20,
+        hardwareDecodingMode: HardwareDecodingMode.software,
+      ),
     );
 
     final restored = await JsonPlaybackSettingsStore(
       directory: directory,
     ).read();
     expect(restored.maxStreamingBitrate, PlaybackBitrate.mbps20);
+    expect(restored.hardwareDecodingMode, HardwareDecodingMode.software);
   });
 
   test('uses safe defaults when the settings file is damaged', () async {
@@ -56,5 +60,42 @@ void main() {
     ).read();
 
     expect(restored.maxStreamingBitrate, PlaybackBitrate.original);
+  });
+
+  test('uses automatic hardware decoding for legacy settings', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'peek-playback-settings-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}playback_settings_v1.json',
+    );
+    await file.writeAsString('{"version":1,"maxStreamingBitrate":"mbps20"}');
+
+    final restored = await JsonPlaybackSettingsStore(
+      directory: directory,
+    ).read();
+
+    expect(restored.maxStreamingBitrate, PlaybackBitrate.mbps20);
+    expect(restored.hardwareDecodingMode, HardwareDecodingMode.automatic);
+  });
+
+  test('falls back to automatic for an unknown decoding mode', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'peek-playback-settings-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}playback_settings_v1.json',
+    );
+    await file.writeAsString(
+      '{"version":2,"hardwareDecodingMode":"future-value"}',
+    );
+
+    final restored = await JsonPlaybackSettingsStore(
+      directory: directory,
+    ).read();
+
+    expect(restored.hardwareDecodingMode, HardwareDecodingMode.automatic);
   });
 }

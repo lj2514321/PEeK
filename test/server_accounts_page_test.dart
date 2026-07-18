@@ -91,6 +91,25 @@ void main() {
     expect(selected, PlaybackBitrate.mbps10);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('selects a hardware decoding mode', (tester) async {
+    HardwareDecodingMode? selected;
+    await tester.pumpWidget(
+      _app(
+        state: _state(),
+        onHardwareDecodingModeChanged: (value) => selected = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final option = find.byKey(const ValueKey('hardware-decoding-software'));
+    await tester.ensureVisible(option);
+    await tester.tap(option);
+    await tester.pump();
+
+    expect(selected, HardwareDecodingMode.software);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Widget _app({
@@ -99,6 +118,7 @@ Widget _app({
   Future<void> Function(ServerAccountEntry)? onLogin,
   PlaybackSettings playbackSettings = const PlaybackSettings(),
   ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged,
+  ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged,
 }) {
   return MaterialApp(
     theme: AppTheme.dark(),
@@ -113,6 +133,7 @@ Widget _app({
         onGoHome: () {},
         playbackSettings: playbackSettings,
         onPlaybackBitrateChanged: onPlaybackBitrateChanged,
+        onHardwareDecodingModeChanged: onHardwareDecodingModeChanged,
       ),
     ),
   );

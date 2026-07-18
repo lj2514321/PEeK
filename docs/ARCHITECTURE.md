@@ -29,9 +29,10 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
 
 1. 适配器向服务器请求 PlaybackInfo 与 MediaSources。
 2. 播放策略根据客户端能力、用户码率、音轨和字幕生成 `PlaybackPlan`。
-3. `PlaybackEngine` 将流地址、认证请求头和起始位置交给 libmpv。
-4. 会话协调器发送 Started，并每约十秒及状态变化时发送 Progress。
-5. 播放完成、切换条目或关闭窗口时发送 Stopped。
+3. 播放准备阶段并行读取本地解码偏好；自动模式向 libmpv 传递 `auto-safe`，不支持的格式由底层回退到软件解码，兼容模式传递 `no`。
+4. `PlaybackEngine` 将流地址、认证请求头和起始位置交给 libmpv。
+5. 会话协调器发送 Started，并每约十秒及状态变化时发送 Progress。
+6. 播放完成、切换条目或关闭窗口时发送 Stopped。
 
 播放器不得在日志中记录 token 或完整认证 URL，也不应将密码写入本地数据库。
 
@@ -52,7 +53,7 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
 - 系统安全存储：服务器账户目录不包含密码或 token；每个 ServerId/UserId 的访问 token 使用独立键保存，当前账户只记录资料 ID。
 - 文件缓存：海报、背景图与临时字幕；媒体图片按服务器完整 URL 和图片 Tag 隔离，保留 30 天且最多 600 个对象。
 - 每日推荐缓存按服务器、用户和本地自然日隔离；当天直接复用，跨日只更新推荐分区，网络失败时保留上一批内容。
-- 播放偏好：最大串流码率保存在本机 PEeK 配置目录，不包含凭据；PlaybackInfo 的 POST 与兼容 GET 路径读取同一设置。
+- 播放偏好：最大串流码率与解码方式保存在本机 PEeK 配置目录，不包含凭据；PlaybackInfo 的 POST 与兼容 GET 路径读取同一码率设置，视频控制器在创建时读取解码方式。
 - 持久 DeviceId：每次启动保持不变，以维持服务器会话识别。
 
 ## 关键约束

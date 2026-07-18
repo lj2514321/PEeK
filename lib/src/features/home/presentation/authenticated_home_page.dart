@@ -180,6 +180,7 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
             item: prepared.item,
             plan: prepared.plan,
             queue: prepared.queue,
+            hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
           ),
         ),
       );

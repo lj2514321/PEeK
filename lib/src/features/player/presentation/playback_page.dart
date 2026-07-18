@@ -8,6 +8,7 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_controls.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -25,12 +26,14 @@ class PlaybackPage extends ConsumerStatefulWidget {
     required this.item,
     required this.plan,
     this.queue,
+    this.hardwareDecodingMode = HardwareDecodingMode.automatic,
   });
 
   final AuthenticatedServer account;
   final MediaItem item;
   final PlaybackPlan plan;
   final PlaybackQueue? queue;
+  final HardwareDecodingMode hardwareDecodingMode;
 
   @override
   ConsumerState<PlaybackPage> createState() => _PlaybackPageState();
@@ -38,7 +41,13 @@ class PlaybackPage extends ConsumerStatefulWidget {
 
 class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   late final Player _player = Player();
-  late final VideoController _controller = VideoController(_player);
+  late final VideoController _controller = VideoController(
+    _player,
+    configuration: VideoControllerConfiguration(
+      hwdec: widget.hardwareDecodingMode.mpvValue,
+      enableHardwareAcceleration: true,
+    ),
+  );
   late PlaybackPlan _plan = widget.plan;
   late MediaItem _item = widget.item;
   late PlaybackQueue? _queue = widget.queue;

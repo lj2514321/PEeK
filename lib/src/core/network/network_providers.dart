@@ -71,6 +71,7 @@ final playbackPreparationProvider = Provider<PlaybackPreparationService>((ref) {
   return PlaybackPreparationService(
     ref.watch(playbackServiceProvider),
     ref.watch(mediaLibraryProvider),
+    ref.watch(playbackSettingsStoreProvider),
   );
 });
 

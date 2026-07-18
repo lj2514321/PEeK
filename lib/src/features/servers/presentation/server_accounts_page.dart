@@ -20,6 +20,7 @@ class ServerAccountsPage extends StatelessWidget {
     this.playbackSettingsSaving = false,
     this.playbackSettingsError,
     this.onPlaybackBitrateChanged,
+    this.onHardwareDecodingModeChanged,
     this.busyProfileId,
   });
 
@@ -35,6 +36,7 @@ class ServerAccountsPage extends StatelessWidget {
   final bool playbackSettingsSaving;
   final String? playbackSettingsError;
   final ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged;
+  final ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged;
   final String? busyProfileId;
 
   @override
@@ -71,6 +73,8 @@ class ServerAccountsPage extends StatelessWidget {
                     saving: playbackSettingsSaving,
                     error: playbackSettingsError,
                     onBitrateChanged: onPlaybackBitrateChanged,
+                    onHardwareDecodingModeChanged:
+                        onHardwareDecodingModeChanged,
                   ),
                   const SizedBox(height: 32),
                   Text('服务器与账户', style: Theme.of(context).textTheme.titleLarge),

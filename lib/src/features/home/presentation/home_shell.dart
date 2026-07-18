@@ -98,13 +98,24 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   Future<void> _changePlaybackBitrate(PlaybackBitrate bitrate) async {
+    await _savePlaybackSettings(
+      _playbackSettings.copyWith(maxStreamingBitrate: bitrate),
+    );
+  }
+
+  Future<void> _changeHardwareDecodingMode(HardwareDecodingMode mode) async {
+    await _savePlaybackSettings(
+      _playbackSettings.copyWith(hardwareDecodingMode: mode),
+    );
+  }
+
+  Future<void> _savePlaybackSettings(PlaybackSettings updated) async {
     if (_playbackSettingsLoading ||
         _playbackSettingsSaving ||
-        bitrate == _playbackSettings.maxStreamingBitrate) {
+        updated == _playbackSettings) {
       return;
     }
     final previous = _playbackSettings;
-    final updated = previous.copyWith(maxStreamingBitrate: bitrate);
     setState(() {
       _playbackSettings = updated;
       _playbackSettingsSaving = true;
@@ -421,6 +432,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                     onPlaybackBitrateChanged: (bitrate) =>
                                         unawaited(
                                           _changePlaybackBitrate(bitrate),
+                                        ),
+                                    onHardwareDecodingModeChanged: (mode) =>
+                                        unawaited(
+                                          _changeHardwareDecodingMode(mode),
                                         ),
                                   ),
                                 },

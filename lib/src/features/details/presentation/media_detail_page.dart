@@ -89,6 +89,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
             item: prepared.item,
             plan: prepared.plan,
             queue: prepared.queue,
+            hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
           ),
         ),
       );

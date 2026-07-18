@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/features/player/data/playback_preparation_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
+import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -15,6 +17,11 @@ void main() {
     final preparation = PlaybackPreparationService(
       playback,
       _FakeEpisodeLibrary(),
+      MemoryPlaybackSettingsStore(
+        const PlaybackSettings(
+          hardwareDecodingMode: HardwareDecodingMode.software,
+        ),
+      ),
     );
     const episode = MediaItem(
       id: 'episode-2',
@@ -31,6 +38,10 @@ void main() {
     expect(prepared.queue?.items, hasLength(2));
     expect(prepared.queue?.currentIndex, 1);
     expect(playback.requestedStartPosition, isNull);
+    expect(
+      prepared.settings.hardwareDecodingMode,
+      HardwareDecodingMode.software,
+    );
   });
 
   test('can explicitly prepare playback from the beginning', () async {
@@ -38,6 +49,7 @@ void main() {
     final preparation = PlaybackPreparationService(
       playback,
       _FakeEpisodeLibrary(),
+      MemoryPlaybackSettingsStore(),
     );
     const movie = MediaItem(
       id: 'movie-id',

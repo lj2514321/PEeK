@@ -81,8 +81,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('playback-bitrate-mbps20')));
     await tester.pumpAndSettle();
+    final softwareDecoding = find.byKey(
+      const ValueKey('hardware-decoding-software'),
+    );
+    await tester.ensureVisible(softwareDecoding);
+    await tester.tap(softwareDecoding);
+    await tester.pumpAndSettle();
 
     expect(store.settings.maxStreamingBitrate, PlaybackBitrate.mbps20);
+    expect(store.settings.hardwareDecodingMode, HardwareDecodingMode.software);
     expect(find.text('已自动保存'), findsOneWidget);
   });
 }

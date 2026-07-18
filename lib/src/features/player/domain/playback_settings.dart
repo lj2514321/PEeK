@@ -18,19 +18,43 @@ enum PlaybackBitrate {
   }
 }
 
+enum HardwareDecodingMode {
+  automatic('auto-safe', '自动硬件解码', '推荐 · 不支持时回退软件解码'),
+  software('no', '软件解码', '兼容模式 · CPU 占用更高');
+
+  const HardwareDecodingMode(this.mpvValue, this.label, this.detail);
+
+  final String mpvValue;
+  final String label;
+  final String detail;
+
+  static HardwareDecodingMode fromName(Object? value) {
+    return values.where((item) => item.name == value).firstOrNull ?? automatic;
+  }
+}
+
 class PlaybackSettings {
-  const PlaybackSettings({this.maxStreamingBitrate = PlaybackBitrate.original});
+  const PlaybackSettings({
+    this.maxStreamingBitrate = PlaybackBitrate.original,
+    this.hardwareDecodingMode = HardwareDecodingMode.automatic,
+  });
 
   final PlaybackBitrate maxStreamingBitrate;
+  final HardwareDecodingMode hardwareDecodingMode;
 
-  PlaybackSettings copyWith({PlaybackBitrate? maxStreamingBitrate}) {
+  PlaybackSettings copyWith({
+    PlaybackBitrate? maxStreamingBitrate,
+    HardwareDecodingMode? hardwareDecodingMode,
+  }) {
     return PlaybackSettings(
       maxStreamingBitrate: maxStreamingBitrate ?? this.maxStreamingBitrate,
+      hardwareDecodingMode: hardwareDecodingMode ?? this.hardwareDecodingMode,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'maxStreamingBitrate': maxStreamingBitrate.name,
+    'hardwareDecodingMode': hardwareDecodingMode.name,
   };
 
   factory PlaybackSettings.fromJson(Map<String, dynamic> json) {
@@ -38,15 +62,19 @@ class PlaybackSettings {
       maxStreamingBitrate: PlaybackBitrate.fromName(
         json['maxStreamingBitrate'],
       ),
+      hardwareDecodingMode: HardwareDecodingMode.fromName(
+        json['hardwareDecodingMode'],
+      ),
     );
   }
 
   @override
   bool operator ==(Object other) {
     return other is PlaybackSettings &&
-        other.maxStreamingBitrate == maxStreamingBitrate;
+        other.maxStreamingBitrate == maxStreamingBitrate &&
+        other.hardwareDecodingMode == hardwareDecodingMode;
   }
 
   @override
-  int get hashCode => maxStreamingBitrate.hashCode;
+  int get hashCode => Object.hash(maxStreamingBitrate, hardwareDecodingMode);
 }

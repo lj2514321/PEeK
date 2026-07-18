@@ -66,7 +66,7 @@ class JsonPlaybackSettingsStore implements PlaybackSettingsStore {
 
   @override
   Future<void> write(PlaybackSettings settings) {
-    final snapshot = jsonEncode({'version': 1, ...settings.toJson()});
+    final snapshot = jsonEncode({'version': 2, ...settings.toJson()});
     _writeQueue = _writeQueue.catchError((_) {}).then((_) async {
       await _directory.create(recursive: true);
       await _file.writeAsString(snapshot, flush: true);

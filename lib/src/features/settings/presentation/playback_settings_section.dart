@@ -10,6 +10,7 @@ class PlaybackSettingsSection extends StatelessWidget {
     required this.loading,
     required this.saving,
     required this.onBitrateChanged,
+    required this.onHardwareDecodingModeChanged,
     this.error,
   });
 
@@ -18,10 +19,13 @@ class PlaybackSettingsSection extends StatelessWidget {
   final bool saving;
   final String? error;
   final ValueChanged<PlaybackBitrate>? onBitrateChanged;
+  final ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged;
 
   @override
   Widget build(BuildContext context) {
-    final enabled = !loading && !saving && onBitrateChanged != null;
+    final bitrateEnabled = !loading && !saving && onBitrateChanged != null;
+    final hardwareDecodingEnabled =
+        !loading && !saving && onHardwareDecodingModeChanged != null;
     return Container(
       key: const ValueKey('playback-settings-section'),
       padding: const EdgeInsets.all(24),
@@ -51,8 +55,41 @@ class PlaybackSettingsSection extends StatelessWidget {
                       child: _BitrateOption(
                         bitrate: bitrate,
                         selected: settings.maxStreamingBitrate == bitrate,
-                        enabled: enabled,
+                        enabled: bitrateEnabled,
                         onSelected: () => onBitrateChanged?.call(bitrate),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 28),
+          Text('解码方式', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          const Text(
+            '自动模式优先使用安全的硬件解码；遇到不支持的格式时会回退到软件解码。',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 560 ? 2 : 1;
+              const gap = 12.0;
+              final width =
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final mode in HardwareDecodingMode.values)
+                    SizedBox(
+                      width: width,
+                      child: _HardwareDecodingOption(
+                        mode: mode,
+                        selected: settings.hardwareDecodingMode == mode,
+                        enabled: hardwareDecodingEnabled,
+                        onSelected: () =>
+                            onHardwareDecodingModeChanged?.call(mode),
                       ),
                     ),
                 ],
@@ -83,6 +120,102 @@ class PlaybackSettingsSection extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HardwareDecodingOption extends StatelessWidget {
+  const _HardwareDecodingOption({
+    required this.mode,
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final HardwareDecodingMode mode;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: enabled,
+      label: '${mode.label}，${mode.detail}',
+      hint: selected ? '当前解码方式' : '选择后自动保存，下次播放生效',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: ValueKey('hardware-decoding-${mode.name}'),
+          onTap: enabled ? onSelected : null,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: AppMotion.responsive(context, AppMotion.fast),
+            constraints: const BoxConstraints(minHeight: 88),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.indigo.withValues(alpha: 0.11)
+                  : AppColors.surfaceLow,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? AppColors.indigo : AppColors.outline,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  mode == HardwareDecodingMode.automatic
+                      ? Icons.memory_rounded
+                      : Icons.shield_outlined,
+                  color: selected ? AppColors.indigo : AppColors.textTertiary,
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        mode.label,
+                        style: TextStyle(
+                          color: selected
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                          fontSize: 14,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        mode.detail,
+                        style: const TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 18,
+                    color: AppColors.indigo,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

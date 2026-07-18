@@ -15,14 +15,14 @@
 - 登录后每日自动更新的推荐轮播、继续观看、最近电影和最新剧集
 - 电影、剧集、演员详情、相似推荐和全局搜索
 - STRM、原码、直传与转码播放计划及播放进度上报
-- 可持久化的最大串流码率设置，并同步应用到 PlaybackInfo 与设备配置
+- 可持久化的最大串流码率与解码方式设置，并同步应用到 PlaybackInfo、设备配置和 libmpv
 - `media_kit/libmpv` 影院控制层、快捷键、全屏、倍速与音字幕轨道
 - 剧集队列、选集、上一集/下一集和可取消的片尾自动连播
 - 统一服务器、媒体条目和播放计划模型
 - Riverpod、Dio、Drift、安全凭据存储及 media_kit 依赖
 - 基础组件测试
 
-下一阶段将继续完善硬件解码、播放诊断与兼容性验证。详细边界见 [架构说明](docs/ARCHITECTURE.md)、[开发路线](docs/ROADMAP.md) 和 [播放验证矩阵](docs/PLAYBACK_TEST_MATRIX.md)。
+下一阶段将继续完善播放诊断与兼容性验证。详细边界见 [架构说明](docs/ARCHITECTURE.md)、[开发路线](docs/ROADMAP.md) 和 [播放验证矩阵](docs/PLAYBACK_TEST_MATRIX.md)。
 
 视觉与交互实现遵循 [PEeK 设计系统](design-system/default/MASTER.md)，首页状态与响应式规则见 [首页规范](design-system/default/pages/home.md)。
 
