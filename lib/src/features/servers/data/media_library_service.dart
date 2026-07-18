@@ -6,11 +6,16 @@ import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 
 class MediaLibraryService {
-  MediaLibraryService(this._dio, [MediaCacheStore? cache])
-    : _cache = cache ?? MemoryMediaCacheStore();
+  MediaLibraryService(
+    this._dio, [
+    MediaCacheStore? cache,
+    DateTime Function()? clock,
+  ]) : _cache = cache ?? MemoryMediaCacheStore(),
+       _clock = clock ?? DateTime.now;
 
   final Dio _dio;
   final MediaCacheStore _cache;
+  final DateTime Function() _clock;
   final Set<String> _refreshingCacheKeys = {};
 
   static const _libraryCacheAge = Duration(minutes: 30);
@@ -19,7 +24,7 @@ class MediaLibraryService {
   static const _similarCacheAge = Duration(minutes: 30);
   static const _searchCacheAge = Duration(minutes: 5);
   static const _homeFeedCacheAge = Duration(minutes: 5);
-  static const _recommendationCacheAge = Duration(hours: 12);
+  static const _recommendationCacheAge = Duration(days: 1);
 
   Future<List<MediaItem>> getLibraries(
     AuthenticatedServer account, {
@@ -306,6 +311,8 @@ class MediaLibraryService {
         account,
         cacheAge: _recommendationCacheAge,
         forceRefresh: forceRefresh,
+        cacheForCurrentDay: true,
+        refreshCachedInBackground: false,
       )).items;
     } on MediaLibraryException catch (error) {
       if (error.statusCode != 400 && error.statusCode != 404) rethrow;
@@ -338,6 +345,8 @@ class MediaLibraryService {
         account,
         cacheAge: _recommendationCacheAge,
         forceRefresh: forceRefresh,
+        cacheForCurrentDay: true,
+        refreshCachedInBackground: false,
       )).items;
     }
   }
@@ -431,6 +440,8 @@ class MediaLibraryService {
     required Duration cacheAge,
     bool forceRefresh = false,
     bool allowListResponse = false,
+    bool cacheForCurrentDay = false,
+    bool refreshCachedInBackground = true,
   }) async {
     try {
       final data = await _requestJson(
@@ -439,6 +450,8 @@ class MediaLibraryService {
         cacheAge: cacheAge,
         forceRefresh: forceRefresh,
         allowListResponse: allowListResponse,
+        cacheForCurrentDay: cacheForCurrentDay,
+        refreshCachedInBackground: refreshCachedInBackground,
       );
       final rawItems = data['Items'];
       if (rawItems is! List) {
@@ -469,17 +482,25 @@ class MediaLibraryService {
     required Duration cacheAge,
     required bool forceRefresh,
     bool allowListResponse = false,
+    bool cacheForCurrentDay = false,
+    bool refreshCachedInBackground = true,
   }) async {
     final cacheKey = _cacheKey(account, uri);
     if (!forceRefresh) {
-      final cached = await _readCache(cacheKey, maxAge: cacheAge);
-      if (cached != null) {
-        _refreshInBackground(
-          cacheKey,
-          uri,
-          account,
-          allowListResponse: allowListResponse,
-        );
+      final cached = await _readCache(
+        cacheKey,
+        maxAge: cacheForCurrentDay ? null : cacheAge,
+      );
+      if (cached != null &&
+          (!cacheForCurrentDay || _isStoredToday(cached.storedAt))) {
+        if (refreshCachedInBackground) {
+          _refreshInBackground(
+            cacheKey,
+            uri,
+            account,
+            allowListResponse: allowListResponse,
+          );
+        }
         return cached.payload;
       }
     }
@@ -556,6 +577,14 @@ class MediaLibraryService {
     } on Object {
       return null;
     }
+  }
+
+  bool _isStoredToday(DateTime storedAt) {
+    final stored = storedAt.toLocal();
+    final now = _clock().toLocal();
+    return stored.year == now.year &&
+        stored.month == now.month &&
+        stored.day == now.day;
   }
 
   String _cacheKey(AuthenticatedServer account, Uri uri) {

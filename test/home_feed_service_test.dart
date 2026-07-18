@@ -129,6 +129,48 @@ void main() {
       expect(refreshed.latestEpisodes, same(currentFeed.latestEpisodes));
     },
   );
+
+  test('refreshes only daily recommendations', () async {
+    final library = _FakeLibraryService(
+      recommendations: const [
+        MediaItem(
+          id: 'recommendation-1',
+          name: '第一天推荐',
+          kind: MediaItemKind.movie,
+        ),
+      ],
+      resumeItems: const [
+        MediaItem(id: 'resume-id', name: '继续观看', kind: MediaItemKind.movie),
+      ],
+      latestMovies: const [
+        MediaItem(id: 'movie-id', name: '最新电影', kind: MediaItemKind.movie),
+      ],
+    );
+    final service = HomeFeedService(library);
+    final currentFeed = await service.load(account);
+    library.recommendations = const [
+      MediaItem(
+        id: 'recommendation-2',
+        name: '第二天推荐',
+        kind: MediaItemKind.movie,
+      ),
+    ];
+
+    library.resetRequestCounts();
+    final refreshed = await service.refreshRecommendations(
+      account,
+      currentFeed,
+    );
+
+    expect(library.recommendationRequests, 1);
+    expect(library.resumeRequests, 0);
+    expect(library.latestMovieRequests, 0);
+    expect(library.latestEpisodeRequests, 0);
+    expect(refreshed.dailyRecommendations.items.single.id, 'recommendation-2');
+    expect(refreshed.continueWatching, same(currentFeed.continueWatching));
+    expect(refreshed.latestMovies, same(currentFeed.latestMovies));
+    expect(refreshed.latestEpisodes, same(currentFeed.latestEpisodes));
+  });
 }
 
 class _FakeLibraryService extends MediaLibraryService {
@@ -141,7 +183,7 @@ class _FakeLibraryService extends MediaLibraryService {
     this.latestMoviesError,
   }) : super(Dio());
 
-  final List<MediaItem> recommendations;
+  List<MediaItem> recommendations;
   final List<MediaItem> resumeItems;
   final List<MediaItem> latestMovies;
   final List<MediaItem> latestEpisodes;

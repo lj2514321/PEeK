@@ -19,11 +19,13 @@ class AuthenticatedHomePage extends ConsumerStatefulWidget {
     required this.account,
     required this.onOpenLibrary,
     required this.onSessionExpired,
+    this.clock,
   });
 
   final AuthenticatedServer account;
   final VoidCallback onOpenLibrary;
   final Future<void> Function() onSessionExpired;
+  final DateTime Function()? clock;
 
   @override
   ConsumerState<AuthenticatedHomePage> createState() =>
@@ -36,11 +38,14 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   bool _refreshing = false;
   String? _pageError;
   String? _planningItemId;
+  Timer? _dailyRecommendationTimer;
+  bool _refreshingRecommendations = false;
 
   @override
   void initState() {
     super.initState();
     Future<void>.microtask(_load);
+    _scheduleDailyRecommendationRefresh();
   }
 
   @override
@@ -50,7 +55,14 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
         oldWidget.account.server.serverId != widget.account.server.serverId) {
       _feed = null;
       Future<void>.microtask(_load);
+      _scheduleDailyRecommendationRefresh();
     }
+  }
+
+  @override
+  void dispose() {
+    _dailyRecommendationTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load({bool forceRefresh = false}) async {
@@ -104,6 +116,42 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
       }
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  void _scheduleDailyRecommendationRefresh() {
+    _dailyRecommendationTimer?.cancel();
+    final now = (widget.clock?.call() ?? DateTime.now()).toLocal();
+    final nextDay = DateTime(now.year, now.month, now.day + 1);
+    final delay = nextDay.difference(now);
+    _dailyRecommendationTimer = Timer(
+      delay > Duration.zero ? delay : const Duration(days: 1),
+      () => unawaited(_runDailyRecommendationRefresh()),
+    );
+  }
+
+  Future<void> _runDailyRecommendationRefresh() async {
+    await _refreshDailyRecommendations();
+    if (mounted) _scheduleDailyRecommendationRefresh();
+  }
+
+  Future<void> _refreshDailyRecommendations() async {
+    final currentFeed = _feed;
+    if (currentFeed == null || _refreshing || _refreshingRecommendations) {
+      return;
+    }
+    _refreshingRecommendations = true;
+    try {
+      final feed = await ref
+          .read(homeFeedProvider)
+          .refreshRecommendations(widget.account, currentFeed);
+      if (mounted) setState(() => _feed = feed);
+    } on MediaLibraryException catch (error) {
+      if (error.authenticationExpired) {
+        await widget.onSessionExpired();
+      }
+    } finally {
+      _refreshingRecommendations = false;
     }
   }
 

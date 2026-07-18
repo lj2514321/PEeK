@@ -549,6 +549,60 @@ void main() {
     expect(items.single.id, 'recommendation-id');
   });
 
+  test('refreshes recommendations once per local calendar day', () async {
+    var now = DateTime(2026, 7, 18, 9);
+    var requestCount = 0;
+    final cache = MemoryMediaCacheStore(clock: () => now);
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            requestCount += 1;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'Items': [
+                    {
+                      'Id': 'recommendation-$requestCount',
+                      'Name': '第 $requestCount 天推荐',
+                      'Type': 'Movie',
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+    final service = MediaLibraryService(dio, cache, () => now);
+
+    expect(
+      (await service.getRecommendations(account)).single.id,
+      'recommendation-1',
+    );
+    now = DateTime(2026, 7, 18, 23, 59);
+    expect(
+      (await service.getRecommendations(account)).single.id,
+      'recommendation-1',
+    );
+    expect(requestCount, 1);
+
+    expect(
+      (await service.getRecommendations(account, forceRefresh: true)).single.id,
+      'recommendation-2',
+    );
+    expect(requestCount, 2);
+
+    now = DateTime(2026, 7, 19, 0, 1);
+    expect(
+      (await service.getRecommendations(account)).single.id,
+      'recommendation-3',
+    );
+    expect(requestCount, 3);
+  });
+
   test('falls back to random library items for recommendations', () async {
     final requests = <RequestOptions>[];
     final dio = Dio()

@@ -106,6 +106,36 @@ void main() {
     expect(find.text('01 / 03'), findsOneWidget);
   });
 
+  testWidgets('refreshes only recommendations after local midnight', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 7, 18, 23, 59, 59, 800);
+    final service = _HomeLibraryService();
+    await tester.pumpWidget(_homeApp(account, service, clock: () => now));
+    await tester.pump();
+    await tester.pump();
+
+    expect(service.recommendationRequests, 1);
+    expect(find.text('每日推荐一'), findsOneWidget);
+    service.recommendations = const [
+      MediaItem(
+        id: 'recommendation-next-day',
+        name: '第二天推荐',
+        kind: MediaItemKind.movie,
+      ),
+    ];
+    now = DateTime(2026, 7, 19);
+
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump();
+
+    expect(service.recommendationRequests, 2);
+    expect(service.resumeRequests, 1);
+    expect(service.latestMovieRequests, 1);
+    expect(service.latestEpisodeRequests, 1);
+    expect(find.text('第二天推荐'), findsOneWidget);
+  });
+
   testWidgets('keeps other rails when one home section fails', (tester) async {
     await tester.pumpWidget(
       _homeApp(
@@ -159,6 +189,7 @@ Widget _homeApp(
   AuthenticatedServer account,
   MediaLibraryService service, {
   Future<void> Function()? onSessionExpired,
+  DateTime Function()? clock,
 }) {
   return ProviderScope(
     overrides: [mediaLibraryProvider.overrideWithValue(service)],
@@ -170,6 +201,7 @@ Widget _homeApp(
           account: account,
           onOpenLibrary: () {},
           onSessionExpired: onSessionExpired ?? () async {},
+          clock: clock,
         ),
       ),
     ),
@@ -183,6 +215,34 @@ class _HomeLibraryService extends MediaLibraryService {
   final Future<void>? release;
   final MediaLibraryException? latestMoviesError;
   final MediaLibraryException? resumeError;
+  List<MediaItem> recommendations = const [
+    MediaItem(
+      id: 'recommendation-1',
+      name: '每日推荐一',
+      kind: MediaItemKind.movie,
+      overview: '今晚值得打开的一部电影。',
+      productionYear: 2026,
+      runTime: Duration(minutes: 118),
+    ),
+    MediaItem(
+      id: 'recommendation-2',
+      name: '每日推荐二',
+      kind: MediaItemKind.movie,
+      productionYear: 2025,
+    ),
+    MediaItem(
+      id: 'recommendation-3',
+      name: '每日推荐三',
+      kind: MediaItemKind.episode,
+      seriesName: '示例剧集',
+      parentIndexNumber: 2,
+      indexNumber: 4,
+    ),
+  ];
+  int recommendationRequests = 0;
+  int resumeRequests = 0;
+  int latestMovieRequests = 0;
+  int latestEpisodeRequests = 0;
 
   Future<void> _wait() async {
     if (release != null) await release;
@@ -195,30 +255,8 @@ class _HomeLibraryService extends MediaLibraryService {
     bool forceRefresh = false,
   }) async {
     await _wait();
-    return const [
-      MediaItem(
-        id: 'recommendation-1',
-        name: '每日推荐一',
-        kind: MediaItemKind.movie,
-        overview: '今晚值得打开的一部电影。',
-        productionYear: 2026,
-        runTime: Duration(minutes: 118),
-      ),
-      MediaItem(
-        id: 'recommendation-2',
-        name: '每日推荐二',
-        kind: MediaItemKind.movie,
-        productionYear: 2025,
-      ),
-      MediaItem(
-        id: 'recommendation-3',
-        name: '每日推荐三',
-        kind: MediaItemKind.episode,
-        seriesName: '示例剧集',
-        parentIndexNumber: 2,
-        indexNumber: 4,
-      ),
-    ];
+    recommendationRequests += 1;
+    return recommendations;
   }
 
   @override
@@ -228,6 +266,7 @@ class _HomeLibraryService extends MediaLibraryService {
     bool forceRefresh = false,
   }) async {
     await _wait();
+    resumeRequests += 1;
     if (resumeError != null) throw resumeError!;
     return const [
       MediaItem(
@@ -256,6 +295,7 @@ class _HomeLibraryService extends MediaLibraryService {
     bool forceRefresh = false,
   }) async {
     await _wait();
+    latestMovieRequests += 1;
     if (latestMoviesError != null) throw latestMoviesError!;
     return const [
       MediaItem(
@@ -274,6 +314,7 @@ class _HomeLibraryService extends MediaLibraryService {
     bool forceRefresh = false,
   }) async {
     await _wait();
+    latestEpisodeRequests += 1;
     return const [
       MediaItem(
         id: 'episode-1',

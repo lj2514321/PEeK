@@ -72,6 +72,33 @@ class HomeFeedService {
     );
   }
 
+  Future<HomeFeed> refreshRecommendations(
+    AuthenticatedServer account,
+    HomeFeed currentFeed,
+  ) async {
+    final refreshed = await _capture(
+      () => _library.getRecommendations(account),
+    );
+    if (refreshed.authenticationExpired) {
+      throw MediaLibraryException(
+        refreshed.error ?? '登录凭据已失效，请重新登录服务器。',
+        authenticationExpired: true,
+        statusCode: 401,
+      );
+    }
+    if (refreshed.hasError) return currentFeed;
+
+    return HomeFeed(
+      dailyRecommendations: _withoutResumableDuplicates(
+        refreshed,
+        currentFeed.continueWatching,
+      ),
+      continueWatching: currentFeed.continueWatching,
+      latestMovies: currentFeed.latestMovies,
+      latestEpisodes: currentFeed.latestEpisodes,
+    );
+  }
+
   HomeFeedSection _withoutResumableDuplicates(
     HomeFeedSection recommendations,
     HomeFeedSection continueWatching,
