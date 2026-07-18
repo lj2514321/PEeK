@@ -17,6 +17,7 @@ class MediaLibraryService {
   static const _itemPageCacheAge = Duration(minutes: 10);
   static const _detailCacheAge = Duration(minutes: 15);
   static const _similarCacheAge = Duration(minutes: 30);
+  static const _searchCacheAge = Duration(minutes: 5);
 
   Future<List<MediaItem>> getLibraries(
     AuthenticatedServer account, {
@@ -65,6 +66,95 @@ class MediaLibraryService {
       account,
       startIndex: startIndex,
       cacheAge: _itemPageCacheAge,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<MediaPage> search(
+    AuthenticatedServer account, {
+    required String query,
+    MediaSearchScope scope = MediaSearchScope.all,
+    int startIndex = 0,
+    int limit = 40,
+    bool forceRefresh = false,
+  }) async {
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.isEmpty) {
+      return const MediaPage(items: [], totalRecordCount: 0, nextStartIndex: 0);
+    }
+    final uri = _appendPath(account.server.apiBaseUri, 'Search/Hints').replace(
+      queryParameters: {
+        'SearchTerm': normalizedQuery,
+        'UserId': account.userId,
+        'StartIndex': '$startIndex',
+        'Limit': '$limit',
+        'IncludeItemTypes': scope.apiTypes,
+        'IncludeMedia': '${scope != MediaSearchScope.people}',
+        'IncludePeople': '${scope.includesPeople}',
+      },
+    );
+    try {
+      final data = await _requestJson(
+        uri,
+        account,
+        cacheAge: _searchCacheAge,
+        forceRefresh: forceRefresh,
+      );
+      final rawHints = data['SearchHints'];
+      if (rawHints is! List) {
+        throw const MediaLibraryException('服务器返回了无法识别的搜索结果。');
+      }
+      final items = rawHints
+          .whereType<Map<String, dynamic>>()
+          .map((hint) => _parseSearchHint(hint, account))
+          .where((item) => item.id.isNotEmpty && item.name.isNotEmpty)
+          .toList(growable: false);
+      return MediaPage(
+        items: items,
+        totalRecordCount:
+            _readInt(data['TotalRecordCount']) ?? startIndex + rawHints.length,
+        nextStartIndex: startIndex + rawHints.length,
+      );
+    } on MediaLibraryException {
+      rethrow;
+    } on DioException catch (error) {
+      throw _mapDioException(error);
+    }
+  }
+
+  Future<MediaPage> getItemsForPerson(
+    AuthenticatedServer account, {
+    required String personId,
+    int startIndex = 0,
+    int limit = 40,
+    bool forceRefresh = false,
+  }) async {
+    final uri =
+        _appendPath(
+          account.server.apiBaseUri,
+          'Users/${account.userId}/Items',
+        ).replace(
+          queryParameters: {
+            'PersonIds': personId,
+            'Recursive': 'true',
+            'IncludeItemTypes': 'Movie,Series,Episode,Video',
+            'SortBy': 'ProductionYear,SortName',
+            'SortOrder': 'Descending',
+            'Fields':
+                'Overview,PrimaryImageAspectRatio,ProductionYear,'
+                'RunTimeTicks,UserData',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary',
+            'EnableTotalRecordCount': 'true',
+            'StartIndex': '$startIndex',
+            'Limit': '$limit',
+          },
+        );
+    return _requestPage(
+      uri,
+      account,
+      startIndex: startIndex,
+      cacheAge: _searchCacheAge,
       forceRefresh: forceRefresh,
     );
   }
@@ -290,6 +380,53 @@ class MediaLibraryService {
     );
   }
 
+  MediaItem _parseSearchHint(
+    Map<String, dynamic> data,
+    AuthenticatedServer account,
+  ) {
+    final id = _readString(data, 'Id', fallback: _readString(data, 'ItemId'));
+    final primaryTag = _readNullableString(data, 'PrimaryImageTag');
+    final thumbTag = _readNullableString(data, 'ThumbImageTag');
+    final imageTag = primaryTag ?? thumbTag;
+    final imageItemId = primaryTag != null
+        ? _readString(data, 'PrimaryImageItemId', fallback: id)
+        : _readString(data, 'ThumbImageItemId', fallback: id);
+    final backdropTag = _readNullableString(data, 'BackdropImageTag');
+    final backdropItemId = _readString(
+      data,
+      'BackdropImageItemId',
+      fallback: id,
+    );
+    final runTimeTicks = _readInt(data['RunTimeTicks']);
+    return MediaItem(
+      id: id,
+      name: _readString(data, 'Name'),
+      kind: _readKind(_readString(data, 'Type')),
+      productionYear: _readInt(data['ProductionYear']),
+      runTime: runTimeTicks == null
+          ? null
+          : Duration(microseconds: runTimeTicks ~/ 10),
+      imageTag: imageTag,
+      imageUri: imageTag == null || imageItemId.isEmpty
+          ? null
+          : _imageUri(account.server.apiBaseUri, imageItemId, imageTag),
+      backdropUri: backdropTag == null || backdropItemId.isEmpty
+          ? null
+          : _imageUri(
+              account.server.apiBaseUri,
+              backdropItemId,
+              backdropTag,
+              type: 'Backdrop',
+              index: 0,
+              maxWidth: 1600,
+            ),
+      imageHeaders: _authHeaders(account.accessToken),
+      seriesName: _readNullableString(data, 'Series'),
+      indexNumber: _readInt(data['IndexNumber']),
+      parentIndexNumber: _readInt(data['ParentIndexNumber']),
+    );
+  }
+
   Uri _imageUri(
     Uri base,
     String itemId,
@@ -337,6 +474,7 @@ class MediaLibraryService {
       'episode' => MediaItemKind.episode,
       'video' => MediaItemKind.video,
       'audio' || 'musicalbum' || 'musicartist' => MediaItemKind.audio,
+      'person' => MediaItemKind.person,
       _ => MediaItemKind.folder,
     };
   }
@@ -398,6 +536,21 @@ class MediaLibraryService {
     }
     return null;
   }
+}
+
+enum MediaSearchScope { all, movies, series, episodes, people }
+
+extension MediaSearchScopeApi on MediaSearchScope {
+  String get apiTypes => switch (this) {
+    MediaSearchScope.all => 'Movie,Series,Episode,Video,Person',
+    MediaSearchScope.movies => 'Movie,Video',
+    MediaSearchScope.series => 'Series',
+    MediaSearchScope.episodes => 'Episode',
+    MediaSearchScope.people => 'Person',
+  };
+
+  bool get includesPeople =>
+      this == MediaSearchScope.all || this == MediaSearchScope.people;
 }
 
 class MediaPage {

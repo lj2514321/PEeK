@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/core/storage/media_cache_store.dart';
+import 'package:embyplayer/src/core/storage/search_history_store.dart';
 import 'package:embyplayer/src/core/storage/secure_token_store.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -24,6 +25,10 @@ final serverDiscoveryProvider = Provider<ServerDiscoveryService>((ref) {
 
 final mediaCacheStoreProvider = Provider<MediaCacheStore>((ref) {
   return JsonFileMediaCacheStore();
+});
+
+final searchHistoryStoreProvider = Provider<SearchHistoryStore>((ref) {
+  return JsonSearchHistoryStore();
 });
 
 final mediaLibraryProvider = Provider<MediaLibraryService>((ref) {

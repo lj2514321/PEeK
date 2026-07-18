@@ -244,4 +244,105 @@ void main() {
     expect(request?.uri.queryParameters['Limit'], '12');
     expect(items.single.name, '推荐电影');
   });
+
+  test(
+    'searches media and people with the compatible hints endpoint',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
+              handler.resolve(
+                Response<Map<String, dynamic>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: const {
+                    'TotalRecordCount': 2,
+                    'SearchHints': [
+                      {
+                        'Id': 'movie-id',
+                        'Name': '示例电影',
+                        'Type': 'Movie',
+                        'ProductionYear': 2026,
+                        'PrimaryImageTag': 'movie-tag',
+                      },
+                      {
+                        'ItemId': 'person-id',
+                        'Name': '示例演员',
+                        'Type': 'Person',
+                        'PrimaryImageTag': 'person-tag',
+                        'PrimaryImageItemId': 'person-image-id',
+                      },
+                    ],
+                  },
+                ),
+              );
+            },
+          ),
+        );
+
+      final page = await MediaLibraryService(dio).search(
+        account,
+        query: '示例',
+        scope: MediaSearchScope.all,
+        startIndex: 40,
+        limit: 20,
+      );
+
+      expect(request?.uri.path, '/Search/Hints');
+      expect(request?.uri.queryParameters['SearchTerm'], '示例');
+      expect(request?.uri.queryParameters['UserId'], 'user-id');
+      expect(request?.uri.queryParameters['StartIndex'], '40');
+      expect(request?.uri.queryParameters['Limit'], '20');
+      expect(request?.uri.queryParameters['IncludePeople'], 'true');
+      expect(
+        request?.uri.queryParameters['IncludeItemTypes'],
+        contains('Person'),
+      );
+      expect(page.totalRecordCount, 2);
+      expect(page.items.first.kind, MediaItemKind.movie);
+      expect(page.items.last.kind, MediaItemKind.person);
+      expect(page.items.last.id, 'person-id');
+      expect(
+        page.items.last.imageUri?.path,
+        '/Items/person-image-id/Images/Primary',
+      );
+    },
+  );
+
+  test('loads a person filmography with a recursive item query', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {
+                  'TotalRecordCount': 1,
+                  'Items': [
+                    {'Id': 'credit-id', 'Name': '演员作品', 'Type': 'Movie'},
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final page = await MediaLibraryService(
+      dio,
+    ).getItemsForPerson(account, personId: 'person-id');
+
+    expect(request?.uri.path, '/Users/user-id/Items');
+    expect(request?.uri.queryParameters['PersonIds'], 'person-id');
+    expect(request?.uri.queryParameters['Recursive'], 'true');
+    expect(request?.uri.queryParameters['IncludeItemTypes'], contains('Movie'));
+    expect(page.items.single.name, '演员作品');
+  });
 }

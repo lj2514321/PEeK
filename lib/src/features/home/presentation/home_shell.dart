@@ -5,6 +5,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
+import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +19,7 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
+  final _searchPageKey = GlobalKey<MediaSearchPageState>();
   int _selectedIndex = 0;
   DiscoveredServer? _discoveredServer;
   AuthenticatedServer? _authenticatedServer;
@@ -96,7 +98,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   void _selectDestination(int index) {
+    if (index == 2) {
+      _openSearch();
+      return;
+    }
     setState(() => _selectedIndex = index);
+  }
+
+  void _openSearch() {
+    if (_selectedIndex != 2) setState(() => _selectedIndex = 2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchPageKey.currentState?.focusSearch();
+    });
   }
 
   Future<void> _handleSessionExpired() async {
@@ -124,7 +137,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): () {
-          _selectDestination(2);
+          _openSearch();
         },
       },
       child: Focus(
@@ -155,7 +168,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                               destination: _destinations[_selectedIndex],
                               server: _discoveredServer,
                               account: _authenticatedServer,
-                              onSearch: () => _selectDestination(2),
+                              onSearch: _openSearch,
                             ),
                             Expanded(
                               child: AnimatedSwitcher(
@@ -178,6 +191,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                   ),
                                   1 => MediaLibraryPage(
                                     key: const ValueKey('library'),
+                                    account: _authenticatedServer,
+                                    onGoHome: () => _selectDestination(0),
+                                    onSessionExpired: _handleSessionExpired,
+                                  ),
+                                  2 => MediaSearchPage(
+                                    key: _searchPageKey,
                                     account: _authenticatedServer,
                                     onGoHome: () => _selectDestination(0),
                                     onSessionExpired: _handleSessionExpired,

@@ -1,4 +1,13 @@
-enum MediaItemKind { movie, series, season, episode, video, audio, folder }
+enum MediaItemKind {
+  movie,
+  series,
+  season,
+  episode,
+  video,
+  audio,
+  person,
+  folder,
+}
 
 class MediaItem {
   const MediaItem({

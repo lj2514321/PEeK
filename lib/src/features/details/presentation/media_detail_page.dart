@@ -775,6 +775,7 @@ String _kindLabel(MediaItemKind kind) {
     MediaItemKind.episode => '单集',
     MediaItemKind.video => '视频',
     MediaItemKind.audio => '音乐',
+    MediaItemKind.person => '人物',
     MediaItemKind.folder => '文件夹',
   };
 }

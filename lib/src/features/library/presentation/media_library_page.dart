@@ -1075,6 +1075,7 @@ String _kindLabel(MediaItemKind kind) {
     MediaItemKind.episode => '单集',
     MediaItemKind.video => '视频',
     MediaItemKind.audio => '音乐',
+    MediaItemKind.person => '人物',
     MediaItemKind.folder => '文件夹',
   };
 }
@@ -1087,6 +1088,7 @@ IconData _kindIcon(MediaItemKind kind) {
     MediaItemKind.episode => Icons.play_circle_outline_rounded,
     MediaItemKind.video => Icons.videocam_outlined,
     MediaItemKind.audio => Icons.album_outlined,
+    MediaItemKind.person => Icons.person_outline_rounded,
     MediaItemKind.folder => Icons.folder_outlined,
   };
 }
