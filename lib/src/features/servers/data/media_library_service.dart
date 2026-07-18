@@ -18,6 +18,8 @@ class MediaLibraryService {
   static const _detailCacheAge = Duration(minutes: 15);
   static const _similarCacheAge = Duration(minutes: 30);
   static const _searchCacheAge = Duration(minutes: 5);
+  static const _homeFeedCacheAge = Duration(minutes: 5);
+  static const _recommendationCacheAge = Duration(hours: 12);
 
   Future<List<MediaItem>> getLibraries(
     AuthenticatedServer account, {
@@ -199,6 +201,182 @@ class MediaLibraryService {
         .toList(growable: false);
   }
 
+  Future<List<MediaItem>> getResumeItems(
+    AuthenticatedServer account, {
+    int limit = 18,
+    bool forceRefresh = false,
+  }) async {
+    final query = <String, String>{
+      'UserId': account.userId,
+      'MediaTypes': 'Video',
+      'IncludeItemTypes': 'Movie,Episode,Video',
+      'Fields':
+          'Overview,PrimaryImageAspectRatio,ProductionYear,'
+          'RunTimeTicks,UserData,ParentId,SeriesId,SeriesName,'
+          'IndexNumber,ParentIndexNumber',
+      'ImageTypeLimit': '1',
+      'EnableImageTypes': 'Primary,Backdrop',
+      'EnableImages': 'true',
+      'EnableUserData': 'true',
+      'ExcludeActiveSessions': 'true',
+      'StartIndex': '0',
+      'Limit': '$limit',
+      'EnableTotalRecordCount': 'true',
+    };
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Users/${account.userId}/Items/Resume',
+    ).replace(queryParameters: query);
+    try {
+      return (await _requestPage(
+        uri,
+        account,
+        cacheAge: _homeFeedCacheAge,
+        forceRefresh: forceRefresh,
+      )).items;
+    } on MediaLibraryException catch (error) {
+      if (error.statusCode != 400 && error.statusCode != 404) rethrow;
+      final fallbackUri =
+          _appendPath(
+            account.server.apiBaseUri,
+            'Users/${account.userId}/Items',
+          ).replace(
+            queryParameters: {
+              ...query,
+              'Recursive': 'true',
+              'Filters': 'IsResumable',
+              'SortBy': 'DatePlayed',
+              'SortOrder': 'Descending',
+            },
+          );
+      return (await _requestPage(
+        fallbackUri,
+        account,
+        cacheAge: _homeFeedCacheAge,
+        forceRefresh: forceRefresh,
+      )).items;
+    }
+  }
+
+  Future<List<MediaItem>> getLatestMovies(
+    AuthenticatedServer account, {
+    int limit = 18,
+    bool forceRefresh = false,
+  }) {
+    return _getLatestItems(
+      account,
+      includeItemTypes: 'Movie',
+      limit: limit,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<List<MediaItem>> getLatestEpisodes(
+    AuthenticatedServer account, {
+    int limit = 18,
+    bool forceRefresh = false,
+  }) {
+    return _getLatestItems(
+      account,
+      includeItemTypes: 'Episode',
+      limit: limit,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<List<MediaItem>> getRecommendations(
+    AuthenticatedServer account, {
+    int limit = 6,
+    bool forceRefresh = false,
+  }) async {
+    final uri = _appendPath(account.server.apiBaseUri, 'Items/Suggestions')
+        .replace(
+          queryParameters: {
+            'UserId': account.userId,
+            'MediaType': 'Video',
+            'Type': 'Movie,Episode,Video',
+            'StartIndex': '0',
+            'Limit': '$limit',
+            'EnableTotalRecordCount': 'true',
+          },
+        );
+    try {
+      return (await _requestPage(
+        uri,
+        account,
+        cacheAge: _recommendationCacheAge,
+        forceRefresh: forceRefresh,
+      )).items;
+    } on MediaLibraryException catch (error) {
+      if (error.statusCode != 400 && error.statusCode != 404) rethrow;
+      final fallbackUri =
+          _appendPath(
+            account.server.apiBaseUri,
+            'Users/${account.userId}/Items',
+          ).replace(
+            queryParameters: {
+              'Recursive': 'true',
+              'IncludeItemTypes': 'Movie,Episode,Video',
+              'MediaTypes': 'Video',
+              'SortBy': 'Random',
+              'Filters': 'IsNotFolder',
+              'Fields':
+                  'Overview,PrimaryImageAspectRatio,ProductionYear,'
+                  'RunTimeTicks,UserData,ParentId,SeriesId,SeriesName,'
+                  'IndexNumber,ParentIndexNumber',
+              'ImageTypeLimit': '1',
+              'EnableImageTypes': 'Primary,Backdrop',
+              'EnableImages': 'true',
+              'EnableUserData': 'true',
+              'StartIndex': '0',
+              'Limit': '$limit',
+              'EnableTotalRecordCount': 'true',
+            },
+          );
+      return (await _requestPage(
+        fallbackUri,
+        account,
+        cacheAge: _recommendationCacheAge,
+        forceRefresh: forceRefresh,
+      )).items;
+    }
+  }
+
+  Future<List<MediaItem>> _getLatestItems(
+    AuthenticatedServer account, {
+    required String includeItemTypes,
+    required int limit,
+    required bool forceRefresh,
+  }) async {
+    final uri =
+        _appendPath(
+          account.server.apiBaseUri,
+          'Users/${account.userId}/Items/Latest',
+        ).replace(
+          queryParameters: {
+            'IncludeItemTypes': includeItemTypes,
+            'MediaTypes': 'Video',
+            'Fields':
+                'Overview,PrimaryImageAspectRatio,ProductionYear,'
+                'RunTimeTicks,UserData,ParentId,SeriesId,SeriesName,'
+                'IndexNumber,ParentIndexNumber',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary,Backdrop',
+            'EnableImages': 'true',
+            'EnableUserData': 'true',
+            'GroupItems': 'false',
+            'Limit': '$limit',
+          },
+        );
+    return (await _requestPage(
+      uri,
+      account,
+      cacheAge: _homeFeedCacheAge,
+      forceRefresh: forceRefresh,
+      allowListResponse: true,
+    )).items;
+  }
+
   Future<MediaItem> getItem(
     AuthenticatedServer account,
     String itemId, {
@@ -252,6 +430,7 @@ class MediaLibraryService {
     int startIndex = 0,
     required Duration cacheAge,
     bool forceRefresh = false,
+    bool allowListResponse = false,
   }) async {
     try {
       final data = await _requestJson(
@@ -259,6 +438,7 @@ class MediaLibraryService {
         account,
         cacheAge: cacheAge,
         forceRefresh: forceRefresh,
+        allowListResponse: allowListResponse,
       );
       final rawItems = data['Items'];
       if (rawItems is! List) {
@@ -288,18 +468,29 @@ class MediaLibraryService {
     AuthenticatedServer account, {
     required Duration cacheAge,
     required bool forceRefresh,
+    bool allowListResponse = false,
   }) async {
     final cacheKey = _cacheKey(account, uri);
     if (!forceRefresh) {
       final cached = await _readCache(cacheKey, maxAge: cacheAge);
       if (cached != null) {
-        _refreshInBackground(cacheKey, uri, account);
+        _refreshInBackground(
+          cacheKey,
+          uri,
+          account,
+          allowListResponse: allowListResponse,
+        );
         return cached.payload;
       }
     }
 
     try {
-      return await _fetchAndCache(cacheKey, uri, account);
+      return await _fetchAndCache(
+        cacheKey,
+        uri,
+        account,
+        allowListResponse: allowListResponse,
+      );
     } on DioException {
       if (!forceRefresh) {
         final stale = await _readCache(cacheKey);
@@ -312,13 +503,20 @@ class MediaLibraryService {
   Future<Map<String, dynamic>> _fetchAndCache(
     String cacheKey,
     Uri uri,
-    AuthenticatedServer account,
-  ) async {
-    final response = await _dio.getUri<Map<String, dynamic>>(
+    AuthenticatedServer account, {
+    bool allowListResponse = false,
+  }) async {
+    final response = await _dio.getUri<Object?>(
       uri,
       options: Options(headers: _authHeaders(account.accessToken)),
     );
-    final data = response.data;
+    final payload = response.data;
+    final Map<String, dynamic>? data = switch (payload) {
+      Map<String, dynamic>() => payload,
+      Map() => Map<String, dynamic>.from(payload),
+      List() when allowListResponse => <String, dynamic>{'Items': payload},
+      _ => null,
+    };
     if (data == null) {
       throw const MediaLibraryException('服务器返回了无法识别的媒体数据。');
     }
@@ -333,11 +531,17 @@ class MediaLibraryService {
   void _refreshInBackground(
     String cacheKey,
     Uri uri,
-    AuthenticatedServer account,
-  ) {
+    AuthenticatedServer account, {
+    bool allowListResponse = false,
+  }) {
     if (!_refreshingCacheKeys.add(cacheKey)) return;
     unawaited(
-      _fetchAndCache(cacheKey, uri, account)
+      _fetchAndCache(
+            cacheKey,
+            uri,
+            account,
+            allowListResponse: allowListResponse,
+          )
           .catchError((_) => <String, dynamic>{})
           .whenComplete(() => _refreshingCacheKeys.remove(cacheKey)),
     );
@@ -488,13 +692,15 @@ class MediaLibraryService {
   MediaLibraryException _mapDioException(DioException error) {
     final status = error.response?.statusCode;
     if (status == 401 || status == 403) {
-      return const MediaLibraryException(
+      return MediaLibraryException(
         '登录凭据已失效，请重新登录服务器。',
         authenticationExpired: true,
+        statusCode: status,
       );
     }
     return MediaLibraryException(
       status == null ? '无法连接媒体服务器，请检查网络后重试。' : '媒体服务器返回错误（HTTP $status）。',
+      statusCode: status,
     );
   }
 
@@ -613,10 +819,12 @@ class MediaLibraryException implements Exception {
   const MediaLibraryException(
     this.message, {
     this.authenticationExpired = false,
+    this.statusCode,
   });
 
   final String message;
   final bool authenticationExpired;
+  final int? statusCode;
 
   @override
   String toString() => message;

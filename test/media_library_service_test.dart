@@ -397,4 +397,202 @@ void main() {
     expect(episodes, hasLength(2));
     expect(episodes.first.seriesId, 'series-id');
   });
+
+  test('loads resumable video items for the home feed', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {
+                  'TotalRecordCount': 1,
+                  'Items': [
+                    {
+                      'Id': 'resume-id',
+                      'Name': '继续观看电影',
+                      'Type': 'Movie',
+                      'RunTimeTicks': 72000000000,
+                      'UserData': {
+                        'PlaybackPositionTicks': 18000000000,
+                        'Played': false,
+                      },
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final items = await MediaLibraryService(dio).getResumeItems(account);
+
+    expect(request?.uri.path, '/Users/user-id/Items/Resume');
+    expect(request?.uri.queryParameters['MediaTypes'], 'Video');
+    expect(
+      request?.uri.queryParameters['IncludeItemTypes'],
+      'Movie,Episode,Video',
+    );
+    expect(request?.uri.queryParameters['ExcludeActiveSessions'], 'true');
+    expect(items.single.resumePosition, const Duration(minutes: 30));
+  });
+
+  test('falls back to the compatible resumable item query', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            requests.add(options);
+            if (options.uri.path.endsWith('/Items/Resume')) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.badResponse,
+                  response: Response<void>(
+                    requestOptions: options,
+                    statusCode: 404,
+                  ),
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {
+                  'Items': [
+                    {'Id': 'fallback-id', 'Name': '兼容续播', 'Type': 'Episode'},
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final items = await MediaLibraryService(dio).getResumeItems(account);
+
+    expect(requests, hasLength(2));
+    expect(requests.last.uri.path, '/Users/user-id/Items');
+    expect(requests.last.uri.queryParameters['Filters'], 'IsResumable');
+    expect(requests.last.uri.queryParameters['SortBy'], 'DatePlayed');
+    expect(items.single.id, 'fallback-id');
+  });
+
+  test('loads latest media from an array response', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Object?>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const [
+                  {'Id': 'latest-id', 'Name': '最新电影', 'Type': 'Movie'},
+                ],
+              ),
+            );
+          },
+        ),
+      );
+
+    final items = await MediaLibraryService(dio).getLatestMovies(account);
+
+    expect(request?.uri.path, '/Users/user-id/Items/Latest');
+    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Movie');
+    expect(request?.uri.queryParameters['GroupItems'], 'false');
+    expect(items.single.id, 'latest-id');
+  });
+
+  test('loads daily recommendations from the suggestions endpoint', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {
+                  'Items': [
+                    {
+                      'Id': 'recommendation-id',
+                      'Name': '每日推荐',
+                      'Type': 'Movie',
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final items = await MediaLibraryService(dio).getRecommendations(account);
+
+    expect(request?.uri.path, '/Items/Suggestions');
+    expect(request?.uri.queryParameters['UserId'], 'user-id');
+    expect(request?.uri.queryParameters['MediaType'], 'Video');
+    expect(request?.uri.queryParameters['Type'], 'Movie,Episode,Video');
+    expect(items.single.id, 'recommendation-id');
+  });
+
+  test('falls back to random library items for recommendations', () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            requests.add(options);
+            if (options.uri.path == '/Items/Suggestions') {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.badResponse,
+                  response: Response<void>(
+                    requestOptions: options,
+                    statusCode: 404,
+                  ),
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {
+                  'Items': [
+                    {'Id': 'random-id', 'Name': '随机推荐', 'Type': 'Episode'},
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final items = await MediaLibraryService(dio).getRecommendations(account);
+
+    expect(requests, hasLength(2));
+    expect(requests.last.uri.path, '/Users/user-id/Items');
+    expect(requests.last.uri.queryParameters['SortBy'], 'Random');
+    expect(
+      requests.last.uri.queryParameters['IncludeItemTypes'],
+      'Movie,Episode,Video',
+    );
+    expect(items.single.id, 'random-id');
+  });
 }

@@ -10,6 +10,7 @@
 - Jellyfin/Emby 公共信息接口探测
 - Jellyfin/Emby 用户名密码登录与 Windows Token 安全存储
 - 服务器与登录持久化、媒体库分页浏览和本地缓存
+- 登录后每日推荐轮播、继续观看、最近电影和最新剧集
 - 电影、剧集、演员详情、相似推荐和全局搜索
 - STRM、原码、直传与转码播放计划及播放进度上报
 - `media_kit/libmpv` 影院控制层、快捷键、全屏、倍速与音字幕轨道
@@ -18,7 +19,7 @@
 - Riverpod、Dio、Drift、安全凭据存储及 media_kit 依赖
 - 基础组件测试
 
-下一阶段将继续完善首页内容聚合、图片磁盘缓存与播放兼容性诊断。详细边界见 [架构说明](docs/ARCHITECTURE.md)、[开发路线](docs/ROADMAP.md) 和 [播放验证矩阵](docs/PLAYBACK_TEST_MATRIX.md)。
+下一阶段将继续完善图片磁盘缓存、多服务器管理与播放兼容性诊断。详细边界见 [架构说明](docs/ARCHITECTURE.md)、[开发路线](docs/ROADMAP.md) 和 [播放验证矩阵](docs/PLAYBACK_TEST_MATRIX.md)。
 
 视觉与交互实现遵循 [PEeK 设计系统](design-system/default/MASTER.md)，首页状态与响应式规则见 [首页规范](design-system/default/pages/home.md)。
 

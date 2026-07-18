@@ -4,6 +4,7 @@ import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
+import 'package:embyplayer/src/features/home/presentation/authenticated_home_page.dart';
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
 import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -179,16 +180,31 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                 switchInCurve: Curves.easeOutCubic,
                                 switchOutCurve: Curves.easeInCubic,
                                 child: switch (_selectedIndex) {
-                                  0 => _HomePage(
-                                    key: const ValueKey('home'),
-                                    server: _discoveredServer,
-                                    account: _authenticatedServer,
-                                    onAddServer: _showAddServerDialog,
-                                    onLogin: _showLoginDialog,
-                                    onOpenLibrary: () {
-                                      _selectDestination(1);
-                                    },
-                                  ),
+                                  0 =>
+                                    _authenticatedServer == null
+                                        ? _HomePage(
+                                            key: const ValueKey(
+                                              'connection-home',
+                                            ),
+                                            server: _discoveredServer,
+                                            account: null,
+                                            onAddServer: _showAddServerDialog,
+                                            onLogin: _showLoginDialog,
+                                            onOpenLibrary: () {
+                                              _selectDestination(1);
+                                            },
+                                          )
+                                        : AuthenticatedHomePage(
+                                            key: ValueKey(
+                                              'media-home-${_authenticatedServer!.server.serverId}-${_authenticatedServer!.userId}',
+                                            ),
+                                            account: _authenticatedServer!,
+                                            onOpenLibrary: () {
+                                              _selectDestination(1);
+                                            },
+                                            onSessionExpired:
+                                                _handleSessionExpired,
+                                          ),
                                   1 => MediaLibraryPage(
                                     key: const ValueKey('library'),
                                     account: _authenticatedServer,
