@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
@@ -621,20 +622,18 @@ class _LibraryIcon extends StatelessWidget {
             : AppColors.surfaceHigh,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: item.imageUri == null
-          ? Icon(
-              Icons.video_library_rounded,
-              color: selected ? AppColors.spotlight : AppColors.textTertiary,
-            )
-          : Image.network(
-              item.imageUri.toString(),
-              headers: item.imageHeaders,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const Icon(
-                Icons.video_library_rounded,
-                color: AppColors.textTertiary,
-              ),
-            ),
+      child: PeekMediaImage(
+        uri: item.imageUri,
+        headers: item.imageHeaders,
+        kind: PeekMediaImageKind.library,
+        placeholderBackground: selected
+            ? AppColors.spotlight.withValues(alpha: 0.12)
+            : AppColors.surfaceHigh,
+        placeholderIconColor: selected
+            ? AppColors.spotlight
+            : AppColors.textTertiary,
+        placeholderIconSize: 22,
+      ),
     );
   }
 }
@@ -800,30 +799,12 @@ class _MediaArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.surfaceHigh, AppColors.surfaceLow],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          _kindIcon(item.kind),
-          color: AppColors.textTertiary,
-          size: 38,
-        ),
-      ),
-    );
-    final imageUri = item.imageUri;
-    if (imageUri == null) return placeholder;
-    return Image.network(
-      imageUri.toString(),
+    return PeekMediaImage(
+      uri: item.imageUri,
       headers: item.imageHeaders,
+      kind: PeekMediaImageKind.poster,
       fit: BoxFit.cover,
-      filterQuality: FilterQuality.medium,
-      errorBuilder: (_, _, _) => placeholder,
+      placeholderIcon: _kindIcon(item.kind),
     );
   }
 }

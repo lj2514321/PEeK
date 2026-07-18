@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/home/domain/home_feed.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
@@ -747,28 +748,13 @@ class _HeroArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uri = item.backdropUri ?? item.imageUri;
-    if (uri == null) {
-      return const ColoredBox(
-        color: AppColors.surfaceLow,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: EdgeInsets.only(right: 88),
-            child: Icon(
-              Icons.local_movies_outlined,
-              size: 92,
-              color: AppColors.textTertiary,
-            ),
-          ),
-        ),
-      );
-    }
-    return Image.network(
-      uri.toString(),
+    return PeekMediaImage(
+      uri: uri,
       headers: item.imageHeaders,
+      kind: PeekMediaImageKind.backdrop,
       fit: BoxFit.cover,
       alignment: Alignment.centerRight,
-      errorBuilder: (_, _, _) => const ColoredBox(color: AppColors.surfaceLow),
+      placeholderIconSize: 72,
     );
   }
 }
@@ -976,22 +962,15 @@ class _CardArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uri = portrait ? item.imageUri : item.backdropUri ?? item.imageUri;
-    final fallback = ColoredBox(
-      color: AppColors.surfaceLow,
-      child: Icon(
-        item.kind == MediaItemKind.episode
-            ? Icons.live_tv_outlined
-            : Icons.movie_outlined,
-        color: AppColors.textTertiary,
-        size: 38,
-      ),
-    );
-    if (uri == null) return fallback;
-    return Image.network(
-      uri.toString(),
+    return PeekMediaImage(
+      uri: uri,
       headers: item.imageHeaders,
+      kind: item.kind == MediaItemKind.episode
+          ? PeekMediaImageKind.episode
+          : portrait
+          ? PeekMediaImageKind.poster
+          : PeekMediaImageKind.backdrop,
       fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => fallback,
     );
   }
 }

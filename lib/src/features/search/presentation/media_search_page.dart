@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
@@ -943,30 +944,12 @@ class _SearchArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.surfaceHigh, AppColors.surfaceLow],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          _kindIcon(item.kind),
-          color: AppColors.textTertiary,
-          size: 38,
-        ),
-      ),
-    );
-    final imageUri = item.imageUri;
-    if (imageUri == null) return placeholder;
-    return Image.network(
-      imageUri.toString(),
+    return PeekMediaImage(
+      uri: item.imageUri,
       headers: item.imageHeaders,
+      kind: PeekMediaImageKind.poster,
       fit: BoxFit.cover,
-      filterQuality: FilterQuality.medium,
-      errorBuilder: (_, _, _) => placeholder,
+      placeholderIcon: _kindIcon(item.kind),
     );
   }
 }
@@ -984,26 +967,12 @@ class _PersonAvatar extends StatelessWidget {
       height: size,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
-        child: person.imageUri == null
-            ? const ColoredBox(
-                color: AppColors.surfaceHigh,
-                child: Icon(
-                  Icons.person_rounded,
-                  color: AppColors.textTertiary,
-                ),
-              )
-            : Image.network(
-                person.imageUri.toString(),
-                headers: person.imageHeaders,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const ColoredBox(
-                  color: AppColors.surfaceHigh,
-                  child: Icon(
-                    Icons.person_rounded,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ),
+        child: PeekMediaImage(
+          uri: person.imageUri,
+          headers: person.imageHeaders,
+          kind: PeekMediaImageKind.person,
+          placeholderBackground: AppColors.surfaceHigh,
+        ),
       ),
     );
   }

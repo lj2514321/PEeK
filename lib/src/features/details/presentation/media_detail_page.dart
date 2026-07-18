@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -300,15 +301,13 @@ class _Backdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uri = item.backdropUri ?? item.imageUri;
-    if (uri == null) return const ColoredBox(color: AppColors.surfaceLow);
     return Opacity(
       opacity: 0.42,
-      child: Image.network(
-        uri.toString(),
+      child: PeekMediaImage(
+        uri: uri,
         headers: item.imageHeaders,
+        kind: PeekMediaImageKind.backdrop,
         fit: BoxFit.cover,
-        errorBuilder: (_, _, _) =>
-            const ColoredBox(color: AppColors.surfaceLow),
       ),
     );
   }
@@ -326,22 +325,12 @@ class _DetailPoster extends StatelessWidget {
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: AppGlass.decoration(radius: 18, elevated: true),
-        child: item.imageUri == null
-            ? const Icon(
-                Icons.movie_outlined,
-                size: 54,
-                color: AppColors.textTertiary,
-              )
-            : Image.network(
-                item.imageUri.toString(),
-                headers: item.imageHeaders,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const Icon(
-                  Icons.movie_outlined,
-                  size: 54,
-                  color: AppColors.textTertiary,
-                ),
-              ),
+        child: PeekMediaImage(
+          uri: item.imageUri,
+          headers: item.imageHeaders,
+          kind: PeekMediaImageKind.poster,
+          placeholderIconSize: 54,
+        ),
       ),
     );
   }
@@ -545,22 +534,14 @@ class _PersonCard extends StatelessWidget {
                 color: AppColors.surfaceHigh,
                 borderRadius: BorderRadius.circular(13),
               ),
-              child: person.imageUri == null
-                  ? const Icon(
-                      Icons.person_outline_rounded,
-                      size: 38,
-                      color: AppColors.textTertiary,
-                    )
-                  : Image.network(
-                      person.imageUri.toString(),
-                      headers: person.imageHeaders,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const Icon(
-                        Icons.person_outline_rounded,
-                        size: 38,
-                        color: AppColors.textTertiary,
-                      ),
-                    ),
+              child: PeekMediaImage(
+                uri: person.imageUri,
+                headers: person.imageHeaders,
+                kind: PeekMediaImageKind.person,
+                placeholderBackground: AppColors.surfaceHigh,
+                placeholderIcon: Icons.person_outline_rounded,
+                placeholderIconSize: 38,
+              ),
             ),
           ),
           const SizedBox(height: 9),
@@ -649,20 +630,11 @@ class _SimilarCard extends StatelessWidget {
                       color: AppColors.surfaceHigh,
                       borderRadius: BorderRadius.circular(13),
                     ),
-                    child: item.imageUri == null
-                        ? const Icon(
-                            Icons.movie_outlined,
-                            color: AppColors.textTertiary,
-                          )
-                        : Image.network(
-                            item.imageUri.toString(),
-                            headers: item.imageHeaders,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const Icon(
-                              Icons.movie_outlined,
-                              color: AppColors.textTertiary,
-                            ),
-                          ),
+                    child: PeekMediaImage(
+                      uri: item.imageUri,
+                      headers: item.imageHeaders,
+                      kind: PeekMediaImageKind.poster,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 9),
