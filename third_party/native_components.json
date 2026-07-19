@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "id": "libmpv-windows-bundle",
+      "name": "mpv and FFmpeg Windows bundle",
+      "version": "mpv v0.36.0-403-g652a1dd907 / FFmpeg ea3d24bbe3c58b171e55fe2151fc7ffaca3ab3d2",
+      "distributedFiles": ["libmpv-2.dll"],
+      "license": "mpv LGPL-2.1-or-later; FFmpeg LGPL-3.0-or-later; bundled dependencies retain their own permissive or LGPL-compatible terms",
+      "licenseFiles": [
+        "third_party/licenses/LGPL-2.1.txt",
+        "third_party/licenses/LGPL-3.0.txt",
+        "third_party/licenses/GPL-3.0.txt"
+      ],
+      "sourceUrls": [
+        "https://github.com/mpv-player/mpv/tree/652a1dd907",
+        "https://github.com/FFmpeg/FFmpeg/tree/ea3d24bbe3c58b171e55fe2151fc7ffaca3ab3d2",
+        "https://github.com/media-kit/libmpv-win32-video-build/releases/tag/2023-09-24",
+        "https://github.com/media-kit/libmpv-win32-video-build/blob/master/packages/mpv.cmake",
+        "https://github.com/media-kit/libmpv-win32-video-build/blob/master/packages/ffmpeg.cmake"
+      ],
+      "notes": "The archived build recipe sets mpv -Dgpl=false and FFmpeg --disable-gpl --disable-nonfree --enable-version3. PEeK dynamically loads the unmodified libmpv DLL. Public distribution must keep replacement possible and preserve access to the corresponding source and build recipe."
+    },
+    {
+      "id": "angle-windows-runtime",
+      "name": "ANGLE Windows runtime",
+      "version": "media-kit archive v1.0.1",
+      "distributedFiles": [
+        "d3dcompiler_47.dll",
+        "libEGL.dll",
+        "libGLESv2.dll",
+        "vk_swiftshader.dll",
+        "vulkan-1.dll",
+        "zlib.dll"
+      ],
+      "license": "BSD-3-Clause-style ANGLE license and component-specific third-party terms",
+      "licenseFiles": ["third_party/licenses/ANGLE-BSD-3-Clause.txt"],
+      "sourceUrls": [
+        "https://github.com/alexmercerind/flutter-windows-ANGLE-OpenGL-ES/releases/tag/v1.0.1",
+        "https://github.com/google/angle"
+      ],
+      "notes": "Flutter's generated notices are appended to PEeK's notice file for ANGLE, Vulkan, SwiftShader, zlib and other engine/runtime attributions."
+    },
+    {
+      "id": "sqlite",
+      "name": "SQLite",
+      "version": "3.53.3 (bundled by package:sqlite3 3.4.0)",
+      "distributedFiles": ["sqlite3.dll"],
+      "license": "Public Domain",
+      "licenseFiles": ["third_party/licenses/SQLITE-PUBLIC-DOMAIN.txt"],
+      "sourceUrls": [
+        "https://www.sqlite.org/copyright.html",
+        "https://github.com/simolus3/sqlite3.dart/tree/sqlite3-3.4.0"
+      ],
+      "notes": "The Dart wrapper is MIT licensed and is included separately in the generated package notices."
+    },
+    {
+      "id": "flutter-engine",
+      "name": "Flutter engine and bundled Windows runtime components",
+      "version": "resolved by the pinned Flutter SDK",
+      "distributedFiles": [
+        "flutter_windows.dll",
+        "icudtl.dat",
+        "data/flutter_assets/NOTICES.Z"
+      ],
+      "license": "BSD-3-Clause and component-specific third-party terms",
+      "licenseFiles": [],
+      "sourceUrls": [
+        "https://github.com/flutter/flutter",
+        "https://github.com/flutter/engine"
+      ],
+      "notes": "The complete Flutter-generated notices are decompressed and appended during PEeK packaging."
+    }
+  ]
+}

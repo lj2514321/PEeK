@@ -12,6 +12,37 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 产物位于 `build\windows\x64\installer\PEeK-x64.msix`，同时生成 SHA-256 文件。开发包由打包工具生成的自签名测试证书签名，但脚本不会修改本机证书存储；该包仅用于受控测试，不作为正式公开发行包。
 
+打包脚本还会根据锁定依赖、原生组件清单和 Flutter 的 `NOTICES.Z` 重新生成 `THIRD_PARTY_NOTICES.txt`，并将其放入安装目录。具体规则见[第三方许可证说明](THIRD_PARTY_LICENSES.md)。
+
+## GitHub 自动构建与发布
+
+`.github/workflows/windows-release.yml` 使用 Windows 托管运行器执行依赖安装、静态分析、全量测试和 MSIX 打包：
+
+- 推送到 `master`、提交针对 `master` 的 Pull Request，或手动运行工作流时，会构建并保留 14 天的 Actions Artifact。
+- 推送 `vMAJOR.MINOR.PATCH` 或 `vMAJOR.MINOR.PATCH.REVISION` 标签时，会在构建通过后自动创建 GitHub Release，并附上 MSIX 与 SHA-256 文件。
+- 三段标签会转换为四段 MSIX 版本，例如 `v0.2.0` 对应 `0.2.0.0`。每段取值必须在 0–65535 之间。
+
+发布示例：
+
+```powershell
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+默认情况下，CI 与本地开发构建一样使用测试证书。如果要让 GitHub Actions 使用正式 PFX，在仓库的 `Settings > Secrets and variables > Actions` 中同时添加以下 Repository Secrets：
+
+- `WINDOWS_CERTIFICATE_BASE64`：PFX 文件的 Base64 内容。
+- `WINDOWS_CERTIFICATE_PASSWORD`：PFX 密码。
+- `WINDOWS_CERTIFICATE_PUBLISHER`：证书的完整 Subject，必须与 MSIX Publisher 完全一致。
+
+可以在本地生成要粘贴到 Secret 中的 Base64 内容：
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('PEeK-signing.pfx'))
+```
+
+三个签名 Secret 必须全部配置或全部留空。工作流不会把证书写入仓库，临时 PFX 只存在于 GitHub 托管运行器的临时目录中。
+
 ## 生成更新描述文件
 
 正式签名后，为即将上传的 MSIX 生成 App Installer 文件：
@@ -56,3 +87,4 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 - 安装、覆盖升级、卸载后用户数据行为符合预期。
 - 安装包签名和 SHA-256 校验通过。
 - `.appinstaller` 中的 Identity、Publisher、Version 和 URI 与已上传包一致。
+- 安装目录包含最新的 `THIRD_PARTY_NOTICES.txt`，LGPL 对应源码与构建配方可访问。

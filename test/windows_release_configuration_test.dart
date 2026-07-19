@@ -44,4 +44,36 @@ void main() {
     expect(File('scripts/new_windows_appinstaller.ps1').existsSync(), isTrue);
     expect(File('docs/WINDOWS_RELEASE.md').existsSync(), isTrue);
   });
+
+  test('automates Windows builds and tagged GitHub releases', () {
+    final workflow = File(
+      '.github/workflows/windows-release.yml',
+    ).readAsStringSync();
+    final packageScript = File(
+      'scripts/build_windows_package.ps1',
+    ).readAsStringSync();
+
+    expect(workflow, contains('branches:'));
+    expect(workflow, contains('- master'));
+    expect(workflow, contains("- 'v*'"));
+    expect(workflow, contains('flutter analyze'));
+    expect(workflow, contains('flutter test'));
+    expect(workflow, contains('build_windows_package.ps1'));
+    expect(workflow, contains('actions/upload-artifact@v7'));
+    expect(workflow, contains('actions/download-artifact@v8'));
+    expect(workflow, contains("startsWith(github.ref, 'refs/tags/v')"));
+    expect(workflow, contains('gh release create'));
+    expect(workflow, contains('gh release upload'));
+    expect(workflow, contains('--clobber'));
+    expect(workflow, contains('contents: write'));
+    expect(workflow, contains(r'${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}'));
+    expect(workflow, isNot(contains('pull_request_target:')));
+
+    expect(packageScript, contains(r'$MsixVersion'));
+    expect(packageScript, contains(r'$CertificatePath'));
+    expect(packageScript, contains("'--build-name'"));
+    expect(packageScript, contains("'--build-number'"));
+    expect(packageScript, contains("'--certificate-password'"));
+    expect(packageScript, contains("'--publisher'"));
+  });
 }

@@ -33,6 +33,7 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/THIRD_PARTY_NOTICES.txt
 
 # Windows release signing material must never be committed.
 *.pfx

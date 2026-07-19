@@ -1,0 +1,145 @@
+name: Windows Build and Release
+
+run-name: PEeK Windows - ${{ github.ref_name }}
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  FLUTTER_VERSION: 3.44.6
+  WINDOWS_ARTIFACT_NAME: PEeK-windows-x64-${{ github.run_number }}
+
+jobs:
+  build:
+    name: Analyze, test, and package Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2.23.0
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          pub-cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build MSIX
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_PUBLISHER: ${{ secrets.WINDOWS_CERTIFICATE_PUBLISHER }}
+        run: |
+          $parameters = @{
+            FlutterExecutable = (Get-Command flutter).Source
+          }
+
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($env:GITHUB_REF_NAME -notmatch '^v(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:\.(?<revision>\d+))?$') {
+              throw "Release tag '$env:GITHUB_REF_NAME' must use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH.REVISION."
+            }
+
+            $parts = @(
+              [int]$Matches.major
+              [int]$Matches.minor
+              [int]$Matches.patch
+              $(if ($Matches.revision) { [int]$Matches.revision } else { 0 })
+            )
+            if ($parts.Where({ $_ -gt 65535 }).Count -gt 0) {
+              throw 'Every MSIX version part must be between 0 and 65535.'
+            }
+            $parameters.MsixVersion = $parts -join '.'
+          }
+
+          $signingValues = @(
+            $env:WINDOWS_CERTIFICATE_BASE64
+            $env:WINDOWS_CERTIFICATE_PASSWORD
+            $env:WINDOWS_CERTIFICATE_PUBLISHER
+          )
+          $configuredSigningValues = $signingValues.Where({ -not [string]::IsNullOrWhiteSpace($_) })
+          if ($configuredSigningValues.Count -notin @(0, 3)) {
+            throw 'Configure all three Windows signing secrets, or leave all of them empty.'
+          }
+
+          if ($configuredSigningValues.Count -eq 3) {
+            $certificatePath = Join-Path $env:RUNNER_TEMP 'peek-signing.pfx'
+            [IO.File]::WriteAllBytes(
+              $certificatePath,
+              [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+            )
+            $parameters.CertificatePath = $certificatePath
+            $parameters.CertificatePassword = $env:WINDOWS_CERTIFICATE_PASSWORD
+            $parameters.Publisher = $env:WINDOWS_CERTIFICATE_PUBLISHER
+          }
+
+          & .\scripts\build_windows_package.ps1 @parameters
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.WINDOWS_ARTIFACT_NAME }}
+          path: |
+            build/windows/x64/installer/PEeK-x64.msix
+            build/windows/x64/installer/PEeK-x64.msix.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows package
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.WINDOWS_ARTIFACT_NAME }}
+          path: release-assets
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/* \
+              --verify-tag \
+              --generate-notes \
+              --title "PEeK $GITHUB_REF_NAME"
+          fi
