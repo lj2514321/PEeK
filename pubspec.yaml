@@ -55,6 +55,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.15.1
   drift_dev: ^2.34.0
+  msix: ^3.18.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -97,3 +98,18 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+msix_config:
+  display_name: PEeK
+  publisher_display_name: PEeK
+  identity_name: PEeK.Player
+  publisher: CN=PEeK Development
+  msix_version: 0.1.0.1
+  logo_path: windows/runner/resources/app_icon.ico
+  architecture: x64
+  capabilities: internetClient,privateNetworkClientServer
+  languages: zh-cn,en-us
+  os_min_version: 10.0.19041.0
+  output_path: build/windows/x64/installer
+  output_name: PEeK-x64
+  install_certificate: false

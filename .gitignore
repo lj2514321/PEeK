@@ -34,6 +34,12 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Windows release signing material must never be committed.
+*.pfx
+*.p12
+*.pvk
+*.snk
+
 # Symbolication related
 app.*.symbols
 
