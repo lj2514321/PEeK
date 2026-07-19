@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:embyplayer/src/features/player/data/playback_device_profile.dart';
 import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
@@ -92,7 +93,9 @@ class PlaybackService {
           'AllowAudioStreamCopy': true,
           'IsPlayback': true,
           'AutoOpenLiveStream': true,
-          'DeviceProfile': _deviceProfileFor(maxStreamingBitrate),
+          'DeviceProfile': PlaybackDeviceProfile.build(
+            maxStreamingBitrate: maxStreamingBitrate,
+          ),
         },
         options: Options(
           contentType: Headers.jsonContentType,
@@ -650,45 +653,6 @@ class PlaybackService {
       return value;
     }
     return null;
-  }
-
-  static const _deviceProfile = <String, dynamic>{
-    'Name': 'PEeK Windows',
-    'SupportedMediaTypes': 'Video,Audio',
-    'MaxStreamingBitrate': 160000000,
-    'MusicStreamingTranscodingBitrate': 320000,
-    'DirectPlayProfiles': [
-      {
-        'Container':
-            'mkv,mp4,m4v,mov,avi,ts,m2ts,mpeg,mpg,webm,wmv,flv,vob,ogv,3gp',
-        'Type': 'Video',
-      },
-      {'Container': 'mp3,aac,m4a,flac,ogg,opus,wav,wma', 'Type': 'Audio'},
-    ],
-    'TranscodingProfiles': [
-      {
-        'Container': 'ts',
-        'Type': 'Video',
-        'VideoCodec': 'h264,hevc',
-        'AudioCodec': 'aac,ac3,eac3,mp3,opus',
-        'Protocol': 'hls',
-        'Context': 'Streaming',
-        'MinSegments': 1,
-        'BreakOnNonKeyFrames': true,
-      },
-    ],
-    'SubtitleProfiles': [
-      {'Format': 'srt', 'Method': 'External'},
-      {'Format': 'vtt', 'Method': 'External'},
-      {'Format': 'ass', 'Method': 'Embed'},
-      {'Format': 'ssa', 'Method': 'Embed'},
-      {'Format': 'pgssub', 'Method': 'Embed'},
-      {'Format': 'dvdsub', 'Method': 'Embed'},
-    ],
-  };
-
-  Map<String, dynamic> _deviceProfileFor(int maxStreamingBitrate) {
-    return {..._deviceProfile, 'MaxStreamingBitrate': maxStreamingBitrate};
   }
 }
 

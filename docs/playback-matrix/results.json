@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-07-19",
+  "results": [
+    {"caseId": "VID-H264-8-SDR-1080P", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "VID-H264-10-SDR-1080P", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "VID-HEVC-8-SDR-4K", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "VID-AV1-8-SDR-4K", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "VID-VP9-8-SDR-4K", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "AUD-AAC-2.0", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "AUD-EAC3-5.1", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "AUD-DTS-5.1", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "AUD-TRUEHD-7.1", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "AUD-FLAC-2.0", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "SUB-SRT-EMBEDDED", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "SUB-SRT-EXTERNAL", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "SUB-ASS-EMBEDDED", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "SUB-ASS-EXTERNAL", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "SUB-PGS-EMBEDDED", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "SUB-FORCED-DEFAULT", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "HDR-HEVC-MAIN10-HDR10", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "HDR-HEVC-MAIN10-HLG", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "HDR-AV1-MAIN10-HDR10", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "STRM-REMOTE-MP4-HEADERS", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "STRM-HLS-MASTER", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "STRM-HTTP-REDIRECT", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "STRM-INVALID-TIMEOUT", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "NET-BITRATE-20M-80MS", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "NET-BITRATE-8M-150MS", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "NET-SERVER-INTERRUPTION", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}},
+    {"caseId": "NET-SEEK-AFTER-STALL", "jellyfin": {"status": "pending"}, "emby": {"status": "pending"}}
+  ]
+}

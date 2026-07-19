@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-07-19",
+  "cases": [
+    {
+      "id": "VID-H264-8-SDR-1080P",
+      "category": "video",
+      "title": "H.264 8-bit SDR 1080p / MP4",
+      "fixture": "MP4, H.264 High, yuv420p, AAC stereo",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay"],
+      "expected": "稳定原码播放、拖动后音画同步",
+      "evidence": ["playbackMethod", "actualDecoder", "droppedFrames"]
+    },
+    {
+      "id": "VID-H264-10-SDR-1080P",
+      "category": "video",
+      "title": "H.264 Hi10P SDR 1080p / MKV",
+      "fixture": "MKV, H.264 High 10, yuv420p10le, AAC stereo",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "硬解不可用时自动软件解码，或由服务器转码后稳定播放",
+      "evidence": ["playbackMethod", "actualDecoder", "transcodingReasons"]
+    },
+    {
+      "id": "VID-HEVC-8-SDR-4K",
+      "category": "video",
+      "title": "HEVC Main 8-bit SDR 4K / MKV",
+      "fixture": "MKV, HEVC Main, yuv420p, AAC stereo",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "支持的 GPU 使用硬解；不支持时回退软件解码或服务器转码",
+      "evidence": ["playbackMethod", "actualDecoder", "droppedFrames"]
+    },
+    {
+      "id": "VID-AV1-8-SDR-4K",
+      "category": "video",
+      "title": "AV1 Main 8-bit SDR 4K / MKV",
+      "fixture": "MKV, AV1 Main, yuv420p, Opus stereo",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "支持的 GPU 使用硬解；否则回退后仍可播放",
+      "evidence": ["playbackMethod", "actualDecoder", "droppedFrames"]
+    },
+    {
+      "id": "VID-VP9-8-SDR-4K",
+      "category": "video",
+      "title": "VP9 Profile 0 SDR 4K / WebM",
+      "fixture": "WebM, VP9 Profile 0, yuv420p, Opus stereo",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "稳定播放且播放方式与服务端会话一致",
+      "evidence": ["playbackMethod", "actualDecoder", "droppedFrames"]
+    },
+    {
+      "id": "AUD-AAC-2.0",
+      "category": "audio",
+      "title": "AAC 2.0 音轨",
+      "fixture": "H.264 MP4 with AAC LC stereo",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay"],
+      "expected": "声道、语言和默认轨标识正确",
+      "evidence": ["playbackMethod", "selectedTrack", "audibleResult"]
+    },
+    {
+      "id": "AUD-EAC3-5.1",
+      "category": "audio",
+      "title": "E-AC-3 5.1 音轨",
+      "fixture": "MKV with E-AC-3 5.1",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream", "transcode"],
+      "expected": "可听且无明显声道错位；转码时原因可见",
+      "evidence": ["playbackMethod", "selectedTrack", "transcodingReasons"]
+    },
+    {
+      "id": "AUD-DTS-5.1",
+      "category": "audio",
+      "title": "DTS 5.1 音轨",
+      "fixture": "MKV with DTS 5.1",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream", "transcode"],
+      "expected": "直解或音频转码后正常输出，视频无需无故重编码",
+      "evidence": ["playbackMethod", "selectedTrack", "transcodingReasons"]
+    },
+    {
+      "id": "AUD-TRUEHD-7.1",
+      "category": "audio",
+      "title": "TrueHD 7.1 音轨",
+      "fixture": "MKV with TrueHD 7.1 and AAC fallback",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream", "transcode"],
+      "expected": "可切换 TrueHD 与兼容音轨，状态和声音同步更新",
+      "evidence": ["playbackMethod", "selectedTrack", "transcodingReasons"]
+    },
+    {
+      "id": "AUD-FLAC-2.0",
+      "category": "audio",
+      "title": "FLAC 2.0 音轨",
+      "fixture": "MKV with FLAC stereo",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream"],
+      "expected": "轨道信息和播放状态正确",
+      "evidence": ["playbackMethod", "selectedTrack", "audibleResult"]
+    },
+    {
+      "id": "SUB-SRT-EMBEDDED",
+      "category": "subtitle",
+      "title": "内嵌 SRT 字幕",
+      "fixture": "MKV with UTF-8 Chinese SRT",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream"],
+      "expected": "可选择、关闭且中文显示正常",
+      "evidence": ["playbackMethod", "selectedTrack", "visualResult"]
+    },
+    {
+      "id": "SUB-SRT-EXTERNAL",
+      "category": "subtitle",
+      "title": "外挂 SRT 字幕",
+      "fixture": "MP4 plus server-managed external UTF-8 SRT",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream"],
+      "expected": "通过 DeliveryUrl 加载，鉴权正确且中文正常",
+      "evidence": ["playbackMethod", "selectedTrack", "visualResult"]
+    },
+    {
+      "id": "SUB-ASS-EMBEDDED",
+      "category": "subtitle",
+      "title": "内嵌 ASS 样式字幕",
+      "fixture": "MKV with Chinese ASS, fonts and positioning",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "直放时样式、字体和位置可接受；烧录时转码原因可见",
+      "evidence": ["playbackMethod", "selectedTrack", "visualResult"]
+    },
+    {
+      "id": "SUB-ASS-EXTERNAL",
+      "category": "subtitle",
+      "title": "外挂 ASS 样式字幕",
+      "fixture": "Video plus server-managed external ASS",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream", "transcode"],
+      "expected": "字幕可加载；若服务端烧录则切换后保留播放位置",
+      "evidence": ["playbackMethod", "selectedTrack", "visualResult"]
+    },
+    {
+      "id": "SUB-PGS-EMBEDDED",
+      "category": "subtitle",
+      "title": "内嵌 PGS 图形字幕",
+      "fixture": "MKV with PGS subtitle",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "直放渲染或服务端烧录均可用，播放方式标识正确",
+      "evidence": ["playbackMethod", "selectedTrack", "transcodingReasons"]
+    },
+    {
+      "id": "SUB-FORCED-DEFAULT",
+      "category": "subtitle",
+      "title": "默认与强制字幕标记",
+      "fixture": "MKV with normal, default and forced subtitle tracks",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream", "transcode"],
+      "expected": "轨道标签正确，切换与关闭行为稳定",
+      "evidence": ["playbackMethod", "selectedTrack", "visualResult"]
+    },
+    {
+      "id": "HDR-HEVC-MAIN10-HDR10",
+      "category": "hdr",
+      "title": "HEVC Main10 HDR10 4K",
+      "fixture": "MKV, HEVC Main10, BT.2020, PQ, HDR10 metadata",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "原码时显示链路保留 HDR；转码时确认已映射为 SDR 且无严重偏色",
+      "evidence": ["playbackMethod", "actualDecoder", "colorMetadata", "visualResult"]
+    },
+    {
+      "id": "HDR-HEVC-MAIN10-HLG",
+      "category": "hdr",
+      "title": "HEVC Main10 HLG 4K",
+      "fixture": "TS, HEVC Main10, BT.2020, HLG",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "原码或色调映射后的画面亮度与颜色可接受",
+      "evidence": ["playbackMethod", "actualDecoder", "colorMetadata", "visualResult"]
+    },
+    {
+      "id": "HDR-AV1-MAIN10-HDR10",
+      "category": "hdr",
+      "title": "AV1 Main10 HDR10 4K",
+      "fixture": "MKV, AV1 Main10, BT.2020, PQ",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "transcode"],
+      "expected": "支持的 GPU 使用硬解；回退路径仍可播放且颜色可接受",
+      "evidence": ["playbackMethod", "actualDecoder", "colorMetadata", "visualResult"]
+    },
+    {
+      "id": "STRM-REMOTE-MP4-HEADERS",
+      "category": "strm",
+      "title": "STRM 远程 MP4 与必需请求头",
+      "fixture": "STRM URL requiring Referer and User-Agent",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay"],
+      "expected": "源站请求头透传，时长与拖动正常",
+      "evidence": ["playbackMethod", "requestHeaders", "seekResult"]
+    },
+    {
+      "id": "STRM-HLS-MASTER",
+      "category": "strm",
+      "title": "STRM HLS 主播放列表",
+      "fixture": "STRM URL pointing to a multi-variant master.m3u8",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay"],
+      "expected": "首开、分片请求、缓冲和长时间播放稳定",
+      "evidence": ["playbackMethod", "startupTime", "bufferHealth"]
+    },
+    {
+      "id": "STRM-HTTP-REDIRECT",
+      "category": "strm",
+      "title": "STRM HTTP 重定向",
+      "fixture": "STRM URL returning a 302 redirect to media",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay"],
+      "expected": "重定向后正常播放且凭据不泄露到诊断报告",
+      "evidence": ["playbackMethod", "startupTime", "redactedReport"]
+    },
+    {
+      "id": "STRM-INVALID-TIMEOUT",
+      "category": "strm",
+      "title": "STRM 无效地址与超时",
+      "fixture": "Unreachable or deliberately delayed STRM URL",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["failure"],
+      "expected": "有限时间内给出可关闭的错误，日志不含完整 URL 或凭据",
+      "evidence": ["errorMessage", "recoveryResult", "redactedLog"]
+    },
+    {
+      "id": "NET-BITRATE-20M-80MS",
+      "category": "network",
+      "title": "20 Mbps / 80 ms 延迟网络",
+      "fixture": "Network shaping: 20 Mbps, 80 ms RTT, no packet loss",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream", "transcode"],
+      "expected": "按码率设置规划，缓冲后可持续播放",
+      "evidence": ["playbackMethod", "startupTime", "bufferHealth", "droppedFrames"]
+    },
+    {
+      "id": "NET-BITRATE-8M-150MS",
+      "category": "network",
+      "title": "8 Mbps / 150 ms 延迟网络",
+      "fixture": "Network shaping: 8 Mbps, 150 ms RTT, no packet loss",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directStream", "transcode"],
+      "expected": "服务器选择受限码率流，界面保持可操作",
+      "evidence": ["playbackMethod", "startupTime", "bufferHealth", "transcodingReasons"]
+    },
+    {
+      "id": "NET-SERVER-INTERRUPTION",
+      "category": "network",
+      "title": "播放中服务器短暂中断",
+      "fixture": "Disconnect server for 10 seconds during playback",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["recovery", "failure"],
+      "expected": "恢复播放或给出可退出、可重试的错误，窗口不失去响应",
+      "evidence": ["recoveryResult", "positionRetention", "redactedLog"]
+    },
+    {
+      "id": "NET-SEEK-AFTER-STALL",
+      "category": "network",
+      "title": "网络卡顿后拖动",
+      "fixture": "Pause traffic for 5 seconds, restore, then seek forward",
+      "servers": ["jellyfin", "emby"],
+      "allowedPlaybackMethods": ["directPlay", "directStream", "transcode", "recovery"],
+      "expected": "恢复后拖动成功，服务端进度和本地位置重新同步",
+      "evidence": ["seekResult", "positionRetention", "bufferHealth"]
+    }
+  ]
+}
