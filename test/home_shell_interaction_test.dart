@@ -1,0 +1,180 @@
+import 'package:dio/dio.dart';
+import 'package:embyplayer/src/app/app.dart';
+import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/storage/search_history_store.dart';
+import 'package:embyplayer/src/core/storage/secure_token_store.dart';
+import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
+import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
+import 'package:embyplayer/src/features/servers/data/server_authentication_service.dart';
+import 'package:embyplayer/src/features/servers/domain/media_item.dart';
+import 'package:embyplayer/src/features/servers/domain/server.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('keeps search context when switching between main destinations', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final account = _account();
+    final library = _ShellLibraryService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          serverAuthenticationProvider.overrideWithValue(
+            _ShellAuthenticationService(account),
+          ),
+          mediaLibraryProvider.overrideWithValue(library),
+          searchHistoryStoreProvider.overrideWithValue(
+            MemorySearchHistoryStore(),
+          ),
+          playbackSettingsStoreProvider.overrideWithValue(
+            MemoryPlaybackSettingsStore(),
+          ),
+        ],
+        child: const EmbyPlayerApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(library.libraryRequests, 0);
+
+    await tester.tap(find.text('搜索电影、剧集与人物'));
+    await tester.pumpAndSettle();
+    final searchField = find.byKey(const ValueKey('media-search-field'));
+    await tester.enterText(searchField, '保留现场');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(find.text('保留现场的结果'), findsOneWidget);
+    expect(library.searchRequests, 1);
+
+    await tester.tap(find.text('设置').first);
+    await tester.pumpAndSettle();
+    expect(searchField, findsNothing);
+
+    await tester.tap(find.text('搜索').first);
+    await tester.pumpAndSettle();
+
+    final restoredField = tester.widget<TextField>(searchField);
+    expect(restoredField.controller?.text, '保留现场');
+    expect(find.text('保留现场的结果'), findsOneWidget);
+    expect(library.searchRequests, 1);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _ShellAuthenticationService extends ServerAuthenticationService {
+  _ShellAuthenticationService(this.account) : super(Dio(), SecureTokenStore());
+
+  final AuthenticatedServer account;
+
+  @override
+  Future<ServerAccountState> restoreSessionState() async {
+    return ServerAccountState(
+      accounts: [
+        ServerAccountEntry(
+          profile: ServerProfile.fromSession(account),
+          session: account,
+        ),
+      ],
+      activeSession: account,
+    );
+  }
+}
+
+class _ShellLibraryService extends MediaLibraryService {
+  _ShellLibraryService() : super(Dio());
+
+  int libraryRequests = 0;
+  int searchRequests = 0;
+
+  @override
+  Future<List<MediaItem>> getLibraries(
+    AuthenticatedServer account, {
+    bool forceRefresh = false,
+  }) async {
+    libraryRequests += 1;
+    return const [
+      MediaItem(id: 'library', name: '电影', kind: MediaItemKind.folder),
+    ];
+  }
+
+  @override
+  Future<MediaPage> getItems(
+    AuthenticatedServer account, {
+    required String parentId,
+    int startIndex = 0,
+    int limit = 60,
+    bool forceRefresh = false,
+  }) async {
+    return const MediaPage(items: [], totalRecordCount: 0, nextStartIndex: 0);
+  }
+
+  @override
+  Future<MediaPage> search(
+    AuthenticatedServer account, {
+    required String query,
+    MediaSearchScope scope = MediaSearchScope.all,
+    int startIndex = 0,
+    int limit = 40,
+    bool forceRefresh = false,
+  }) async {
+    searchRequests += 1;
+    return MediaPage(
+      items: [
+        MediaItem(id: 'result', name: '$query的结果', kind: MediaItemKind.movie),
+      ],
+      totalRecordCount: 1,
+      nextStartIndex: 1,
+    );
+  }
+
+  @override
+  Future<List<MediaItem>> getRecommendations(
+    AuthenticatedServer account, {
+    int limit = 6,
+    bool forceRefresh = false,
+  }) async => const [];
+
+  @override
+  Future<List<MediaItem>> getResumeItems(
+    AuthenticatedServer account, {
+    int limit = 18,
+    bool forceRefresh = false,
+  }) async => const [];
+
+  @override
+  Future<List<MediaItem>> getLatestMovies(
+    AuthenticatedServer account, {
+    int limit = 18,
+    bool forceRefresh = false,
+  }) async => const [];
+
+  @override
+  Future<List<MediaItem>> getLatestEpisodes(
+    AuthenticatedServer account, {
+    int limit = 18,
+    bool forceRefresh = false,
+  }) async => const [];
+}
+
+AuthenticatedServer _account() {
+  return AuthenticatedServer(
+    server: DiscoveredServer(
+      kind: ServerKind.jellyfin,
+      name: '客厅服务器',
+      version: '10.11.6',
+      serverId: 'server-id',
+      apiBaseUri: Uri.parse('http://192.168.1.20:8096'),
+    ),
+    userId: 'user-id',
+    userName: 'Alex',
+    deviceId: 'device-id',
+    accessToken: 'secret-token',
+  );
+}

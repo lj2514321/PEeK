@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
@@ -12,6 +13,7 @@ import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:embyplayer/src/features/servers/presentation/server_accounts_page.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,7 +26,10 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
+  final _mediaHomePageKey = GlobalKey<AuthenticatedHomePageState>();
+  final _libraryPageKey = GlobalKey<MediaLibraryPageState>();
   final _searchPageKey = GlobalKey<MediaSearchPageState>();
+  final _visitedDestinations = <int>{0};
   int _selectedIndex = 0;
   DiscoveredServer? _discoveredServer;
   AuthenticatedServer? _authenticatedServer;
@@ -279,11 +284,32 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       _openSearch();
       return;
     }
-    setState(() => _selectedIndex = index);
+    _searchPageKey.currentState?.unfocusSearch();
+    if (_selectedIndex == index) {
+      switch (index) {
+        case 0:
+          _mediaHomePageKey.currentState?.scrollToTop();
+          return;
+        case 1:
+          _libraryPageKey.currentState?.scrollToTop();
+          return;
+        default:
+          return;
+      }
+    }
+    setState(() {
+      _visitedDestinations.add(index);
+      _selectedIndex = index;
+    });
   }
 
   void _openSearch() {
-    if (_selectedIndex != 2) setState(() => _selectedIndex = 2);
+    if (_selectedIndex != 2) {
+      setState(() {
+        _visitedDestinations.add(2);
+        _selectedIndex = 2;
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchPageKey.currentState?.focusSearch();
     });
@@ -334,6 +360,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): () {
           _openSearch();
         },
+        const SingleActivator(LogicalKeyboardKey.digit1, control: true): () {
+          _selectDestination(0);
+        },
+        const SingleActivator(LogicalKeyboardKey.digit2, control: true): () {
+          _selectDestination(1);
+        },
+        const SingleActivator(LogicalKeyboardKey.digit3, control: true): () {
+          _selectDestination(2);
+        },
+        const SingleActivator(LogicalKeyboardKey.digit4, control: true): () {
+          _selectDestination(3);
+        },
       },
       child: Focus(
         autofocus: true,
@@ -367,78 +405,81 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                               onAccount: () => _selectDestination(3),
                             ),
                             Expanded(
-                              child: AnimatedSwitcher(
-                                duration: AppMotion.responsive(
-                                  context,
-                                  AppMotion.standard,
-                                ),
-                                switchInCurve: Curves.easeOutCubic,
-                                switchOutCurve: Curves.easeInCubic,
-                                child: switch (_selectedIndex) {
-                                  0 =>
-                                    _authenticatedServer == null
-                                        ? _HomePage(
-                                            key: const ValueKey(
-                                              'connection-home',
-                                            ),
-                                            server: _discoveredServer,
-                                            account: null,
-                                            onAddServer: _showAddServerDialog,
-                                            onLogin: _showLoginDialog,
-                                            onOpenLibrary: () {
-                                              _selectDestination(1);
-                                            },
-                                          )
-                                        : AuthenticatedHomePage(
-                                            key: ValueKey(
-                                              'media-home-${_authenticatedServer!.server.serverId}-${_authenticatedServer!.userId}',
-                                            ),
-                                            account: _authenticatedServer!,
-                                            onOpenLibrary: () {
-                                              _selectDestination(1);
-                                            },
-                                            onSessionExpired:
-                                                _handleSessionExpired,
+                              child: IndexedStack(
+                                index: _selectedIndex,
+                                sizing: StackFit.expand,
+                                children: [
+                                  _authenticatedServer == null
+                                      ? _HomePage(
+                                          key: const ValueKey(
+                                            'connection-home',
                                           ),
-                                  1 => MediaLibraryPage(
-                                    key: const ValueKey('library'),
-                                    account: _authenticatedServer,
-                                    onGoHome: () => _selectDestination(0),
-                                    onSessionExpired: _handleSessionExpired,
-                                  ),
-                                  2 => MediaSearchPage(
-                                    key: _searchPageKey,
-                                    account: _authenticatedServer,
-                                    onGoHome: () => _selectDestination(0),
-                                    onSessionExpired: _handleSessionExpired,
-                                  ),
-                                  _ => ServerAccountsPage(
-                                    key: const ValueKey('server-accounts'),
-                                    state: _accountState,
-                                    busyProfileId: _busyProfileId,
-                                    onAddServer: _showAddServerDialog,
-                                    onSwitch: _switchAccount,
-                                    onLogin: _loginAccount,
-                                    onLogout: _logoutAccount,
-                                    onRemove: _removeAccount,
-                                    onGoHome: () => _selectDestination(0),
-                                    playbackSettings: _playbackSettings,
-                                    playbackSettingsLoading:
-                                        _playbackSettingsLoading,
-                                    playbackSettingsSaving:
-                                        _playbackSettingsSaving,
-                                    playbackSettingsError:
-                                        _playbackSettingsError,
-                                    onPlaybackBitrateChanged: (bitrate) =>
-                                        unawaited(
-                                          _changePlaybackBitrate(bitrate),
+                                          server: _discoveredServer,
+                                          account: null,
+                                          onAddServer: _showAddServerDialog,
+                                          onLogin: _showLoginDialog,
+                                          onOpenLibrary: () {
+                                            _selectDestination(1);
+                                          },
+                                        )
+                                      : AuthenticatedHomePage(
+                                          key: _mediaHomePageKey,
+                                          account: _authenticatedServer!,
+                                          active: _selectedIndex == 0,
+                                          onOpenLibrary: () {
+                                            _selectDestination(1);
+                                          },
+                                          onSessionExpired:
+                                              _handleSessionExpired,
                                         ),
-                                    onHardwareDecodingModeChanged: (mode) =>
-                                        unawaited(
-                                          _changeHardwareDecodingMode(mode),
-                                        ),
-                                  ),
-                                },
+                                  if (_visitedDestinations.contains(1))
+                                    MediaLibraryPage(
+                                      key: _libraryPageKey,
+                                      account: _authenticatedServer,
+                                      onGoHome: () => _selectDestination(0),
+                                      onSessionExpired: _handleSessionExpired,
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
+                                  if (_visitedDestinations.contains(2))
+                                    MediaSearchPage(
+                                      key: _searchPageKey,
+                                      account: _authenticatedServer,
+                                      onGoHome: () => _selectDestination(0),
+                                      onSessionExpired: _handleSessionExpired,
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
+                                  if (_visitedDestinations.contains(3))
+                                    ServerAccountsPage(
+                                      key: const ValueKey('server-accounts'),
+                                      state: _accountState,
+                                      busyProfileId: _busyProfileId,
+                                      onAddServer: _showAddServerDialog,
+                                      onSwitch: _switchAccount,
+                                      onLogin: _loginAccount,
+                                      onLogout: _logoutAccount,
+                                      onRemove: _removeAccount,
+                                      onGoHome: () => _selectDestination(0),
+                                      playbackSettings: _playbackSettings,
+                                      playbackSettingsLoading:
+                                          _playbackSettingsLoading,
+                                      playbackSettingsSaving:
+                                          _playbackSettingsSaving,
+                                      playbackSettingsError:
+                                          _playbackSettingsError,
+                                      onPlaybackBitrateChanged: (bitrate) =>
+                                          unawaited(
+                                            _changePlaybackBitrate(bitrate),
+                                          ),
+                                      onHardwareDecodingModeChanged: (mode) =>
+                                          unawaited(
+                                            _changeHardwareDecodingMode(mode),
+                                          ),
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
+                                ],
                               ),
                             ),
                           ],
@@ -649,6 +690,10 @@ class _TopCommandBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final horizontalPadding = compact ? 20.0 : 32.0;
+    final captionInset = defaultTargetPlatform == TargetPlatform.windows
+        ? AppChrome.windowControlsWidth
+        : 0.0;
     return GlassSurface(
       radius: 0,
       blur: 22,
@@ -656,7 +701,10 @@ class _TopCommandBar extends StatelessWidget {
       child: SizedBox(
         height: 76,
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: compact ? 20 : 32),
+          padding: EdgeInsets.only(
+            left: horizontalPadding,
+            right: horizontalPadding + captionInset,
+          ),
           child: Row(
             children: [
               Expanded(

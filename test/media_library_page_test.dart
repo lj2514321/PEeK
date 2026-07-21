@@ -50,6 +50,10 @@ void main() {
 
       expect(find.text('晚上好，Alex'), findsOneWidget);
       expect(find.text('电影 1'), findsOneWidget);
+      final librarySelector = find.byKey(const ValueKey('library-selector'));
+      expect(librarySelector, findsOneWidget);
+      await tester.drag(librarySelector, const Offset(-2000, 0));
+      await tester.pumpAndSettle();
       expect(find.text('媒体库 8'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

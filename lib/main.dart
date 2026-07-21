@@ -22,6 +22,8 @@ Future<void> main() async {
       windowButtonVisibility: false,
     );
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setAsFrameless();
+      await windowManager.setHasShadow(false);
       await windowManager.show();
       await windowManager.focus();
     });

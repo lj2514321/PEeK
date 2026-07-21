@@ -302,11 +302,39 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (!Platform.isWindows) return;
     final next = !_fullScreen;
     try {
-      await windowManager.setFullScreen(next);
+      await _setNativeFullScreen(next);
       if (mounted) setState(() => _fullScreen = next);
     } on Object catch (error) {
+      try {
+        await _restoreFramelessWindow();
+      } on Object {
+        // Keep the original fullscreen error as the actionable failure.
+      }
       if (mounted) setState(() => _error = '无法切换全屏：$error');
     }
+  }
+
+  Future<void> _setNativeFullScreen(bool fullScreen) async {
+    if (!Platform.isWindows) return;
+    if (fullScreen) {
+      // window_manager does not resize an already-frameless window when its
+      // fullscreen API is called. Temporarily restore its hidden-titlebar
+      // mode so the plugin can capture the window bounds and fill the monitor.
+      await windowManager.setTitleBarStyle(
+        TitleBarStyle.hidden,
+        windowButtonVisibility: false,
+      );
+      await windowManager.setFullScreen(true);
+      await windowManager.setHasShadow(false);
+      return;
+    }
+    await windowManager.setFullScreen(false);
+    await _restoreFramelessWindow();
+  }
+
+  Future<void> _restoreFramelessWindow() async {
+    await windowManager.setAsFrameless();
+    await windowManager.setHasShadow(false);
   }
 
   Future<void> _handleEscape() async {
@@ -1330,7 +1358,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     await _safeReportStopped();
     if (_fullScreen && Platform.isWindows) {
       try {
-        await windowManager.setFullScreen(false);
+        await _setNativeFullScreen(false);
       } on Object {
         // The page still needs to close if the native window is unavailable.
       }
@@ -1358,7 +1386,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       unawaited(subscription.cancel());
     }
     if (_fullScreen && Platform.isWindows) {
-      unawaited(windowManager.setFullScreen(false));
+      unawaited(_setNativeFullScreen(false));
     }
     if (!_reportedStopped) unawaited(_safeReportStopped());
     if (!_playerDisposed) unawaited(_disposePlayer());

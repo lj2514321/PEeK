@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/home/domain/home_feed.dart';
@@ -19,20 +20,23 @@ class AuthenticatedHomePage extends ConsumerStatefulWidget {
     required this.account,
     required this.onOpenLibrary,
     required this.onSessionExpired,
+    this.active = true,
     this.clock,
   });
 
   final AuthenticatedServer account;
   final VoidCallback onOpenLibrary;
   final Future<void> Function() onSessionExpired;
+  final bool active;
   final DateTime Function()? clock;
 
   @override
   ConsumerState<AuthenticatedHomePage> createState() =>
-      _AuthenticatedHomePageState();
+      AuthenticatedHomePageState();
 }
 
-class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
+class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
+  final _scrollController = ScrollController();
   HomeFeed? _feed;
   bool _loading = true;
   bool _refreshing = false;
@@ -62,7 +66,22 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   @override
   void dispose() {
     _dailyRecommendationTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    final duration = AppMotion.responsive(context, AppMotion.standard);
+    if (duration == Duration.zero) {
+      _scrollController.jumpTo(0);
+      return;
+    }
+    _scrollController.animateTo(
+      0,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _load({bool forceRefresh = false}) async {
@@ -212,6 +231,7 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           final compact = constraints.maxWidth < 720;
           final horizontalPadding = compact ? 20.0 : 32.0;
           return CustomScrollView(
+            controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverPadding(
@@ -247,6 +267,7 @@ class _AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                               items: feed!.heroItems,
                               dailyRecommendations:
                                   feed.dailyRecommendations.items.isNotEmpty,
+                              active: widget.active,
                               planningItemId: _planningItemId,
                               onPlay: (item) =>
                                   unawaited(_continuePlayback(item)),
@@ -456,6 +477,7 @@ class _HomeHeroCarousel extends StatefulWidget {
   const _HomeHeroCarousel({
     required this.items,
     required this.dailyRecommendations,
+    required this.active,
     required this.planningItemId,
     required this.onPlay,
     required this.onDetails,
@@ -463,6 +485,7 @@ class _HomeHeroCarousel extends StatefulWidget {
 
   final List<MediaItem> items;
   final bool dailyRecommendations;
+  final bool active;
   final String? planningItemId;
   final ValueChanged<MediaItem> onPlay;
   final ValueChanged<MediaItem> onDetails;
@@ -514,7 +537,12 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
   void _scheduleNext() {
     _timer?.cancel();
     _timer = null;
-    if (_disableAnimations || _hovering || widget.items.length < 2) return;
+    if (!widget.active ||
+        _disableAnimations ||
+        _hovering ||
+        widget.items.length < 2) {
+      return;
+    }
     _timer = Timer(_autoAdvanceInterval, () => _move(1));
   }
 
@@ -922,21 +950,16 @@ class _MediaTrack extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
-        SizedBox(
+        PeekHorizontalRail(
+          railId: 'home-track-$title',
+          semanticLabel: title,
           height: height,
-          child: ListView.separated(
-            key: ValueKey('home-track-$title'),
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: (context, index) => SizedBox(
-              width: width,
-              child: _HomeMediaCard(
-                item: items[index],
-                portrait: portrait,
-                onOpen: () => onOpen(items[index]),
-              ),
-            ),
+          itemCount: items.length,
+          itemExtent: width,
+          itemBuilder: (context, index) => _HomeMediaCard(
+            item: items[index],
+            portrait: portrait,
+            onOpen: () => onOpen(items[index]),
           ),
         ),
       ],

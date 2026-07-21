@@ -1,12 +1,15 @@
 import 'package:embyplayer/src/app/glass.dart';
+import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -125,6 +128,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
           slivers: [
             SliverAppBar(
               pinned: true,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              shadowColor: Colors.transparent,
               backgroundColor: AppColors.glassStrong.withValues(alpha: 0.9),
               surfaceTintColor: Colors.transparent,
               title: Text(
@@ -132,6 +138,10 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              actions: [
+                if (defaultTargetPlatform == TargetPlatform.windows)
+                  const SizedBox(width: AppChrome.windowControlsWidth),
+              ],
             ),
             SliverToBoxAdapter(
               child: _DetailHero(
@@ -245,6 +255,7 @@ class _DetailHero extends StatelessWidget {
                 final poster = _DetailPoster(item: item);
                 final copy = _DetailCopy(
                   item: item,
+                  compact: compact,
                   playable: playable,
                   planningPlayback: planningPlayback,
                   onPlay: onPlay,
@@ -342,6 +353,7 @@ class _DetailPoster extends StatelessWidget {
 class _DetailCopy extends StatelessWidget {
   const _DetailCopy({
     required this.item,
+    required this.compact,
     required this.playable,
     required this.planningPlayback,
     required this.onPlay,
@@ -349,6 +361,7 @@ class _DetailCopy extends StatelessWidget {
   });
 
   final MediaItem item;
+  final bool compact;
   final bool playable;
   final bool planningPlayback;
   final VoidCallback onPlay;
@@ -369,7 +382,7 @@ class _DetailCopy extends StatelessWidget {
           item.name,
           style: Theme.of(
             context,
-          ).textTheme.displayLarge?.copyWith(fontSize: 44),
+          ).textTheme.displayLarge?.copyWith(fontSize: compact ? 34 : 44),
         ),
         if (item.tagline != null) ...[
           const SizedBox(height: 10),
@@ -392,33 +405,13 @@ class _DetailCopy extends StatelessWidget {
         ),
         if (playable) ...[
           const SizedBox(height: 28),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              FilledButton.icon(
-                onPressed: planningPlayback ? null : onPlay,
-                icon: planningPlayback
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.play_arrow_rounded),
-                label: Text(
-                  planningPlayback
-                      ? '正在准备播放'
-                      : resume
-                      ? '继续播放 · ${_position(item.resumePosition)}'
-                      : '立即播放',
-                ),
-              ),
-              if (resume)
-                OutlinedButton.icon(
-                  onPressed: planningPlayback ? null : onPlayFromBeginning,
-                  icon: const Icon(Icons.replay_rounded),
-                  label: const Text('从头播放'),
-                ),
-            ],
+          _PlaybackActions(
+            compact: compact,
+            resume: resume,
+            planning: planningPlayback,
+            resumeLabel: _position(item.resumePosition),
+            onPlay: onPlay,
+            onPlayFromBeginning: onPlayFromBeginning,
           ),
         ],
       ],
@@ -441,6 +434,64 @@ class _DetailCopy extends StatelessWidget {
     final hours = value.inHours;
     final minutes = value.inMinutes.remainder(60);
     return hours > 0 ? '$hours 小时 $minutes 分' : '$minutes 分钟';
+  }
+}
+
+class _PlaybackActions extends StatelessWidget {
+  const _PlaybackActions({
+    required this.compact,
+    required this.resume,
+    required this.planning,
+    required this.resumeLabel,
+    required this.onPlay,
+    required this.onPlayFromBeginning,
+  });
+
+  final bool compact;
+  final bool resume;
+  final bool planning;
+  final String resumeLabel;
+  final VoidCallback onPlay;
+  final VoidCallback onPlayFromBeginning;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = FilledButton.icon(
+      onPressed: planning ? null : onPlay,
+      icon: planning
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.play_arrow_rounded),
+      label: Text(
+        planning
+            ? '正在准备播放'
+            : resume
+            ? '继续播放 · $resumeLabel'
+            : '立即播放',
+      ),
+    );
+    final restart = OutlinedButton.icon(
+      onPressed: planning ? null : onPlayFromBeginning,
+      icon: const Icon(Icons.replay_rounded),
+      label: const Text('从头播放'),
+    );
+
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          primary,
+          if (resume) ...[const SizedBox(height: 10), restart],
+        ],
+      );
+    }
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [primary, if (resume) restart],
+    );
   }
 }
 
@@ -506,12 +557,14 @@ class _CastSection extends StatelessWidget {
     return _DetailPanel(
       eyebrow: 'CAST',
       title: '演员阵容',
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 18,
-        children: [
-          for (final person in visiblePeople) _PersonCard(person: person),
-        ],
+      child: PeekHorizontalRail(
+        railId: 'detail-cast',
+        semanticLabel: '演员阵容',
+        height: 258,
+        itemCount: visiblePeople.length,
+        itemExtent: 132,
+        itemBuilder: (context, index) =>
+            _PersonCard(person: visiblePeople[index]),
       ),
     );
   }
@@ -593,13 +646,16 @@ class _SimilarSection extends StatelessWidget {
     return _DetailPanel(
       eyebrow: 'MORE LIKE THIS',
       title: '相似推荐',
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 20,
-        children: [
-          for (final item in items)
-            _SimilarCard(item: item, onOpen: () => onOpen(item)),
-        ],
+      child: PeekHorizontalRail(
+        railId: 'detail-similar',
+        semanticLabel: '相似推荐',
+        height: 278,
+        itemCount: items.length,
+        itemExtent: 150,
+        itemBuilder: (context, index) => _SimilarCard(
+          item: items[index],
+          onOpen: () => onOpen(items[index]),
+        ),
       ),
     );
   }

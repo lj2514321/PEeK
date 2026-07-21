@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -22,10 +23,10 @@ class MediaLibraryPage extends ConsumerStatefulWidget {
   final VoidCallback? onSessionExpired;
 
   @override
-  ConsumerState<MediaLibraryPage> createState() => _MediaLibraryPageState();
+  ConsumerState<MediaLibraryPage> createState() => MediaLibraryPageState();
 }
 
-class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
+class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   static const _pageSize = 60;
 
   final _scrollController = ScrollController();
@@ -205,6 +206,20 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         _scrollController.position.extentAfter < 700) {
       _loadMore();
     }
+  }
+
+  void scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    final duration = AppMotion.responsive(context, AppMotion.standard);
+    if (duration == Duration.zero) {
+      _scrollController.jumpTo(0);
+      return;
+    }
+    _scrollController.animateTo(
+      0,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _loadMore() async {
@@ -516,23 +531,24 @@ class _LibrarySelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cardWidth = constraints.maxWidth < 460
-            ? constraints.maxWidth
-            : constraints.maxWidth < 720
-            ? (constraints.maxWidth - 12) / 2
+        final cardWidth = constraints.maxWidth < 640
+            ? (constraints.maxWidth * 0.76).clamp(220.0, 300.0)
             : 210.0;
-        return Wrap(
+        return PeekHorizontalRail(
+          railId: 'library-selector',
+          semanticLabel: '选择媒体库',
+          height: 86,
+          itemCount: libraries.length,
+          itemExtent: cardWidth,
           spacing: 12,
-          runSpacing: 12,
-          children: [
-            for (final library in libraries)
-              _LibraryChoice(
-                library: library,
-                selected: library.id == selectedId,
-                width: cardWidth,
-                onSelected: onSelected,
-              ),
-          ],
+          itemBuilder: (context, index) {
+            final library = libraries[index];
+            return _LibraryChoice(
+              library: library,
+              selected: library.id == selectedId,
+              onSelected: onSelected,
+            );
+          },
         );
       },
     );
@@ -543,13 +559,11 @@ class _LibraryChoice extends StatelessWidget {
   const _LibraryChoice({
     required this.library,
     required this.selected,
-    required this.width,
     required this.onSelected,
   });
 
   final MediaItem library;
   final bool selected;
-  final double width;
   final ValueChanged<MediaItem> onSelected;
 
   @override
@@ -565,7 +579,6 @@ class _LibraryChoice extends StatelessWidget {
           borderRadius: BorderRadius.circular(15),
           child: AnimatedContainer(
             duration: AppMotion.fast,
-            width: width,
             height: 86,
             padding: const EdgeInsets.all(14),
             decoration: AppGlass.decoration(radius: 15, selected: selected),

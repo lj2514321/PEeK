@@ -105,6 +105,25 @@ class MediaSearchPageState extends ConsumerState<MediaSearchPage> {
     );
   }
 
+  void unfocusSearch() {
+    if (!mounted) return;
+    _searchFocusNode.unfocus();
+  }
+
+  void scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    final duration = AppMotion.responsive(context, AppMotion.standard);
+    if (duration == Duration.zero) {
+      _scrollController.jumpTo(0);
+      return;
+    }
+    _scrollController.animateTo(
+      0,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   void _handleFocusChange() {
     if (!mounted || _searchFieldFocused == _searchFocusNode.hasFocus) return;
     setState(() => _searchFieldFocused = _searchFocusNode.hasFocus);
