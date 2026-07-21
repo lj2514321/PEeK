@@ -42,6 +42,10 @@ void main() {
   test('includes repeatable package and App Installer scripts', () {
     expect(File('scripts/build_windows_package.ps1').existsSync(), isTrue);
     expect(File('scripts/new_windows_appinstaller.ps1').existsSync(), isTrue);
+    expect(
+      File('scripts/upload_github_release_assets.sh').existsSync(),
+      isTrue,
+    );
     expect(File('docs/WINDOWS_RELEASE.md').existsSync(), isTrue);
   });
 
@@ -51,6 +55,9 @@ void main() {
     ).readAsStringSync();
     final packageScript = File(
       'scripts/build_windows_package.ps1',
+    ).readAsStringSync();
+    final releaseScript = File(
+      'scripts/upload_github_release_assets.sh',
     ).readAsStringSync();
 
     expect(workflow, contains('branches:'));
@@ -62,9 +69,10 @@ void main() {
     expect(workflow, contains('actions/upload-artifact@v7'));
     expect(workflow, contains('actions/download-artifact@v8'));
     expect(workflow, contains("startsWith(github.ref, 'refs/tags/v')"));
-    expect(workflow, contains('gh release create'));
-    expect(workflow, contains('gh release upload'));
-    expect(workflow, contains('--clobber'));
+    expect(workflow, contains('new_windows_appinstaller.ps1'));
+    expect(workflow, contains('/releases/latest/download'));
+    expect(workflow, contains('PEeK.appinstaller'));
+    expect(workflow, contains('upload_github_release_assets.sh'));
     expect(workflow, contains('contents: write'));
     expect(workflow, contains(r'${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}'));
     expect(workflow, isNot(contains('pull_request_target:')));
@@ -75,5 +83,12 @@ void main() {
     expect(packageScript, contains("'--build-number'"));
     expect(packageScript, contains("'--certificate-password'"));
     expect(packageScript, contains("'--publisher'"));
+
+    expect(releaseScript, contains('gh release create'));
+    expect(releaseScript, contains('--latest'));
+    expect(releaseScript, contains('application/msix'));
+    expect(releaseScript, contains('application/appinstaller'));
+    expect(releaseScript, contains('https://uploads.github.com/'));
+    expect(releaseScript, contains('X-GitHub-Api-Version: 2026-03-10'));
   });
 }

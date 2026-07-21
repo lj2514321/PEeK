@@ -19,8 +19,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 `.github/workflows/windows-release.yml` 使用 Windows 托管运行器执行依赖安装、静态分析、全量测试和 MSIX 打包：
 
 - 推送到 `master`、提交针对 `master` 的 Pull Request，或手动运行工作流时，会构建并保留 14 天的 Actions Artifact。
-- 推送 `vMAJOR.MINOR.PATCH` 或 `vMAJOR.MINOR.PATCH.REVISION` 标签时，会在构建通过后自动创建 GitHub Release，并附上 MSIX 与 SHA-256 文件。
+- 推送 `vMAJOR.MINOR.PATCH` 或 `vMAJOR.MINOR.PATCH.REVISION` 标签时，会在构建通过后自动创建 GitHub Release，并附上 MSIX、SHA-256 与 `PEeK.appinstaller`。
 - 三段标签会转换为四段 MSIX 版本，例如 `v0.2.0` 对应 `0.2.0.0`。每段取值必须在 0–65535 之间。
+- `PEeK.appinstaller` 使用稳定的 `releases/latest/download` 地址。发布脚本通过 GitHub Release API 为 MSIX 和 App Installer 显式设置 Windows 要求的 MIME 类型。
 
 发布示例：
 
@@ -43,6 +44,8 @@ git push origin v0.2.0
 
 三个签名 Secret 必须全部配置或全部留空。工作流不会把证书写入仓库，临时 PFX 只存在于 GitHub 托管运行器的临时目录中。
 
+GitHub 自动更新要求仓库及 Release 资产无需登录即可访问。用户应直接下载并双击 `PEeK.appinstaller`；不要依赖默认已禁用的 `ms-appinstaller:` 网页协议。首次安装还必须信任用于签署 MSIX 的发布证书。
+
 ## 生成更新描述文件
 
 正式签名后，为即将上传的 MSIX 生成 App Installer 文件：
@@ -56,7 +59,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 脚本直接读取 MSIX 内的 Identity、Publisher、Version 和架构，避免更新描述与安装包不一致。生成的 `PEeK.appinstaller` 在应用启动时最多每 24 小时检查一次更新，并允许后台检查；普通更新不会阻止应用启动。
 
-将 `PEeK-x64.msix`、`PEeK-x64.msix.sha256` 和 `PEeK.appinstaller` 上传到同一个 HTTPS 目录。对外提供 `.appinstaller` 文件的直接下载链接。
+将 `PEeK-x64.msix`、`PEeK-x64.msix.sha256` 和 `PEeK.appinstaller` 上传到同一个 HTTPS 目录。服务器必须为 `.msix` 返回 `application/msix`，为 `.appinstaller` 返回 `application/appinstaller`，并返回正确的 `Content-Length`。对外提供 `.appinstaller` 文件的直接下载链接。
 
 ## 版本规则
 

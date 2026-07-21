@@ -41,6 +41,6 @@
 - [x] 最大串流码率设置与本地持久化
 - [x] 播放统计与可脱敏诊断日志
 - [ ] 编解码器、字幕、HDR 和弱网测试矩阵（自动化基线已建立，待 Jellyfin/Emby 实机验证）
-- [ ] Windows 安装包、签名和升级策略（MSIX 基线已建立，待正式发布者与证书）
+- [ ] Windows 安装包、签名和升级策略（MSIX、GitHub Release 与 App Installer 更新链路已建立，待正式发布者、证书和端到端安装验证）
 - [x] GitHub Actions Windows 自动构建与版本标签发布
 - [x] 第三方许可证清单与发布包 notices 自动生成
