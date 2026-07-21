@@ -16,6 +16,12 @@ void main() {
       const PlaybackSettings(
         maxStreamingBitrate: PlaybackBitrate.mbps20,
         hardwareDecodingMode: HardwareDecodingMode.software,
+        subtitlePreferences: SubtitlePreferences(
+          appearance: SubtitleAppearance.warm,
+          fontSize: 30,
+          bottomPadding: 132,
+          delayMilliseconds: -400,
+        ),
       ),
     );
 
@@ -24,6 +30,10 @@ void main() {
     ).read();
     expect(restored.maxStreamingBitrate, PlaybackBitrate.mbps20);
     expect(restored.hardwareDecodingMode, HardwareDecodingMode.software);
+    expect(restored.subtitlePreferences.appearance, SubtitleAppearance.warm);
+    expect(restored.subtitlePreferences.fontSize, 30);
+    expect(restored.subtitlePreferences.bottomPadding, 132);
+    expect(restored.subtitlePreferences.delayMilliseconds, -400);
   });
 
   test('uses safe defaults when the settings file is damaged', () async {
@@ -78,6 +88,7 @@ void main() {
 
     expect(restored.maxStreamingBitrate, PlaybackBitrate.mbps20);
     expect(restored.hardwareDecodingMode, HardwareDecodingMode.automatic);
+    expect(restored.subtitlePreferences, const SubtitlePreferences());
   });
 
   test('falls back to automatic for an unknown decoding mode', () async {

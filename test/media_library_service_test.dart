@@ -181,6 +181,10 @@ void main() {
                   'OfficialRating': 'PG-13',
                   'Taglines': ['示例标语'],
                   'BackdropImageTags': ['backdrop-tag'],
+                  'Chapters': [
+                    {'Name': '第二幕', 'StartPositionTicks': 36000000000},
+                    {'Name': '开场', 'StartPositionTicks': 0},
+                  ],
                   'People': [
                     {
                       'Id': 'person-id',
@@ -206,6 +210,9 @@ void main() {
     expect(item.backdropUri?.path, '/Items/movie-id/Images/Backdrop/0');
     expect(item.people.single.name, '示例演员');
     expect(item.people.single.role, '主角');
+    expect(item.chapters, hasLength(2));
+    expect(item.chapters.first.name, '开场');
+    expect(item.chapters.last.startPosition, const Duration(hours: 1));
     expect(
       item.people.single.imageUri?.path,
       '/Items/person-id/Images/Primary',

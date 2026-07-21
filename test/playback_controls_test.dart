@@ -24,6 +24,8 @@ void main() {
       expect(find.byKey(const ValueKey('player-fullscreen')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-diagnostics')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-episodes')), findsOneWidget);
+      expect(find.byKey(const ValueKey('player-chapters')), findsOneWidget);
+      expect(find.byKey(const ValueKey('chapter-marker-0')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -44,6 +46,7 @@ void main() {
     var nextCount = 0;
     var episodesCount = 0;
     var diagnosticsCount = 0;
+    var chaptersCount = 0;
     Duration? previewPosition;
     Duration? seekPosition;
     double? selectedRate;
@@ -60,6 +63,7 @@ void main() {
         onNext: () => nextCount++,
         onEpisodes: () => episodesCount++,
         onDiagnostics: () => diagnosticsCount++,
+        onChapters: () => chaptersCount++,
         onRateChanged: (value) => selectedRate = value,
       ),
     );
@@ -72,6 +76,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('player-next')));
     await tester.tap(find.byKey(const ValueKey('player-episodes')));
     await tester.tap(find.byKey(const ValueKey('player-diagnostics')));
+    await tester.tap(find.byKey(const ValueKey('player-chapters')));
     await tester.drag(
       find.byKey(const ValueKey('player-seek')),
       const Offset(90, 0),
@@ -89,6 +94,7 @@ void main() {
     expect(nextCount, 1);
     expect(episodesCount, 1);
     expect(diagnosticsCount, 1);
+    expect(chaptersCount, 1);
     expect(previewPosition, isNotNull);
     expect(seekPosition, isNotNull);
     expect(selectedRate, 1.5);
@@ -166,6 +172,7 @@ Widget _controlsApp({
   VoidCallback? onNext,
   VoidCallback? onEpisodes,
   VoidCallback? onDiagnostics,
+  VoidCallback? onChapters,
   ValueChanged<double>? onRateChanged,
 }) {
   return MaterialApp(
@@ -187,6 +194,11 @@ Widget _controlsApp({
         fullScreen: false,
         audioLabel: '中文 AAC 5.1',
         subtitleLabel: '简体中文',
+        chapters: const [
+          MediaChapter(name: '开场', startPosition: Duration.zero),
+          MediaChapter(name: '第一次转折', startPosition: Duration(minutes: 30)),
+          MediaChapter(name: '终幕', startPosition: Duration(minutes: 90)),
+        ],
         queueAvailable: true,
         canPrevious: true,
         canNext: true,
@@ -201,6 +213,7 @@ Widget _controlsApp({
         onRateChanged: onRateChanged ?? (_) {},
         onAudio: onAudio ?? () {},
         onSubtitle: onSubtitle ?? () {},
+        onChapters: onChapters ?? () {},
         onPrevious: onPrevious ?? () {},
         onNext: onNext ?? () {},
         onEpisodes: onEpisodes ?? () {},

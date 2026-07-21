@@ -21,6 +21,7 @@ class PlaybackControls extends StatelessWidget {
     required this.fullScreen,
     required this.audioLabel,
     required this.subtitleLabel,
+    required this.chapters,
     required this.queueAvailable,
     required this.canPrevious,
     required this.canNext,
@@ -35,6 +36,7 @@ class PlaybackControls extends StatelessWidget {
     required this.onRateChanged,
     required this.onAudio,
     required this.onSubtitle,
+    required this.onChapters,
     required this.onPrevious,
     required this.onNext,
     required this.onEpisodes,
@@ -56,6 +58,7 @@ class PlaybackControls extends StatelessWidget {
   final bool fullScreen;
   final String audioLabel;
   final String subtitleLabel;
+  final List<MediaChapter> chapters;
   final bool queueAvailable;
   final bool canPrevious;
   final bool canNext;
@@ -70,6 +73,7 @@ class PlaybackControls extends StatelessWidget {
   final ValueChanged<double> onRateChanged;
   final VoidCallback onAudio;
   final VoidCallback onSubtitle;
+  final VoidCallback onChapters;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onEpisodes;
@@ -119,6 +123,7 @@ class PlaybackControls extends StatelessWidget {
                   fullScreen: fullScreen,
                   audioLabel: audioLabel,
                   subtitleLabel: subtitleLabel,
+                  chapters: chapters,
                   queueAvailable: queueAvailable,
                   canPrevious: canPrevious,
                   canNext: canNext,
@@ -132,6 +137,7 @@ class PlaybackControls extends StatelessWidget {
                   onRateChanged: onRateChanged,
                   onAudio: onAudio,
                   onSubtitle: onSubtitle,
+                  onChapters: onChapters,
                   onPrevious: onPrevious,
                   onNext: onNext,
                   onEpisodes: onEpisodes,
@@ -244,6 +250,7 @@ class _PlaybackBottomBar extends StatelessWidget {
     required this.fullScreen,
     required this.audioLabel,
     required this.subtitleLabel,
+    required this.chapters,
     required this.queueAvailable,
     required this.canPrevious,
     required this.canNext,
@@ -257,6 +264,7 @@ class _PlaybackBottomBar extends StatelessWidget {
     required this.onRateChanged,
     required this.onAudio,
     required this.onSubtitle,
+    required this.onChapters,
     required this.onPrevious,
     required this.onNext,
     required this.onEpisodes,
@@ -272,6 +280,7 @@ class _PlaybackBottomBar extends StatelessWidget {
   final bool fullScreen;
   final String audioLabel;
   final String subtitleLabel;
+  final List<MediaChapter> chapters;
   final bool queueAvailable;
   final bool canPrevious;
   final bool canNext;
@@ -285,6 +294,7 @@ class _PlaybackBottomBar extends StatelessWidget {
   final ValueChanged<double> onRateChanged;
   final VoidCallback onAudio;
   final VoidCallback onSubtitle;
+  final VoidCallback onChapters;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onEpisodes;
@@ -317,10 +327,17 @@ class _PlaybackBottomBar extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (chapters.isNotEmpty)
+                  _ChapterRail(
+                    chapters: chapters,
+                    position: position,
+                    onPressed: onChapters,
+                  ),
                 _Timeline(
                   position: position,
                   duration: duration,
                   buffer: buffer,
+                  chapters: chapters,
                   onSeekPreview: onSeekPreview,
                   onSeek: onSeek,
                 ),
@@ -442,6 +459,7 @@ class _Timeline extends StatelessWidget {
     required this.position,
     required this.duration,
     required this.buffer,
+    required this.chapters,
     required this.onSeekPreview,
     required this.onSeek,
   });
@@ -449,6 +467,7 @@ class _Timeline extends StatelessWidget {
   final Duration position;
   final Duration duration;
   final Duration buffer;
+  final List<MediaChapter> chapters;
   final ValueChanged<Duration> onSeekPreview;
   final ValueChanged<Duration> onSeek;
 
@@ -461,28 +480,170 @@ class _Timeline extends StatelessWidget {
     final buffered = buffer.inMilliseconds
         .clamp(value.toInt(), maximum.toInt())
         .toDouble();
-    return SliderTheme(
-      data: SliderTheme.of(context).copyWith(
-        activeTrackColor: AppColors.spotlight,
-        inactiveTrackColor: Colors.white.withValues(alpha: 0.13),
-        secondaryActiveTrackColor: Colors.white.withValues(alpha: 0.28),
-        thumbColor: AppColors.spotlight,
-        overlayColor: AppColors.spotlight.withValues(alpha: 0.14),
-        trackHeight: 3,
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-        overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+    return SizedBox(
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: AppColors.spotlight,
+                inactiveTrackColor: Colors.white.withValues(alpha: 0.13),
+                secondaryActiveTrackColor: Colors.white.withValues(alpha: 0.28),
+                thumbColor: AppColors.spotlight,
+                overlayColor: AppColors.spotlight.withValues(alpha: 0.14),
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+              ),
+              child: Slider(
+                key: const ValueKey('player-seek'),
+                value: value,
+                secondaryTrackValue: buffered,
+                max: maximum,
+                onChanged: (value) {
+                  onSeekPreview(Duration(milliseconds: value.round()));
+                },
+                onChangeEnd: (value) {
+                  onSeek(Duration(milliseconds: value.round()));
+                },
+              ),
+            ),
+          ),
+          if (duration > Duration.zero)
+            Positioned(
+              left: 24,
+              right: 24,
+              top: 20,
+              height: 8,
+              child: IgnorePointer(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final usableChapters = chapters
+                        .where(
+                          (chapter) =>
+                              chapter.startPosition > Duration.zero &&
+                              chapter.startPosition < duration,
+                        )
+                        .toList(growable: false);
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        for (
+                          var index = 0;
+                          index < usableChapters.length;
+                          index++
+                        )
+                          Positioned(
+                            key: ValueKey('chapter-marker-$index'),
+                            left:
+                                (usableChapters[index]
+                                            .startPosition
+                                            .inMilliseconds /
+                                        duration.inMilliseconds) *
+                                    constraints.maxWidth -
+                                1,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color:
+                                    usableChapters[index].startPosition <=
+                                        position
+                                    ? AppColors.spotlight
+                                    : Colors.white.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(2),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x66000000),
+                                    blurRadius: 3,
+                                  ),
+                                ],
+                              ),
+                              child: const SizedBox(width: 2, height: 8),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+        ],
       ),
-      child: Slider(
-        key: const ValueKey('player-seek'),
-        value: value,
-        secondaryTrackValue: buffered,
-        max: maximum,
-        onChanged: (value) {
-          onSeekPreview(Duration(milliseconds: value.round()));
-        },
-        onChangeEnd: (value) {
-          onSeek(Duration(milliseconds: value.round()));
-        },
+    );
+  }
+}
+
+class _ChapterRail extends StatelessWidget {
+  const _ChapterRail({
+    required this.chapters,
+    required this.position,
+    required this.onPressed,
+  });
+
+  final List<MediaChapter> chapters;
+  final Duration position;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    var currentIndex = 0;
+    for (var index = 0; index < chapters.length; index++) {
+      if (chapters[index].startPosition <= position) currentIndex = index;
+    }
+    final chapter = chapters[currentIndex];
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const ValueKey('player-chapters'),
+          borderRadius: BorderRadius.circular(10),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.bookmarks_rounded,
+                  size: 14,
+                  color: AppColors.spotlight,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  'CH ${(currentIndex + 1).toString().padLeft(2, '0')}',
+                  style: const TextStyle(
+                    color: AppColors.spotlight,
+                    fontFamily: 'Cascadia Mono',
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    chapter.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.keyboard_arrow_up_rounded,
+                  size: 16,
+                  color: AppColors.textTertiary,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

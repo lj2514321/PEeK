@@ -33,28 +33,115 @@ enum HardwareDecodingMode {
   }
 }
 
+enum SubtitleAppearance {
+  cinema('影院白'),
+  warm('暖黄'),
+  highContrast('高对比');
+
+  const SubtitleAppearance(this.label);
+
+  final String label;
+
+  static SubtitleAppearance fromName(Object? value) {
+    return values.where((item) => item.name == value).firstOrNull ?? cinema;
+  }
+}
+
+class SubtitlePreferences {
+  const SubtitlePreferences({
+    this.appearance = SubtitleAppearance.cinema,
+    this.fontSize = 25,
+    this.bottomPadding = 94,
+    this.delayMilliseconds = 0,
+  });
+
+  final SubtitleAppearance appearance;
+  final double fontSize;
+  final double bottomPadding;
+  final int delayMilliseconds;
+
+  Duration get delay => Duration(milliseconds: delayMilliseconds);
+
+  SubtitlePreferences copyWith({
+    SubtitleAppearance? appearance,
+    double? fontSize,
+    double? bottomPadding,
+    int? delayMilliseconds,
+  }) {
+    return SubtitlePreferences(
+      appearance: appearance ?? this.appearance,
+      fontSize: fontSize ?? this.fontSize,
+      bottomPadding: bottomPadding ?? this.bottomPadding,
+      delayMilliseconds: delayMilliseconds ?? this.delayMilliseconds,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'appearance': appearance.name,
+    'fontSize': fontSize,
+    'bottomPadding': bottomPadding,
+    'delayMilliseconds': delayMilliseconds,
+  };
+
+  factory SubtitlePreferences.fromJson(Object? value) {
+    if (value is! Map) return const SubtitlePreferences();
+    final json = Map<Object?, Object?>.from(value);
+    final rawFontSize = json['fontSize'];
+    final rawBottomPadding = json['bottomPadding'];
+    final rawDelay = json['delayMilliseconds'];
+    return SubtitlePreferences(
+      appearance: SubtitleAppearance.fromName(json['appearance']),
+      fontSize: rawFontSize is num ? rawFontSize.toDouble().clamp(18, 42) : 25,
+      bottomPadding: rawBottomPadding is num
+          ? rawBottomPadding.toDouble().clamp(48, 180)
+          : 94,
+      delayMilliseconds: rawDelay is num
+          ? rawDelay.toInt().clamp(-10000, 10000)
+          : 0,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is SubtitlePreferences &&
+        other.appearance == appearance &&
+        other.fontSize == fontSize &&
+        other.bottomPadding == bottomPadding &&
+        other.delayMilliseconds == delayMilliseconds;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(appearance, fontSize, bottomPadding, delayMilliseconds);
+}
+
 class PlaybackSettings {
   const PlaybackSettings({
     this.maxStreamingBitrate = PlaybackBitrate.original,
     this.hardwareDecodingMode = HardwareDecodingMode.automatic,
+    this.subtitlePreferences = const SubtitlePreferences(),
   });
 
   final PlaybackBitrate maxStreamingBitrate;
   final HardwareDecodingMode hardwareDecodingMode;
+  final SubtitlePreferences subtitlePreferences;
 
   PlaybackSettings copyWith({
     PlaybackBitrate? maxStreamingBitrate,
     HardwareDecodingMode? hardwareDecodingMode,
+    SubtitlePreferences? subtitlePreferences,
   }) {
     return PlaybackSettings(
       maxStreamingBitrate: maxStreamingBitrate ?? this.maxStreamingBitrate,
       hardwareDecodingMode: hardwareDecodingMode ?? this.hardwareDecodingMode,
+      subtitlePreferences: subtitlePreferences ?? this.subtitlePreferences,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'maxStreamingBitrate': maxStreamingBitrate.name,
     'hardwareDecodingMode': hardwareDecodingMode.name,
+    'subtitlePreferences': subtitlePreferences.toJson(),
   };
 
   factory PlaybackSettings.fromJson(Map<String, dynamic> json) {
@@ -65,6 +152,9 @@ class PlaybackSettings {
       hardwareDecodingMode: HardwareDecodingMode.fromName(
         json['hardwareDecodingMode'],
       ),
+      subtitlePreferences: SubtitlePreferences.fromJson(
+        json['subtitlePreferences'],
+      ),
     );
   }
 
@@ -72,9 +162,14 @@ class PlaybackSettings {
   bool operator ==(Object other) {
     return other is PlaybackSettings &&
         other.maxStreamingBitrate == maxStreamingBitrate &&
-        other.hardwareDecodingMode == hardwareDecodingMode;
+        other.hardwareDecodingMode == hardwareDecodingMode &&
+        other.subtitlePreferences == subtitlePreferences;
   }
 
   @override
-  int get hashCode => Object.hash(maxStreamingBitrate, hardwareDecodingMode);
+  int get hashCode => Object.hash(
+    maxStreamingBitrate,
+    hardwareDecodingMode,
+    subtitlePreferences,
+  );
 }

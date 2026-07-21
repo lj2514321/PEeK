@@ -1,3 +1,5 @@
+import 'package:embyplayer/src/features/servers/domain/media_item.dart';
+
 enum PlaybackMethod { directPlay, directStream, transcode }
 
 enum PlaybackTrackKind { audio, subtitle }
@@ -44,6 +46,7 @@ class PlaybackPlan {
     this.duration,
     this.audioTracks = const [],
     this.subtitleTracks = const [],
+    this.chapters = const [],
     this.audioStreamIndex,
     this.subtitleStreamIndex,
     this.transcodingReasons = const [],
@@ -59,6 +62,7 @@ class PlaybackPlan {
   final Duration? duration;
   final List<PlaybackTrackInfo> audioTracks;
   final List<PlaybackTrackInfo> subtitleTracks;
+  final List<MediaChapter> chapters;
   final int? audioStreamIndex;
   final int? subtitleStreamIndex;
   final List<String> transcodingReasons;
@@ -74,6 +78,7 @@ class PlaybackSessionSnapshot {
     this.subtitleStreamIndex,
     this.subtitlesDisabled = false,
     this.playbackRate = 1,
+    this.subtitleOffset = Duration.zero,
   });
 
   final PlaybackPlan plan;
@@ -84,4 +89,5 @@ class PlaybackSessionSnapshot {
   final int? subtitleStreamIndex;
   final bool subtitlesDisabled;
   final double playbackRate;
+  final Duration subtitleOffset;
 }

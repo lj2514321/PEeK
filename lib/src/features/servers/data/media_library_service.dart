@@ -635,6 +635,7 @@ class MediaLibraryService {
             )
           : null,
       imageHeaders: _authHeaders(account.accessToken),
+      chapters: _readChapters(data['Chapters']),
       people: _readPeople(data['People'], account),
       genres: _readStringList(data['Genres']),
       communityRating: _readDouble(data['CommunityRating']),
@@ -652,6 +653,27 @@ class MediaLibraryService {
           ? Duration.zero
           : Duration(microseconds: resumeTicks ~/ 10),
     );
+  }
+
+  List<MediaChapter> _readChapters(Object? value) {
+    if (value is! List) return const [];
+    final chapters =
+        value
+            .whereType<Map>()
+            .map((chapter) {
+              final ticks = _readInt(chapter['StartPositionTicks']);
+              if (ticks == null || ticks < 0) return null;
+              final rawName = chapter['Name'];
+              final name = rawName is String ? rawName.trim() : '';
+              return MediaChapter(
+                name: name.isEmpty ? '章节' : name,
+                startPosition: Duration(microseconds: ticks ~/ 10),
+              );
+            })
+            .whereType<MediaChapter>()
+            .toList(growable: true)
+          ..sort((a, b) => a.startPosition.compareTo(b.startPosition));
+    return List.unmodifiable(chapters);
   }
 
   MediaItem _parseSearchHint(

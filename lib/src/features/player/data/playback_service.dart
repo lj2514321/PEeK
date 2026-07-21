@@ -215,6 +215,7 @@ class PlaybackService {
       'PlayMethod': _playMethodName(plan.method),
       'PlaySessionId': plan.playSessionId,
       'PlaybackRate': snapshot.playbackRate,
+      'SubtitleOffset': snapshot.subtitleOffset.inMilliseconds,
     };
     if (eventName != null) body['EventName'] = eventName;
     try {
@@ -289,6 +290,8 @@ class PlaybackService {
     final subtitleTracks = tracks
         .where((track) => track.kind == PlaybackTrackKind.subtitle)
         .toList(growable: false);
+    final sourceChapters = _readChapters(source['Chapters']);
+    final chapters = sourceChapters.isEmpty ? item.chapters : sourceChapters;
     final selectedAudioStreamIndex =
         requestedAudioStreamIndex ??
         _readInt(source['DefaultAudioStreamIndex']);
@@ -311,6 +314,7 @@ class PlaybackService {
         duration: duration,
         audioTracks: audioTracks,
         subtitleTracks: subtitleTracks,
+        chapters: chapters,
         audioStreamIndex: selectedAudioStreamIndex,
         subtitleStreamIndex: selectedSubtitleStreamIndex,
         transcodingReasons: transcodingReasons,
@@ -335,6 +339,7 @@ class PlaybackService {
         duration: duration,
         audioTracks: audioTracks,
         subtitleTracks: subtitleTracks,
+        chapters: chapters,
         audioStreamIndex: selectedAudioStreamIndex,
         subtitleStreamIndex: selectedSubtitleStreamIndex,
         transcodingReasons: transcodingReasons,
@@ -369,6 +374,7 @@ class PlaybackService {
         duration: duration,
         audioTracks: audioTracks,
         subtitleTracks: subtitleTracks,
+        chapters: chapters,
         audioStreamIndex: selectedAudioStreamIndex,
         subtitleStreamIndex: selectedSubtitleStreamIndex,
         transcodingReasons: transcodingReasons,
@@ -390,6 +396,7 @@ class PlaybackService {
         duration: duration,
         audioTracks: audioTracks,
         subtitleTracks: subtitleTracks,
+        chapters: chapters,
         audioStreamIndex: selectedAudioStreamIndex,
         subtitleStreamIndex: selectedSubtitleStreamIndex,
         transcodingReasons: transcodingReasons,
@@ -412,6 +419,7 @@ class PlaybackService {
     required Duration? duration,
     required List<PlaybackTrackInfo> audioTracks,
     required List<PlaybackTrackInfo> subtitleTracks,
+    required List<MediaChapter> chapters,
     required int? audioStreamIndex,
     required int? subtitleStreamIndex,
     required List<String> transcodingReasons,
@@ -427,6 +435,7 @@ class PlaybackService {
       duration: duration,
       audioTracks: audioTracks,
       subtitleTracks: subtitleTracks,
+      chapters: chapters,
       audioStreamIndex: audioStreamIndex,
       subtitleStreamIndex: subtitleStreamIndex,
       transcodingReasons: transcodingReasons,
@@ -440,6 +449,27 @@ class PlaybackService {
         .map((item) => item.toString().trim())
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
+  }
+
+  List<MediaChapter> _readChapters(Object? value) {
+    if (value is! List) return const [];
+    final chapters =
+        value
+            .whereType<Map>()
+            .map((chapter) {
+              final ticks = _readInt(chapter['StartPositionTicks']);
+              if (ticks == null || ticks < 0) return null;
+              final rawName = chapter['Name'];
+              final name = rawName is String ? rawName.trim() : '';
+              return MediaChapter(
+                name: name.isEmpty ? '章节' : name,
+                startPosition: Duration(microseconds: ticks ~/ 10),
+              );
+            })
+            .whereType<MediaChapter>()
+            .toList(growable: true)
+          ..sort((a, b) => a.startPosition.compareTo(b.startPosition));
+    return List.unmodifiable(chapters);
   }
 
   List<PlaybackTrackInfo> _readTracks(

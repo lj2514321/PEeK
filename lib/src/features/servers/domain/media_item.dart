@@ -21,6 +21,7 @@ class MediaItem {
     this.imageUri,
     this.backdropUri,
     this.imageHeaders = const {},
+    this.chapters = const [],
     this.people = const [],
     this.genres = const [],
     this.communityRating,
@@ -45,6 +46,7 @@ class MediaItem {
   final Uri? imageUri;
   final Uri? backdropUri;
   final Map<String, String> imageHeaders;
+  final List<MediaChapter> chapters;
   final List<MediaPerson> people;
   final List<String> genres;
   final double? communityRating;
@@ -57,6 +59,13 @@ class MediaItem {
   final String? seriesId;
   final bool played;
   final Duration resumePosition;
+}
+
+class MediaChapter {
+  const MediaChapter({required this.name, required this.startPosition});
+
+  final String name;
+  final Duration startPosition;
 }
 
 class MediaPerson {

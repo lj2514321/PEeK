@@ -35,6 +35,10 @@ void main() {
             },
             'DefaultAudioStreamIndex': 1,
             'DefaultSubtitleStreamIndex': 2,
+            'Chapters': [
+              {'Name': '开场', 'StartPositionTicks': 0},
+              {'Name': '第二幕', 'StartPositionTicks': 18000000000},
+            ],
             'MediaStreams': [
               {
                 'Index': 1,
@@ -79,6 +83,9 @@ void main() {
     expect(plan.audioTracks.single.label, '中文 AAC 5.1');
     expect(plan.audioTracks.single.channels, '5.1');
     expect(plan.subtitleTracks.single.isExternal, isTrue);
+    expect(plan.chapters, hasLength(2));
+    expect(plan.chapters.last.name, '第二幕');
+    expect(plan.chapters.last.startPosition, const Duration(minutes: 30));
     expect(
       plan.subtitleTracks.single.deliveryUri?.path,
       '/Videos/item-id/Subtitles/2/Stream.srt',
@@ -378,6 +385,7 @@ void main() {
         audioStreamIndex: 4,
         subtitlesDisabled: true,
         playbackRate: 1.5,
+        subtitleOffset: const Duration(milliseconds: 300),
       ),
     );
 
@@ -389,6 +397,7 @@ void main() {
     expect(body['AudioStreamIndex'], 4);
     expect(body['SubtitleStreamIndex'], isNull);
     expect(body['PlaybackRate'], 1.5);
+    expect(body['SubtitleOffset'], 300);
   });
 
   test('marks a completed item as played', () async {

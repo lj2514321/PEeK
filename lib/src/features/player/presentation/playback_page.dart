@@ -31,6 +31,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
     required this.plan,
     this.queue,
     this.hardwareDecodingMode = HardwareDecodingMode.automatic,
+    this.subtitlePreferences = const SubtitlePreferences(),
   });
 
   final AuthenticatedServer account;
@@ -38,6 +39,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final PlaybackPlan plan;
   final PlaybackQueue? queue;
   final HardwareDecodingMode hardwareDecodingMode;
+  final SubtitlePreferences subtitlePreferences;
 
   @override
   ConsumerState<PlaybackPage> createState() => _PlaybackPageState();
@@ -61,6 +63,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Timer? _controlsTimer;
   Timer? _nextEpisodeTimer;
   Timer? _diagnosticsTimer;
+  Timer? _subtitleSettingsTimer;
   late final PlaybackDiagnosticLog _diagnosticLog;
   final PlaybackDiagnosticsService _diagnosticsService =
       const PlaybackDiagnosticsService();
@@ -92,6 +95,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   String? _error;
   PlaybackDiagnosticsSnapshot? _diagnostics;
   int? _nextEpisodeCountdown;
+  late SubtitlePreferences _subtitlePreferences = widget.subtitlePreferences;
 
   static const _autoNextSeconds = 8;
 
@@ -183,8 +187,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     );
   }
 
-  Future<void> _openMedia(PlaybackPlan plan, {required bool play}) {
-    return _player.open(
+  Future<void> _openMedia(PlaybackPlan plan, {required bool play}) async {
+    await _player.open(
       Media(
         plan.streamUri.toString(),
         httpHeaders: plan.httpHeaders,
@@ -192,6 +196,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       ),
       play: play,
     );
+    await _applySubtitleDelay();
   }
 
   void _playingChanged(bool playing) {
@@ -384,6 +389,40 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     }
   }
 
+  Future<void> _applySubtitleDelay() async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer || _playerDisposed) return;
+    try {
+      final seconds = _subtitlePreferences.delayMilliseconds / 1000;
+      await platform.setProperty('sub-delay', seconds.toStringAsFixed(3));
+    } on Object {
+      // Subtitle styling remains available if the native delay is unsupported.
+    }
+  }
+
+  void _updateSubtitlePreferences(SubtitlePreferences preferences) {
+    if (_subtitlePreferences == preferences) return;
+    setState(() => _subtitlePreferences = preferences);
+    unawaited(_applySubtitleDelay());
+    _subtitleSettingsTimer?.cancel();
+    _subtitleSettingsTimer = Timer(
+      const Duration(milliseconds: 350),
+      () => unawaited(_persistSubtitlePreferences()),
+    );
+  }
+
+  Future<void> _persistSubtitlePreferences() async {
+    try {
+      final store = ref.read(playbackSettingsStoreProvider);
+      final settings = await store.read();
+      await store.write(
+        settings.copyWith(subtitlePreferences: _subtitlePreferences),
+      );
+    } on Object {
+      // Playback must not be interrupted by an optional preference write.
+    }
+  }
+
   Future<void> _copyDiagnostics() async {
     final snapshot = _diagnostics;
     if (snapshot == null) return;
@@ -430,12 +469,21 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _showSubtitleTracks() {
-    return _showTrackSheet(
-      title: '选择字幕',
-      icon: Icons.subtitles_rounded,
-      options: _subtitleOptions(),
-      emptyMessage: '当前媒体没有可用字幕。',
-    );
+    _controlsTimer?.cancel();
+    _showControls();
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      isScrollControlled: true,
+      builder: (context) => _SubtitleSheet(
+        preferences: _subtitlePreferences,
+        options: _subtitleOptions(),
+        onPreferencesChanged: _updateSubtitlePreferences,
+      ),
+    ).whenComplete(() {
+      if (mounted) _scheduleControlsHide();
+    });
   }
 
   Future<void> _showTrackSheet({
@@ -807,6 +855,22 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (mounted) _scheduleControlsHide();
   }
 
+  Future<void> _showChapters() async {
+    if (_plan.chapters.isEmpty) return;
+    _controlsTimer?.cancel();
+    _showControls();
+    final target = await showModalBottomSheet<Duration>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      isScrollControlled: true,
+      builder: (context) =>
+          _ChapterSheet(chapters: _plan.chapters, position: _position),
+    );
+    if (target != null && mounted) await _seek(target);
+    if (mounted) _scheduleControlsHide();
+  }
+
   void _startNextEpisodeCountdown() {
     final queue = _queue;
     if (queue == null || !queue.hasNext || _closing || _changingSource) return;
@@ -942,6 +1006,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       subtitleStreamIndex: _selectedSubtitleStreamIndex,
       subtitlesDisabled: _subtitlesDisabled,
       playbackRate: _player.state.rate,
+      subtitleOffset: _subtitlePreferences.delay,
     );
   }
 
@@ -952,6 +1017,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _controlsTimer?.cancel();
     _nextEpisodeTimer?.cancel();
     _diagnosticsTimer?.cancel();
+    _subtitleSettingsTimer?.cancel();
+    await _persistSubtitlePreferences();
     _writeDiagnosticLog('playback_closed');
     await _safeReportStopped();
     if (_fullScreen && Platform.isWindows) {
@@ -979,6 +1046,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _controlsTimer?.cancel();
     _nextEpisodeTimer?.cancel();
     _diagnosticsTimer?.cancel();
+    _subtitleSettingsTimer?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -1072,24 +1140,28 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                     Video(
                       controller: _controller,
                       controls: NoVideoControls,
-                      subtitleViewConfiguration:
-                          const SubtitleViewConfiguration(
-                            style: TextStyle(
-                              height: 1.35,
-                              fontSize: 25,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black,
-                                  blurRadius: 5,
-                                  offset: Offset(0, 2),
-                                ),
-                                Shadow(color: Colors.black, blurRadius: 10),
-                              ],
-                            ),
-                            padding: EdgeInsets.fromLTRB(32, 24, 32, 94),
+                      subtitleViewConfiguration: SubtitleViewConfiguration(
+                        style: TextStyle(
+                          height: 1.35,
+                          fontSize: _subtitlePreferences.fontSize,
+                          color: _subtitleForeground(
+                            _subtitlePreferences.appearance,
                           ),
+                          backgroundColor: _subtitleBackground(
+                            _subtitlePreferences.appearance,
+                          ),
+                          fontWeight: FontWeight.w600,
+                          shadows: _subtitleShadows(
+                            _subtitlePreferences.appearance,
+                          ),
+                        ),
+                        padding: EdgeInsets.fromLTRB(
+                          32,
+                          24,
+                          32,
+                          _subtitlePreferences.bottomPadding,
+                        ),
+                      ),
                     ),
                     PlaybackControls(
                       title: _item.name,
@@ -1108,6 +1180,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                       fullScreen: _fullScreen,
                       audioLabel: _currentAudioLabel,
                       subtitleLabel: _currentSubtitleLabel,
+                      chapters: _plan.chapters,
                       queueAvailable: (_queue?.items.length ?? 0) > 1,
                       canPrevious: _queue?.hasPrevious ?? false,
                       canNext: _queue?.hasNext ?? false,
@@ -1125,6 +1198,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                       onRateChanged: (value) => unawaited(_setRate(value)),
                       onAudio: () => unawaited(_showAudioTracks()),
                       onSubtitle: () => unawaited(_showSubtitleTracks()),
+                      onChapters: () => unawaited(_showChapters()),
                       onPrevious: () {
                         final queue = _queue;
                         if (queue != null && queue.hasPrevious) {
@@ -1403,6 +1477,563 @@ String _queueTime(Duration value) {
     return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
+}
+
+Color _subtitleForeground(SubtitleAppearance appearance) {
+  return switch (appearance) {
+    SubtitleAppearance.cinema => Colors.white,
+    SubtitleAppearance.warm => const Color(0xFFFFE79A),
+    SubtitleAppearance.highContrast => Colors.white,
+  };
+}
+
+Color _subtitleBackground(SubtitleAppearance appearance) {
+  return appearance == SubtitleAppearance.highContrast
+      ? const Color(0xC4000000)
+      : Colors.transparent;
+}
+
+List<Shadow> _subtitleShadows(SubtitleAppearance appearance) {
+  if (appearance == SubtitleAppearance.highContrast) return const [];
+  return const [
+    Shadow(color: Colors.black, blurRadius: 5, offset: Offset(0, 2)),
+    Shadow(color: Colors.black, blurRadius: 10),
+  ];
+}
+
+String _subtitleDelayLabel(int milliseconds) {
+  if (milliseconds == 0) return '0.0 秒';
+  final seconds = milliseconds / 1000;
+  return '${seconds > 0 ? '+' : ''}${seconds.toStringAsFixed(1)} 秒';
+}
+
+class _SubtitleSheet extends StatefulWidget {
+  const _SubtitleSheet({
+    required this.preferences,
+    required this.options,
+    required this.onPreferencesChanged,
+  });
+
+  final SubtitlePreferences preferences;
+  final List<_TrackMenuOption> options;
+  final ValueChanged<SubtitlePreferences> onPreferencesChanged;
+
+  @override
+  State<_SubtitleSheet> createState() => _SubtitleSheetState();
+}
+
+class _SubtitleSheetState extends State<_SubtitleSheet> {
+  late SubtitlePreferences _preferences = widget.preferences;
+
+  void _update(SubtitlePreferences preferences) {
+    setState(() => _preferences = preferences);
+    widget.onPreferencesChanged(preferences);
+  }
+
+  void _adjustDelay(int delta) {
+    _update(
+      _preferences.copyWith(
+        delayMilliseconds: (_preferences.delayMilliseconds + delta).clamp(
+          -10000,
+          10000,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.sizeOf(context).height;
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: GlassSurface(
+            radius: 24,
+            blur: 28,
+            tint: AppColors.glassStrong,
+            elevated: true,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 640,
+                maxHeight: height * 0.88,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 20, 14, 10),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.subtitles_rounded,
+                          color: AppColors.spotlight,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '字幕与显示',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                '调整会即时应用，并自动用于下次播放',
+                                style: TextStyle(
+                                  color: AppColors.textTertiary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '关闭',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+                      children: [
+                        Container(
+                          key: const ValueKey('subtitle-preview'),
+                          height: 92,
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF1D2230), Color(0xFF090B10)],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            '在光影之间，故事正在发生。',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              height: 1.35,
+                              fontSize: _preferences.fontSize.clamp(18, 32),
+                              color: _subtitleForeground(
+                                _preferences.appearance,
+                              ),
+                              backgroundColor: _subtitleBackground(
+                                _preferences.appearance,
+                              ),
+                              fontWeight: FontWeight.w600,
+                              shadows: _subtitleShadows(
+                                _preferences.appearance,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const _SheetLabel('字幕风格'),
+                        const SizedBox(height: 9),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final appearance in SubtitleAppearance.values)
+                              ChoiceChip(
+                                key: ValueKey(
+                                  'subtitle-style-${appearance.name}',
+                                ),
+                                label: Text(appearance.label),
+                                selected: _preferences.appearance == appearance,
+                                onSelected: (_) => _update(
+                                  _preferences.copyWith(appearance: appearance),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        _PreferenceSlider(
+                          label: '字号',
+                          valueLabel: '${_preferences.fontSize.round()} px',
+                          value: _preferences.fontSize,
+                          min: 18,
+                          max: 42,
+                          divisions: 12,
+                          onChanged: (value) =>
+                              _update(_preferences.copyWith(fontSize: value)),
+                        ),
+                        _PreferenceSlider(
+                          label: '垂直位置',
+                          valueLabel:
+                              '距底部 ${_preferences.bottomPadding.round()} px',
+                          value: _preferences.bottomPadding,
+                          min: 48,
+                          max: 180,
+                          divisions: 11,
+                          onChanged: (value) => _update(
+                            _preferences.copyWith(bottomPadding: value),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '字幕延迟',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  SizedBox(height: 3),
+                                  Text(
+                                    '正值延后，负值提前',
+                                    style: TextStyle(
+                                      color: AppColors.textTertiary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton.outlined(
+                              key: const ValueKey('subtitle-delay-minus'),
+                              tooltip: '字幕提前 0.1 秒',
+                              onPressed: () => _adjustDelay(-100),
+                              icon: const Icon(Icons.remove_rounded),
+                            ),
+                            SizedBox(
+                              width: 82,
+                              child: TextButton(
+                                key: const ValueKey('subtitle-delay-reset'),
+                                onPressed: () => _update(
+                                  _preferences.copyWith(delayMilliseconds: 0),
+                                ),
+                                child: Text(
+                                  _subtitleDelayLabel(
+                                    _preferences.delayMilliseconds,
+                                  ),
+                                  style: const TextStyle(
+                                    fontFamily: 'Cascadia Mono',
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            IconButton.outlined(
+                              key: const ValueKey('subtitle-delay-plus'),
+                              tooltip: '字幕延后 0.1 秒',
+                              onPressed: () => _adjustDelay(100),
+                              icon: const Icon(Icons.add_rounded),
+                            ),
+                          ],
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 18),
+                          child: Divider(height: 1),
+                        ),
+                        const _SheetLabel('字幕轨道'),
+                        const SizedBox(height: 8),
+                        for (final option in widget.options)
+                          Material(
+                            color: option.selected
+                                ? AppColors.glassSelected
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: () {
+                                Navigator.of(context).pop();
+                                unawaited(option.onSelected());
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 28,
+                                      child: option.selected
+                                          ? const Icon(
+                                              Icons.check_rounded,
+                                              color: AppColors.spotlight,
+                                              size: 20,
+                                            )
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            option.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            option.detail,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: AppColors.textTertiary,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetLabel extends StatelessWidget {
+  const _SheetLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label.toUpperCase(),
+      style: const TextStyle(
+        color: AppColors.textTertiary,
+        fontFamily: 'Cascadia Mono',
+        fontSize: 9,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.8,
+      ),
+    );
+  }
+}
+
+class _PreferenceSlider extends StatelessWidget {
+  const _PreferenceSlider({
+    required this.label,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String valueLabel;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            Text(
+              valueLabel,
+              style: const TextStyle(
+                color: AppColors.textTertiary,
+                fontFamily: 'Cascadia Mono',
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          divisions: divisions,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _ChapterSheet extends StatelessWidget {
+  const _ChapterSheet({required this.chapters, required this.position});
+
+  final List<MediaChapter> chapters;
+  final Duration position;
+
+  @override
+  Widget build(BuildContext context) {
+    var currentIndex = 0;
+    for (var index = 0; index < chapters.length; index++) {
+      if (chapters[index].startPosition <= position) currentIndex = index;
+    }
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: GlassSurface(
+            radius: 24,
+            blur: 28,
+            tint: AppColors.glassStrong,
+            elevated: true,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 600,
+                maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 20, 14, 12),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.bookmarks_rounded,
+                          color: AppColors.spotlight,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '章节导航',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '共 ${chapters.length} 个章节',
+                                style: const TextStyle(
+                                  color: AppColors.textTertiary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '关闭',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
+                      itemCount: chapters.length,
+                      itemBuilder: (context, index) {
+                        final chapter = chapters[index];
+                        final selected = index == currentIndex;
+                        return Material(
+                          color: selected
+                              ? AppColors.glassSelected
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                          child: InkWell(
+                            key: ValueKey('chapter-option-$index'),
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () => Navigator.of(
+                              context,
+                            ).pop(chapter.startPosition),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 48,
+                                    child: Text(
+                                      'CH ${(index + 1).toString().padLeft(2, '0')}',
+                                      style: TextStyle(
+                                        color: selected
+                                            ? AppColors.spotlight
+                                            : AppColors.textTertiary,
+                                        fontFamily: 'Cascadia Mono',
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      chapter.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    _queueTime(chapter.startPosition),
+                                    style: const TextStyle(
+                                      color: AppColors.textTertiary,
+                                      fontFamily: 'Cascadia Mono',
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                  if (selected) ...[
+                                    const SizedBox(width: 10),
+                                    const Icon(
+                                      Icons.graphic_eq_rounded,
+                                      color: AppColors.spotlight,
+                                      size: 18,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _TrackSheet extends StatelessWidget {
