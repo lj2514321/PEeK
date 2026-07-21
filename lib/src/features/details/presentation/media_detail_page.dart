@@ -90,6 +90,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
             plan: prepared.plan,
             queue: prepared.queue,
             hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
+            maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
             subtitlePreferences: prepared.settings.subtitlePreferences,
           ),
         ),

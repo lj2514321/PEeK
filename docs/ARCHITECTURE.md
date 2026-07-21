@@ -30,7 +30,7 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
 1. 适配器向服务器请求 PlaybackInfo 与 MediaSources。
 2. 播放策略根据客户端能力、用户码率、音轨和字幕生成 `PlaybackPlan`。
 3. 播放准备阶段并行读取本地解码偏好；自动模式向 libmpv 传递 `auto-safe`，不支持的格式由底层回退到软件解码，兼容模式传递 `no`。
-4. `PlaybackEngine` 将流地址、认证请求头和起始位置交给 libmpv。
+4. `PlaybackEngine` 将流地址、认证请求头和起始位置交给 libmpv；播放中切换画质时先准备新计划，打开失败则恢复原播放源。
 5. 会话协调器发送 Started，并每约十秒及状态变化时发送 Progress。
 6. 播放完成、切换条目或关闭窗口时发送 Stopped。
 7. 诊断面板仅在打开时每三秒读取一次 libmpv 安全属性；关闭面板立即停止采样。

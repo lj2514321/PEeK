@@ -20,9 +20,11 @@ class PlaybackService {
     int? audioStreamIndex,
     int? subtitleStreamIndex,
     String? mediaSourceId,
+    PlaybackBitrate? maxStreamingBitrate,
   }) async {
     final resumeAt = startPosition ?? item.resumePosition;
     final settings = await _readSettings();
+    final selectedBitrate = maxStreamingBitrate ?? settings.maxStreamingBitrate;
     final uri = _appendPath(
       account.server.apiBaseUri,
       'Items/${item.id}/PlaybackInfo',
@@ -34,7 +36,7 @@ class PlaybackService {
       audioStreamIndex: audioStreamIndex,
       subtitleStreamIndex: subtitleStreamIndex,
       mediaSourceId: mediaSourceId,
-      maxStreamingBitrate: settings.maxStreamingBitrate.bitsPerSecond,
+      maxStreamingBitrate: selectedBitrate.bitsPerSecond,
     );
     final rawSources = data['MediaSources'];
     final playSessionId = _readString(data, 'PlaySessionId');

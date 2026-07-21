@@ -13,6 +13,9 @@ enum PlaybackBitrate {
   final String label;
   final String detail;
 
+  String get compactLabel =>
+      this == original ? '原画' : '${bitsPerSecond ~/ 1000000}M';
+
   static PlaybackBitrate fromName(Object? value) {
     return values.where((item) => item.name == value).firstOrNull ?? original;
   }

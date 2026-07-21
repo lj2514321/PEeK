@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter/material.dart';
 
@@ -9,10 +10,12 @@ class PlaybackControls extends StatelessWidget {
     super.key,
     required this.title,
     required this.method,
+    required this.quality,
     required this.visible,
     required this.playing,
     required this.buffering,
     required this.changingSource,
+    required this.sourceChangeLabel,
     required this.position,
     required this.duration,
     required this.buffer,
@@ -41,15 +44,18 @@ class PlaybackControls extends StatelessWidget {
     required this.onNext,
     required this.onEpisodes,
     required this.onDiagnostics,
+    required this.onQuality,
     required this.onFullScreen,
   });
 
   final String title;
   final PlaybackMethod method;
+  final PlaybackBitrate quality;
   final bool visible;
   final bool playing;
   final bool buffering;
   final bool changingSource;
+  final String sourceChangeLabel;
   final Duration position;
   final Duration duration;
   final Duration buffer;
@@ -78,6 +84,7 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onEpisodes;
   final VoidCallback onDiagnostics;
+  final VoidCallback onQuality;
   final VoidCallback onFullScreen;
 
   @override
@@ -94,14 +101,21 @@ class PlaybackControls extends StatelessWidget {
             child: _PlaybackTopBar(
               title: title,
               method: method,
+              quality: quality,
               changingSource: changingSource,
+              sourceChangeLabel: sourceChangeLabel,
               onBack: onBack,
               onDiagnostics: onDiagnostics,
+              onQuality: onQuality,
             ),
           ),
         ),
         if (buffering || changingSource)
-          Center(child: _BufferingIndicator(changingSource: changingSource)),
+          Center(
+            child: _BufferingIndicator(
+              label: changingSource ? sourceChangeLabel : '正在缓冲',
+            ),
+          ),
         Align(
           alignment: Alignment.bottomCenter,
           child: IgnorePointer(
@@ -156,16 +170,22 @@ class _PlaybackTopBar extends StatelessWidget {
   const _PlaybackTopBar({
     required this.title,
     required this.method,
+    required this.quality,
     required this.changingSource,
+    required this.sourceChangeLabel,
     required this.onBack,
     required this.onDiagnostics,
+    required this.onQuality,
   });
 
   final String title;
   final PlaybackMethod method;
+  final PlaybackBitrate quality;
   final bool changingSource;
+  final String sourceChangeLabel;
   final VoidCallback onBack;
   final VoidCallback onDiagnostics;
+  final VoidCallback onQuality;
 
   @override
   Widget build(BuildContext context) {
@@ -211,7 +231,9 @@ class _PlaybackTopBar extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        changingSource ? '正在切换媒体轨道' : 'PEeK PRIVATE CINEMA',
+                        changingSource
+                            ? sourceChangeLabel
+                            : 'PEeK PRIVATE CINEMA',
                         style: const TextStyle(
                           color: Color(0xFFB7BBC4),
                           fontFamily: 'Cascadia Mono',
@@ -229,7 +251,11 @@ class _PlaybackTopBar extends StatelessWidget {
                   icon: Icons.monitor_heart_outlined,
                   onPressed: onDiagnostics,
                 ),
-                _MethodBadge(method: method),
+                _MethodBadge(
+                  method: method,
+                  quality: quality,
+                  onPressed: changingSource ? null : onQuality,
+                ),
               ],
             ),
           ),
@@ -738,30 +764,74 @@ class _RateButton extends StatelessWidget {
 }
 
 class _MethodBadge extends StatelessWidget {
-  const _MethodBadge({required this.method});
+  const _MethodBadge({
+    required this.method,
+    required this.quality,
+    required this.onPressed,
+  });
 
   final PlaybackMethod method;
+  final PlaybackBitrate quality;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (method) {
+    final methodLabel = switch (method) {
       PlaybackMethod.directPlay => 'DIRECT PLAY',
       PlaybackMethod.directStream => 'DIRECT STREAM',
       PlaybackMethod.transcode => 'TRANSCODE',
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
+    final showMethod = MediaQuery.sizeOf(context).width >= 560;
+    return Tooltip(
+      message: '画质上限：${quality.label}',
+      child: Material(
         color: Colors.black.withValues(alpha: 0.48),
         borderRadius: BorderRadius.circular(99),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.textSecondary,
-          fontFamily: 'Cascadia Mono',
-          fontSize: 9,
-          letterSpacing: 0.5,
+        child: InkWell(
+          key: const ValueKey('player-quality'),
+          borderRadius: BorderRadius.circular(99),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showMethod) ...[
+                  Text(
+                    methodLabel,
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontFamily: 'Cascadia Mono',
+                      fontSize: 9,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 11,
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                    color: Colors.white.withValues(alpha: 0.14),
+                  ),
+                ],
+                Text(
+                  quality.compactLabel,
+                  style: const TextStyle(
+                    color: AppColors.spotlight,
+                    fontFamily: 'Cascadia Mono',
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(width: 3),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 14,
+                  color: AppColors.textTertiary,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -769,9 +839,9 @@ class _MethodBadge extends StatelessWidget {
 }
 
 class _BufferingIndicator extends StatelessWidget {
-  const _BufferingIndicator({required this.changingSource});
+  const _BufferingIndicator({required this.label});
 
-  final bool changingSource;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -789,7 +859,7 @@ class _BufferingIndicator extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
           const SizedBox(width: 12),
-          Text(changingSource ? '正在切换轨道' : '正在缓冲'),
+          Text(label),
         ],
       ),
     );

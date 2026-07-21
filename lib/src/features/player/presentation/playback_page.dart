@@ -12,8 +12,10 @@ import 'package:embyplayer/src/features/player/domain/playback_diagnostics.dart'
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
+import 'package:embyplayer/src/features/player/domain/playback_source_transition.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_controls.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_diagnostics_panel.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_quality_sheet.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +33,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
     required this.plan,
     this.queue,
     this.hardwareDecodingMode = HardwareDecodingMode.automatic,
+    this.maxStreamingBitrate = PlaybackBitrate.original,
     this.subtitlePreferences = const SubtitlePreferences(),
   });
 
@@ -39,6 +42,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final PlaybackPlan plan;
   final PlaybackQueue? queue;
   final HardwareDecodingMode hardwareDecodingMode;
+  final PlaybackBitrate maxStreamingBitrate;
   final SubtitlePreferences subtitlePreferences;
 
   @override
@@ -88,6 +92,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   bool _playerDisposed = false;
   bool _closing = false;
   bool _changingSource = false;
+  String _sourceChangeLabel = '正在切换媒体';
   bool _fullScreen = false;
   bool _diagnosticsVisible = false;
   bool _diagnosticsLoading = false;
@@ -95,6 +100,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   String? _error;
   PlaybackDiagnosticsSnapshot? _diagnostics;
   int? _nextEpisodeCountdown;
+  late PlaybackBitrate _maxStreamingBitrate = widget.maxStreamingBitrate;
   late SubtitlePreferences _subtitlePreferences = widget.subtitlePreferences;
 
   static const _autoNextSeconds = 8;
@@ -187,12 +193,16 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     );
   }
 
-  Future<void> _openMedia(PlaybackPlan plan, {required bool play}) async {
+  Future<void> _openMedia(
+    PlaybackPlan plan, {
+    required bool play,
+    Duration? startPosition,
+  }) async {
     await _player.open(
       Media(
         plan.streamUri.toString(),
         httpHeaders: plan.httpHeaders,
-        start: plan.startPosition,
+        start: startPosition ?? plan.startPosition,
       ),
       play: play,
     );
@@ -407,16 +417,19 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _subtitleSettingsTimer?.cancel();
     _subtitleSettingsTimer = Timer(
       const Duration(milliseconds: 350),
-      () => unawaited(_persistSubtitlePreferences()),
+      () => unawaited(_persistPlaybackPreferences()),
     );
   }
 
-  Future<void> _persistSubtitlePreferences() async {
+  Future<void> _persistPlaybackPreferences() async {
     try {
       final store = ref.read(playbackSettingsStoreProvider);
       final settings = await store.read();
       await store.write(
-        settings.copyWith(subtitlePreferences: _subtitlePreferences),
+        settings.copyWith(
+          maxStreamingBitrate: _maxStreamingBitrate,
+          subtitlePreferences: _subtitlePreferences,
+        ),
       );
     } on Object {
       // Playback must not be interrupted by an optional preference write.
@@ -466,6 +479,51 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       options: _audioOptions(),
       emptyMessage: '当前媒体没有可切换的音轨。',
     );
+  }
+
+  Future<void> _showQualityOptions() async {
+    if (_changingSource || _closing) return;
+    _controlsTimer?.cancel();
+    _showControls();
+    final selected = await showModalBottomSheet<PlaybackBitrate>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      isScrollControlled: true,
+      builder: (context) =>
+          PlaybackQualitySheet(selected: _maxStreamingBitrate),
+    );
+    if (selected != null && selected != _maxStreamingBitrate && mounted) {
+      await _switchQuality(selected);
+    }
+    if (mounted) _scheduleControlsHide();
+  }
+
+  Future<void> _switchQuality(PlaybackBitrate bitrate) async {
+    final switched = await _replaceCurrentPlan(
+      statusLabel: '正在切换至${bitrate.label}',
+      actionLabel: '切换画质',
+      successEvent: 'playback_quality_changed',
+      committedBitrate: bitrate,
+      createPlan: (position) => ref
+          .read(playbackServiceProvider)
+          .createPlan(
+            widget.account,
+            _item,
+            startPosition: position,
+            audioStreamIndex: _selectedAudioStreamIndex,
+            subtitleStreamIndex: _subtitlesDisabled
+                ? -1
+                : _selectedSubtitleStreamIndex,
+            mediaSourceId: _plan.mediaSourceId,
+            maxStreamingBitrate: bitrate,
+          ),
+    );
+    if (!switched || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('画质上限已切换为${bitrate.label}')));
   }
 
   Future<void> _showSubtitleTracks() {
@@ -689,18 +747,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     required int? audioStreamIndex,
     required int? subtitleStreamIndex,
   }) async {
-    if (_changingSource || _closing) return;
-    _controlsTimer?.cancel();
-    final wasPlaying = _playing;
-    final position = _position;
-    setState(() {
-      _changingSource = true;
-      _controlsVisible = true;
-      _error = null;
-    });
-    await _player.pause();
-    try {
-      final nextPlan = await ref
+    await _replaceCurrentPlan(
+      statusLabel: '正在切换媒体轨道',
+      actionLabel: '切换轨道',
+      successEvent: 'playback_tracks_rebuilt',
+      subtitlesDisabledAfterSwitch: subtitleStreamIndex == -1,
+      createPlan: (position) => ref
           .read(playbackServiceProvider)
           .createPlan(
             widget.account,
@@ -709,40 +761,293 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
             audioStreamIndex: audioStreamIndex,
             subtitleStreamIndex: subtitleStreamIndex,
             mediaSourceId: _plan.mediaSourceId,
+            maxStreamingBitrate: _maxStreamingBitrate,
+          ),
+    );
+  }
+
+  Future<bool> _replaceCurrentPlan({
+    required String statusLabel,
+    required String actionLabel,
+    required String successEvent,
+    required Future<PlaybackPlan> Function(Duration position) createPlan,
+    PlaybackBitrate? committedBitrate,
+    bool? subtitlesDisabledAfterSwitch,
+  }) async {
+    if (_changingSource || _closing) return false;
+    _controlsTimer?.cancel();
+    _progressTimer?.cancel();
+    final oldPlan = _plan;
+    final oldTrack = _track;
+    final oldSubtitlesDisabled = _subtitlesDisabled;
+    final wasPlaying = _playing;
+    final position = _position;
+    final preservedVolume = _volume;
+    final preservedRate = _rate;
+    final shouldReportOldStopped = _reportedStarted && !_reportedStopped;
+    final oldSnapshot = PlaybackSessionSnapshot(
+      plan: oldPlan,
+      position: position,
+      isPaused: !wasPlaying,
+      volume: preservedVolume,
+      audioStreamIndex: _selectedAudioStreamIndex,
+      subtitleStreamIndex: _selectedSubtitleStreamIndex,
+      subtitlesDisabled: oldSubtitlesDisabled,
+      playbackRate: preservedRate,
+      subtitleOffset: _subtitlePreferences.delay,
+    );
+    setState(() {
+      _changingSource = true;
+      _sourceChangeLabel = statusLabel;
+      _controlsVisible = true;
+      _error = null;
+    });
+
+    try {
+      try {
+        await _player.pause();
+      } on Object catch (error) {
+        _reportRecoveredSourceChangeFailure(actionLabel, error);
+        return false;
+      }
+      final transition = await const PlaybackSourceTransition()
+          .execute<PlaybackPlan>(
+            prepare: () => createPlan(position),
+            open: (plan) => _openMedia(plan, play: wasPlaying),
+            restore: () async {
+              final restored = await _restorePreviousSource(
+                oldPlan,
+                oldTrack,
+                position: position,
+                play: wasPlaying,
+                volume: preservedVolume,
+                rate: preservedRate,
+                subtitlesDisabled: oldSubtitlesDisabled,
+              );
+              if (!restored) {
+                throw StateError('原播放源无法重新打开');
+              }
+            },
           );
-      await _safeReportStopped();
+      if (transition.status ==
+          PlaybackSourceTransitionStatus.preparationFailed) {
+        if (wasPlaying) await _resumeQuietly();
+        _reportRecoveredSourceChangeFailure(actionLabel, transition.error!);
+        return false;
+      }
+      if (transition.status == PlaybackSourceTransitionStatus.restored) {
+        _reportRecoveredSourceChangeFailure(actionLabel, transition.error!);
+        return false;
+      }
+      if (transition.status == PlaybackSourceTransitionStatus.restoreFailed) {
+        if (mounted) {
+          setState(
+            () => _error = '$actionLabel失败，且原播放源无法恢复：${transition.error}',
+          );
+        }
+        return false;
+      }
+      final nextPlan = transition.value!;
+
+      if (shouldReportOldStopped) {
+        try {
+          await ref
+              .read(playbackServiceProvider)
+              .reportStopped(widget.account, oldSnapshot);
+        } on Object {
+          // The newly opened source remains usable if the old check-in fails.
+        }
+      }
+
       _plan = nextPlan;
-      if (_diagnosticsVisible) _diagnostics = null;
       _selectedAudioStreamIndex = nextPlan.audioStreamIndex;
       _selectedSubtitleStreamIndex = nextPlan.subtitleStreamIndex;
-      _subtitlesDisabled = subtitleStreamIndex == -1;
+      _subtitlesDisabled = subtitlesDisabledAfterSwitch ?? oldSubtitlesDisabled;
       _reportedStarted = false;
       _reportedStopped = false;
-      _duration = nextPlan.duration ?? _duration;
-      await _openMedia(nextPlan, play: wasPlaying);
-      _writeDiagnosticLog('playback_plan_rebuilt');
+      if (committedBitrate != null) {
+        _maxStreamingBitrate = committedBitrate;
+      }
+      if (_diagnosticsVisible) _diagnostics = null;
+      if (mounted) {
+        setState(() {
+          _duration = nextPlan.duration ?? _duration;
+          _position = nextPlan.startPosition;
+          _previewPosition = null;
+          _buffer = Duration.zero;
+          _error = null;
+        });
+      }
+      await _restorePlanTracks(
+        nextPlan,
+        previousTrack: oldTrack,
+        subtitlesDisabled: _subtitlesDisabled,
+      );
+      await _restoreRuntimeState(volume: preservedVolume, rate: preservedRate);
+      _writeDiagnosticLog(
+        successEvent,
+        fields: {
+          if (committedBitrate != null)
+            'maxStreamingBitrate': committedBitrate.name,
+        },
+      );
       if (_diagnosticsVisible) unawaited(_refreshDiagnostics());
       await _safeReportStarted();
-    } on PlaybackServiceException catch (error) {
-      _writeDiagnosticLog(
-        'playback_plan_rebuild_failed',
-        fields: {'message': error.message},
-      );
-      if (mounted) setState(() => _error = '切换轨道失败：${error.message}');
-      if (wasPlaying) await _player.play();
-    } on Object catch (error) {
-      _writeDiagnosticLog(
-        'playback_plan_rebuild_failed',
-        fields: {'message': error.toString()},
-      );
-      if (mounted) setState(() => _error = '切换轨道失败：$error');
-      if (wasPlaying) await _player.play();
+      if (committedBitrate != null) {
+        await _persistPlaybackPreferences();
+      }
+      return true;
     } finally {
       if (mounted) {
         setState(() => _changingSource = false);
-        _scheduleControlsHide();
+        if (!_closing) {
+          _startProgressTimer();
+          _scheduleControlsHide();
+        }
       }
     }
+  }
+
+  Future<void> _resumeQuietly() async {
+    try {
+      await _player.play();
+    } on Object {
+      // The player error stream will surface a failure to resume.
+    }
+  }
+
+  Future<bool> _restorePreviousSource(
+    PlaybackPlan plan,
+    Track previousTrack, {
+    required Duration position,
+    required bool play,
+    required double volume,
+    required double rate,
+    required bool subtitlesDisabled,
+  }) async {
+    try {
+      await _openMedia(plan, play: play, startPosition: position);
+      await _restorePlanTracks(
+        plan,
+        previousTrack: previousTrack,
+        subtitlesDisabled: subtitlesDisabled,
+      );
+      await _restoreRuntimeState(volume: volume, rate: rate);
+      return true;
+    } on Object catch (error) {
+      _writeDiagnosticLog(
+        'playback_source_restore_failed',
+        fields: {'message': error.toString()},
+      );
+      return false;
+    }
+  }
+
+  Future<void> _restoreRuntimeState({
+    required double volume,
+    required double rate,
+  }) async {
+    try {
+      await _player.setVolume(volume);
+    } on Object {
+      // A media source switch should still succeed if volume restore fails.
+    }
+    try {
+      await _player.setRate(rate);
+    } on Object {
+      // A media source switch should still succeed if rate restore fails.
+    }
+  }
+
+  Future<void> _restorePlanTracks(
+    PlaybackPlan plan, {
+    required Track previousTrack,
+    required bool subtitlesDisabled,
+  }) async {
+    if (plan.method == PlaybackMethod.transcode) return;
+    final tracks = _player.state.tracks;
+    final audioTracks = tracks.audio
+        .where((track) => track.id != 'auto' && track.id != 'no')
+        .toList(growable: false);
+    final subtitleTracks = tracks.subtitle
+        .where((track) => track.id != 'auto' && track.id != 'no')
+        .toList(growable: false);
+    try {
+      final selectedAudioIndex = plan.audioTracks.indexWhere(
+        (track) => track.index == plan.audioStreamIndex,
+      );
+      if (selectedAudioIndex >= 0 && selectedAudioIndex < audioTracks.length) {
+        await _player.setAudioTrack(audioTracks[selectedAudioIndex]);
+      } else {
+        final previousAudioIndex = audioTracks.indexWhere(
+          (track) => track.id == previousTrack.audio.id,
+        );
+        if (previousAudioIndex >= 0) {
+          await _player.setAudioTrack(audioTracks[previousAudioIndex]);
+        }
+      }
+    } on Object {
+      // The server-selected audio track remains the safe fallback.
+    }
+
+    try {
+      if (subtitlesDisabled) {
+        await _player.setSubtitleTrack(SubtitleTrack.no());
+        return;
+      }
+      PlaybackTrackInfo? selectedSubtitle;
+      for (final track in plan.subtitleTracks) {
+        if (track.index == plan.subtitleStreamIndex) {
+          selectedSubtitle = track;
+          break;
+        }
+      }
+      if (selectedSubtitle?.isExternal == true &&
+          selectedSubtitle?.deliveryUri != null) {
+        await _player.setSubtitleTrack(
+          SubtitleTrack.uri(
+            selectedSubtitle!.deliveryUri.toString(),
+            title: selectedSubtitle.label,
+            language: selectedSubtitle.language,
+          ),
+        );
+        return;
+      }
+      final embeddedTracks = plan.subtitleTracks
+          .where((track) => !track.isExternal)
+          .toList(growable: false);
+      final embeddedIndex = embeddedTracks.indexWhere(
+        (track) => track.index == plan.subtitleStreamIndex,
+      );
+      if (embeddedIndex >= 0 && embeddedIndex < subtitleTracks.length) {
+        await _player.setSubtitleTrack(subtitleTracks[embeddedIndex]);
+        return;
+      }
+      final previousSubtitleIndex = subtitleTracks.indexWhere(
+        (track) => track.id == previousTrack.subtitle.id,
+      );
+      if (previousSubtitleIndex >= 0) {
+        await _player.setSubtitleTrack(subtitleTracks[previousSubtitleIndex]);
+      }
+    } on Object {
+      // The server-selected subtitle remains the safe fallback.
+    }
+  }
+
+  void _reportRecoveredSourceChangeFailure(String actionLabel, Object error) {
+    final message = error is PlaybackServiceException
+        ? error.message
+        : error.toString();
+    _writeDiagnosticLog(
+      'playback_source_change_failed',
+      fields: {'action': actionLabel, 'message': message},
+    );
+    if (!mounted) return;
+    setState(() => _error = null);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('$actionLabel失败，已继续原播放：$message')));
   }
 
   String get _currentAudioLabel {
@@ -926,6 +1231,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _controlsTimer?.cancel();
     setState(() {
       _changingSource = true;
+      _sourceChangeLabel = automatic ? '正在播放下一集' : '正在切换剧集';
       _controlsVisible = true;
       _error = null;
     });
@@ -937,6 +1243,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
             widget.account,
             target,
             startPosition: automatic ? Duration.zero : null,
+            maxStreamingBitrate: _maxStreamingBitrate,
           );
       await _safeReportStopped();
       _plan = nextPlan;
@@ -1018,7 +1325,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _nextEpisodeTimer?.cancel();
     _diagnosticsTimer?.cancel();
     _subtitleSettingsTimer?.cancel();
-    await _persistSubtitlePreferences();
+    await _persistPlaybackPreferences();
     _writeDiagnosticLog('playback_closed');
     await _safeReportStopped();
     if (_fullScreen && Platform.isWindows) {
@@ -1166,12 +1473,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                     PlaybackControls(
                       title: _item.name,
                       method: _plan.method,
+                      quality: _maxStreamingBitrate,
                       visible:
                           (_controlsVisible || !_playing) &&
                           !_diagnosticsVisible,
                       playing: _playing,
                       buffering: _buffering,
                       changingSource: _changingSource,
+                      sourceChangeLabel: _sourceChangeLabel,
                       position: shownPosition,
                       duration: _effectiveDuration,
                       buffer: _buffer,
@@ -1213,6 +1522,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                       },
                       onEpisodes: () => unawaited(_showEpisodes()),
                       onDiagnostics: _toggleDiagnostics,
+                      onQuality: () => unawaited(_showQualityOptions()),
                       onFullScreen: () => unawaited(_toggleFullScreen()),
                     ),
                     if (_diagnosticsVisible)

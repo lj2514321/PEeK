@@ -1,5 +1,6 @@
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_controls.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +24,7 @@ void main() {
       expect(find.byKey(const ValueKey('player-subtitle')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-fullscreen')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-diagnostics')), findsOneWidget);
+      expect(find.byKey(const ValueKey('player-quality')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-episodes')), findsOneWidget);
       expect(find.byKey(const ValueKey('player-chapters')), findsOneWidget);
       expect(find.byKey(const ValueKey('chapter-marker-0')), findsOneWidget);
@@ -47,6 +49,7 @@ void main() {
     var episodesCount = 0;
     var diagnosticsCount = 0;
     var chaptersCount = 0;
+    var qualityCount = 0;
     Duration? previewPosition;
     Duration? seekPosition;
     double? selectedRate;
@@ -64,6 +67,7 @@ void main() {
         onEpisodes: () => episodesCount++,
         onDiagnostics: () => diagnosticsCount++,
         onChapters: () => chaptersCount++,
+        onQuality: () => qualityCount++,
         onRateChanged: (value) => selectedRate = value,
       ),
     );
@@ -77,6 +81,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('player-episodes')));
     await tester.tap(find.byKey(const ValueKey('player-diagnostics')));
     await tester.tap(find.byKey(const ValueKey('player-chapters')));
+    await tester.tap(find.byKey(const ValueKey('player-quality')));
     await tester.drag(
       find.byKey(const ValueKey('player-seek')),
       const Offset(90, 0),
@@ -95,6 +100,7 @@ void main() {
     expect(episodesCount, 1);
     expect(diagnosticsCount, 1);
     expect(chaptersCount, 1);
+    expect(qualityCount, 1);
     expect(previewPosition, isNotNull);
     expect(seekPosition, isNotNull);
     expect(selectedRate, 1.5);
@@ -173,6 +179,7 @@ Widget _controlsApp({
   VoidCallback? onEpisodes,
   VoidCallback? onDiagnostics,
   VoidCallback? onChapters,
+  VoidCallback? onQuality,
   ValueChanged<double>? onRateChanged,
 }) {
   return MaterialApp(
@@ -182,10 +189,12 @@ Widget _controlsApp({
       body: PlaybackControls(
         title: '示例电影',
         method: PlaybackMethod.directPlay,
+        quality: PlaybackBitrate.original,
         visible: true,
         playing: true,
         buffering: false,
         changingSource: false,
+        sourceChangeLabel: '正在切换至平衡',
         position: const Duration(minutes: 12, seconds: 34),
         duration: const Duration(hours: 2),
         buffer: const Duration(minutes: 28),
@@ -218,6 +227,7 @@ Widget _controlsApp({
         onNext: onNext ?? () {},
         onEpisodes: onEpisodes ?? () {},
         onDiagnostics: onDiagnostics ?? () {},
+        onQuality: onQuality ?? () {},
         onFullScreen: onFullScreen ?? () {},
       ),
     ),

@@ -82,6 +82,7 @@ class _FakePlaybackService extends PlaybackService {
     int? audioStreamIndex,
     int? subtitleStreamIndex,
     String? mediaSourceId,
+    PlaybackBitrate? maxStreamingBitrate,
   }) async {
     requestedStartPosition = startPosition;
     return PlaybackPlan(

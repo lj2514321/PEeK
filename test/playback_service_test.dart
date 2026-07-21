@@ -164,6 +164,41 @@ void main() {
     },
   );
 
+  test('applies a runtime bitrate without overwriting preferences', () async {
+    RequestOptions? request;
+    final store = MemoryPlaybackSettingsStore(
+      const PlaybackSettings(maxStreamingBitrate: PlaybackBitrate.mbps20),
+    );
+    final service = PlaybackService(
+      _dioWithJsonResponse({
+        'PlaySessionId': 'quality-switch-session',
+        'MediaSources': [
+          {
+            'Id': 'source-id',
+            'Protocol': 'File',
+            'Container': 'mkv',
+            'SupportsDirectPlay': true,
+          },
+        ],
+      }, onRequest: (options) => request = options),
+      store,
+    );
+
+    await service.createPlan(
+      account,
+      item,
+      maxStreamingBitrate: PlaybackBitrate.mbps5,
+    );
+
+    final body = request?.data as Map<String, dynamic>;
+    expect(body['MaxStreamingBitrate'], 5000000);
+    expect(
+      (body['DeviceProfile'] as Map<String, dynamic>)['MaxStreamingBitrate'],
+      5000000,
+    );
+    expect(store.settings.maxStreamingBitrate, PlaybackBitrate.mbps20);
+  });
+
   test('skips direct stream sources without a stream url', () async {
     final service = PlaybackService(
       _dioWithJsonResponse({
