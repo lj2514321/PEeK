@@ -8,6 +8,7 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostic_log.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostics_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
+import 'package:embyplayer/src/features/player/data/windows_media_session.dart';
 import 'package:embyplayer/src/features/player/domain/playback_diagnostics.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
@@ -68,7 +69,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Timer? _nextEpisodeTimer;
   Timer? _diagnosticsTimer;
   Timer? _subtitleSettingsTimer;
+  Timer? _systemTimelineTimer;
+  Timer? _systemVolumeRetryTimer;
   late final PlaybackDiagnosticLog _diagnosticLog;
+  late final SystemMediaSession _systemMediaSession;
   final PlaybackDiagnosticsService _diagnosticsService =
       const PlaybackDiagnosticsService();
 
@@ -90,6 +94,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   bool _reportedStarted = false;
   bool _reportedStopped = false;
   bool _playerDisposed = false;
+  bool _systemMediaAvailable = false;
+  bool _systemVolumeLinked = false;
+  bool _systemMediaDisposed = false;
   bool _closing = false;
   bool _changingSource = false;
   String _sourceChangeLabel = '正在切换媒体';
@@ -100,6 +107,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   String? _error;
   PlaybackDiagnosticsSnapshot? _diagnostics;
   int? _nextEpisodeCountdown;
+  int _systemVolumeBindAttempts = 0;
   late PlaybackBitrate _maxStreamingBitrate = widget.maxStreamingBitrate;
   late SubtitlePreferences _subtitlePreferences = widget.subtitlePreferences;
 
@@ -114,6 +122,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   void initState() {
     super.initState();
     _diagnosticLog = ref.read(playbackDiagnosticLogProvider);
+    _systemMediaSession = ref.read(windowsMediaSessionProvider)();
     AppChrome.enterImmersive();
     _duration = widget.plan.duration ?? Duration.zero;
     _position = widget.plan.startPosition;
@@ -121,6 +130,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _selectedSubtitleStreamIndex = widget.plan.subtitleStreamIndex;
     _subtitlesDisabled = widget.plan.subtitleStreamIndex == null;
     _listenToPlayer();
+    Future<void>.microtask(_initializeSystemMedia);
     Future<void>.microtask(_openInitialMedia);
   }
 
@@ -130,21 +140,26 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _player.stream.position.listen((value) {
         if (mounted && _previewPosition == null) {
           setState(() => _position = value);
+          _scheduleSystemTimelineSync();
         }
       }),
       _player.stream.duration.listen((value) {
         if (mounted && value > Duration.zero) {
           setState(() => _duration = value);
+          _scheduleSystemTimelineSync(immediate: true);
         }
       }),
       _player.stream.buffer.listen((value) {
         if (mounted) setState(() => _buffer = value);
       }),
       _player.stream.buffering.listen((value) {
-        if (mounted) setState(() => _buffering = value);
+        if (mounted) {
+          setState(() => _buffering = value);
+          _syncSystemPlayback();
+        }
       }),
       _player.stream.volume.listen((value) {
-        if (!mounted) return;
+        if (!mounted || _systemVolumeLinked) return;
         if (value > 0) _lastAudibleVolume = value;
         setState(() => _volume = value);
       }),
@@ -170,12 +185,172 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     ]);
   }
 
+  Future<void> _initializeSystemMedia() async {
+    final available = await _systemMediaSession.initialize(
+      onCommand: _handleSystemMediaCommand,
+      onVolumeChanged: _handleSystemVolumeChanged,
+      onVolumeSessionDisconnected: _handleSystemVolumeDisconnected,
+    );
+    if (!mounted || _closing || _systemMediaDisposed) {
+      await _systemMediaSession.dispose();
+      return;
+    }
+    _systemMediaAvailable = available;
+    if (!available) return;
+    _syncSystemMetadata();
+    _syncSystemPlayback();
+    _scheduleSystemTimelineSync(immediate: true);
+    unawaited(_bindSystemVolume(resetAttempts: true));
+  }
+
+  Future<void> _handleSystemMediaCommand(SystemMediaCommand command) async {
+    if (!mounted || _closing || _playerDisposed) return;
+    switch (command.type) {
+      case SystemMediaCommandType.play:
+        if (!_playing) await _player.play();
+      case SystemMediaCommandType.pause:
+        if (_playing) await _player.pause();
+      case SystemMediaCommandType.next:
+        final queue = _queue;
+        if (queue != null && queue.hasNext) {
+          await _playQueueIndex(queue.currentIndex + 1);
+        }
+      case SystemMediaCommandType.previous:
+        final queue = _queue;
+        if (queue != null && queue.hasPrevious) {
+          await _playQueueIndex(queue.currentIndex - 1);
+        }
+      case SystemMediaCommandType.stop:
+        await _close();
+      case SystemMediaCommandType.seek:
+        final position = command.position;
+        if (position != null) await _seek(position);
+    }
+  }
+
+  void _handleSystemVolumeChanged(SystemAudioVolume volume) {
+    if (!mounted || _closing || !_systemVolumeLinked) return;
+    final effective = volume.effectiveLevel;
+    if (effective > 0) _lastAudibleVolume = volume.level;
+    setState(() => _volume = effective);
+  }
+
+  void _handleSystemVolumeDisconnected() {
+    if (!mounted || _closing) return;
+    _systemVolumeLinked = false;
+    _systemVolumeBindAttempts = 0;
+    _systemVolumeRetryTimer?.cancel();
+    _systemVolumeRetryTimer = Timer(
+      const Duration(milliseconds: 500),
+      () => unawaited(_bindSystemVolume()),
+    );
+  }
+
+  Future<void> _bindSystemVolume({bool resetAttempts = false}) async {
+    if (!_systemMediaAvailable || _systemMediaDisposed || _closing) return;
+    if (resetAttempts) _systemVolumeBindAttempts = 0;
+    _systemVolumeRetryTimer?.cancel();
+    final volume = await _systemMediaSession.bindVolume();
+    if (!mounted || _closing || _systemMediaDisposed) return;
+    if (volume == null) {
+      _systemVolumeLinked = false;
+      if (_systemVolumeBindAttempts >= 5) return;
+      _systemVolumeBindAttempts++;
+      final delay = Duration(
+        milliseconds: (350 * _systemVolumeBindAttempts).clamp(350, 1800),
+      );
+      _systemVolumeRetryTimer = Timer(
+        delay,
+        () => unawaited(_bindSystemVolume()),
+      );
+      return;
+    }
+
+    _systemVolumeLinked = true;
+    _systemVolumeBindAttempts = 0;
+    await _player.setVolume(100);
+    if (!mounted || _closing) return;
+    final effective = volume.effectiveLevel;
+    if (effective > 0) _lastAudibleVolume = volume.level;
+    setState(() => _volume = effective);
+  }
+
+  void _syncSystemMetadata() {
+    if (!_systemMediaAvailable || _systemMediaDisposed) return;
+    final episode = _item.parentIndexNumber != null && _item.indexNumber != null
+        ? 'S${_item.parentIndexNumber!.toString().padLeft(2, '0')}'
+              'E${_item.indexNumber!.toString().padLeft(2, '0')}'
+        : null;
+    final subtitle = [
+      ?_item.seriesName,
+      ?episode,
+      if (_item.seriesName == null && _item.productionYear != null)
+        '${_item.productionYear}',
+    ].join(' · ');
+    unawaited(
+      _systemMediaSession.updateMetadata(
+        SystemMediaMetadata(
+          title: _item.name,
+          subtitle: subtitle.isEmpty ? null : subtitle,
+          artworkUri: _item.imageUri,
+          artworkHeaders: _item.imageHeaders,
+        ),
+      ),
+    );
+  }
+
+  void _syncSystemPlayback() {
+    if (!_systemMediaAvailable || _systemMediaDisposed) return;
+    final state = _changingSource || _buffering
+        ? SystemMediaPlaybackState.changing
+        : _playing
+        ? SystemMediaPlaybackState.playing
+        : SystemMediaPlaybackState.paused;
+    final queue = _queue;
+    unawaited(
+      _systemMediaSession.updatePlayback(
+        state: state,
+        canPrevious: queue?.hasPrevious ?? false,
+        canNext: queue?.hasNext ?? false,
+      ),
+    );
+  }
+
+  void _scheduleSystemTimelineSync({bool immediate = false}) {
+    if (!_systemMediaAvailable || _systemMediaDisposed) return;
+    if (immediate) {
+      _systemTimelineTimer?.cancel();
+      _syncSystemTimeline();
+      return;
+    }
+    if (_systemTimelineTimer?.isActive ?? false) return;
+    _systemTimelineTimer = Timer(
+      const Duration(milliseconds: 750),
+      _syncSystemTimeline,
+    );
+  }
+
+  void _syncSystemTimeline() {
+    if (!_systemMediaAvailable || _systemMediaDisposed) return;
+    unawaited(
+      _systemMediaSession.updateTimeline(
+        position: _position,
+        duration: _effectiveDuration,
+        playbackRate: _rate,
+      ),
+    );
+  }
+
   Future<void> _openInitialMedia() async {
     try {
       await _openMedia(_plan, play: true);
       _writeDiagnosticLog('playback_opened');
       await _safeReportStarted();
       _startProgressTimer();
+      _syncSystemMetadata();
+      _syncSystemPlayback();
+      _scheduleSystemTimelineSync(immediate: true);
+      unawaited(_bindSystemVolume(resetAttempts: true));
     } catch (error) {
       _writeDiagnosticLog(
         'playback_open_failed',
@@ -221,6 +396,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (_reportedStarted && !_closing && !_changingSource) {
       _safeReportProgress(playing ? 'Unpause' : 'Pause');
     }
+    _syncSystemPlayback();
   }
 
   void _showControls() {
@@ -260,6 +436,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     });
     await _player.seek(target);
     await _safeReportProgress('TimeUpdate');
+    _scheduleSystemTimelineSync(immediate: true);
     _showControls();
   }
 
@@ -279,7 +456,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     final normalized = value.clamp(0, 100).toDouble();
     if (normalized > 0) _lastAudibleVolume = normalized;
     setState(() => _volume = normalized);
-    await _player.setVolume(normalized);
+    if (_systemVolumeLinked) {
+      await _systemMediaSession.setVolume(normalized);
+    } else {
+      await _player.setVolume(normalized);
+    }
   }
 
   Future<void> _adjustVolume(double delta) {
@@ -295,6 +476,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     setState(() => _rate = value);
     await _player.setRate(value);
     await _safeReportProgress('PlaybackRateChange');
+    _scheduleSystemTimelineSync(immediate: true);
   }
 
   Future<void> _toggleFullScreen() async {
@@ -1263,6 +1445,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _controlsVisible = true;
       _error = null;
     });
+    _syncSystemPlayback();
     await _player.pause();
     try {
       final nextPlan = await ref
@@ -1287,11 +1470,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _position = nextPlan.startPosition;
       _previewPosition = null;
       _buffer = Duration.zero;
+      _syncSystemMetadata();
+      _syncSystemPlayback();
+      _scheduleSystemTimelineSync(immediate: true);
       await _openMedia(nextPlan, play: true);
       _writeDiagnosticLog('queue_item_opened');
       if (_diagnosticsVisible) unawaited(_refreshDiagnostics());
-      await _player.setVolume(preservedVolume);
+      await _player.setVolume(_systemVolumeLinked ? 100 : preservedVolume);
       await _player.setRate(preservedRate);
+      unawaited(_bindSystemVolume(resetAttempts: true));
       await _safeReportStarted();
       _startProgressTimer();
     } on PlaybackServiceException catch (error) {
@@ -1313,6 +1500,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     } finally {
       if (mounted) {
         setState(() => _changingSource = false);
+        _syncSystemPlayback();
+        _scheduleSystemTimelineSync(immediate: true);
         _scheduleControlsHide();
       }
     }
@@ -1336,7 +1525,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       plan: _plan,
       position: _player.state.position,
       isPaused: !_player.state.playing,
-      volume: _player.state.volume,
+      volume: _volume,
       audioStreamIndex: _selectedAudioStreamIndex,
       subtitleStreamIndex: _selectedSubtitleStreamIndex,
       subtitlesDisabled: _subtitlesDisabled,
@@ -1353,9 +1542,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _nextEpisodeTimer?.cancel();
     _diagnosticsTimer?.cancel();
     _subtitleSettingsTimer?.cancel();
+    _systemTimelineTimer?.cancel();
+    _systemVolumeRetryTimer?.cancel();
     await _persistPlaybackPreferences();
     _writeDiagnosticLog('playback_closed');
     await _safeReportStopped();
+    await _disposeSystemMedia();
     if (_fullScreen && Platform.isWindows) {
       try {
         await _setNativeFullScreen(false);
@@ -1374,6 +1566,17 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     await _player.dispose();
   }
 
+  Future<void> _disposeSystemMedia() async {
+    if (_systemMediaDisposed) return;
+    _systemMediaDisposed = true;
+    _systemTimelineTimer?.cancel();
+    _systemVolumeRetryTimer?.cancel();
+    _systemMediaAvailable = false;
+    _systemVolumeLinked = false;
+    await _systemMediaSession.clear();
+    await _systemMediaSession.dispose();
+  }
+
   @override
   void dispose() {
     AppChrome.leaveImmersive();
@@ -1382,6 +1585,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _nextEpisodeTimer?.cancel();
     _diagnosticsTimer?.cancel();
     _subtitleSettingsTimer?.cancel();
+    _systemTimelineTimer?.cancel();
+    _systemVolumeRetryTimer?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -1389,6 +1594,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       unawaited(_setNativeFullScreen(false));
     }
     if (!_reportedStopped) unawaited(_safeReportStopped());
+    if (!_systemMediaDisposed) unawaited(_disposeSystemMedia());
     if (!_playerDisposed) unawaited(_disposePlayer());
     super.dispose();
   }

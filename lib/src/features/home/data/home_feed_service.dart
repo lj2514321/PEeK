@@ -7,12 +7,18 @@ class HomeFeedService {
   const HomeFeedService(this._library);
 
   final MediaLibraryService _library;
+  static const _latestMovieLimitPerLibrary = 12;
+  static const _libraryRequestConcurrency = 4;
 
   Future<HomeFeed> load(
     AuthenticatedServer account, {
     bool forceRefresh = false,
   }) async {
-    final results = await Future.wait([
+    final latestMoviesFuture = _loadLatestMoviesByLibrary(
+      account,
+      forceRefresh: forceRefresh,
+    );
+    final results = await Future.wait<HomeFeedSection>([
       _capture(
         () => _library.getRecommendations(account, forceRefresh: forceRefresh),
       ),
@@ -20,12 +26,10 @@ class HomeFeedService {
         () => _library.getResumeItems(account, forceRefresh: forceRefresh),
       ),
       _capture(
-        () => _library.getLatestMovies(account, forceRefresh: forceRefresh),
-      ),
-      _capture(
         () => _library.getLatestEpisodes(account, forceRefresh: forceRefresh),
       ),
     ]);
+    final latestMovies = await latestMoviesFuture;
     for (final result in results) {
       if (result.authenticationExpired) {
         throw MediaLibraryException(
@@ -35,11 +39,18 @@ class HomeFeedService {
         );
       }
     }
+    if (latestMovies.authenticationExpired) {
+      throw MediaLibraryException(
+        latestMovies.error ?? '登录凭据已失效，请重新登录服务器。',
+        authenticationExpired: true,
+        statusCode: 401,
+      );
+    }
     return HomeFeed(
       dailyRecommendations: _withoutResumableDuplicates(results[0], results[1]),
       continueWatching: results[1],
-      latestMovies: results[2],
-      latestEpisodes: results[3],
+      latestMovies: latestMovies,
+      latestEpisodes: results[2],
     );
   }
 
@@ -129,5 +140,72 @@ class HomeFeedService {
     } on Object {
       return const HomeFeedSection(error: '内容暂时无法读取，请稍后重试。');
     }
+  }
+
+  Future<HomeFeedLibrarySections> _loadLatestMoviesByLibrary(
+    AuthenticatedServer account, {
+    required bool forceRefresh,
+  }) async {
+    final List<MediaItem> libraries;
+    try {
+      libraries = await _library.getLibraries(
+        account,
+        forceRefresh: forceRefresh,
+      );
+    } on MediaLibraryException catch (error) {
+      return HomeFeedLibrarySections(
+        error: error.message,
+        authenticationExpired: error.authenticationExpired,
+      );
+    } on Object {
+      return const HomeFeedLibrarySections(error: '无法读取电影媒体库。');
+    }
+
+    final movieLibraries = libraries
+        .where(_canContainMovies)
+        .toList(growable: false);
+    final groups = <HomeFeedLibrarySection>[];
+    for (
+      var start = 0;
+      start < movieLibraries.length;
+      start += _libraryRequestConcurrency
+    ) {
+      final end = (start + _libraryRequestConcurrency).clamp(
+        0,
+        movieLibraries.length,
+      );
+      final batch = movieLibraries.sublist(start, end);
+      final sections = await Future.wait(
+        batch.map(
+          (library) => _capture(
+            () => _library.getLatestMovies(
+              account,
+              parentId: library.id,
+              limit: _latestMovieLimitPerLibrary,
+              forceRefresh: forceRefresh,
+            ),
+          ),
+        ),
+      );
+      for (var index = 0; index < batch.length; index++) {
+        final section = sections[index];
+        if (section.authenticationExpired) {
+          return HomeFeedLibrarySections(
+            groups: groups,
+            error: section.error,
+            authenticationExpired: true,
+          );
+        }
+        groups.add(
+          HomeFeedLibrarySection(library: batch[index], section: section),
+        );
+      }
+    }
+    return HomeFeedLibrarySections(groups: groups);
+  }
+
+  bool _canContainMovies(MediaItem library) {
+    final type = library.collectionType?.trim().toLowerCase();
+    return type == null || type.isEmpty || type == 'movies' || type == 'mixed';
   }
 }

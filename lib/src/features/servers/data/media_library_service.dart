@@ -47,6 +47,47 @@ class MediaLibraryService {
     required String parentId,
     int startIndex = 0,
     int limit = 60,
+    MediaLibrarySort sort = MediaLibrarySort.nameAscending,
+    MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
+    MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    int? productionYear,
+    bool forceRefresh = false,
+  }) async {
+    final query = <String, String>{
+      'ParentId': parentId,
+      'SortBy': sort.apiSortBy,
+      'SortOrder': sort.apiSortOrder,
+      'Fields':
+          'Overview,PrimaryImageAspectRatio,ProductionYear,'
+          'RunTimeTicks,UserData',
+      'ImageTypeLimit': '1',
+      'EnableImageTypes': 'Primary',
+      'EnableUserData': 'true',
+      'StartIndex': '$startIndex',
+      'Limit': '$limit',
+      'EnableTotalRecordCount': 'true',
+      if (kind.apiTypes != null) 'IncludeItemTypes': kind.apiTypes!,
+      if (status.isPlayed != null) 'IsPlayed': '${status.isPlayed}',
+      if (status.apiFilter != null) 'Filters': status.apiFilter!,
+      if (productionYear != null) 'Years': '$productionYear',
+    };
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Users/${account.userId}/Items',
+    ).replace(queryParameters: query);
+    return _requestPage(
+      uri,
+      account,
+      startIndex: startIndex,
+      cacheAge: _itemPageCacheAge,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<MediaPage> getFavoriteItems(
+    AuthenticatedServer account, {
+    int startIndex = 0,
+    int limit = 60,
     bool forceRefresh = false,
   }) async {
     final uri =
@@ -55,7 +96,9 @@ class MediaLibraryService {
           'Users/${account.userId}/Items',
         ).replace(
           queryParameters: {
-            'ParentId': parentId,
+            'Recursive': 'true',
+            'IncludeItemTypes': 'Movie,Series,Episode,Video,Audio',
+            'Filters': 'IsFavorite',
             'SortBy': 'SortName',
             'SortOrder': 'Ascending',
             'Fields':
@@ -63,6 +106,7 @@ class MediaLibraryService {
                 'RunTimeTicks,UserData',
             'ImageTypeLimit': '1',
             'EnableImageTypes': 'Primary',
+            'EnableUserData': 'true',
             'StartIndex': '$startIndex',
             'Limit': '$limit',
             'EnableTotalRecordCount': 'true',
@@ -266,12 +310,14 @@ class MediaLibraryService {
   Future<List<MediaItem>> getLatestMovies(
     AuthenticatedServer account, {
     int limit = 18,
+    String? parentId,
     bool forceRefresh = false,
   }) {
     return _getLatestItems(
       account,
       includeItemTypes: 'Movie',
       limit: limit,
+      parentId: parentId,
       forceRefresh: forceRefresh,
     );
   }
@@ -355,6 +401,7 @@ class MediaLibraryService {
     AuthenticatedServer account, {
     required String includeItemTypes,
     required int limit,
+    String? parentId,
     required bool forceRefresh,
   }) async {
     final uri =
@@ -375,6 +422,7 @@ class MediaLibraryService {
             'EnableUserData': 'true',
             'GroupItems': 'false',
             'Limit': '$limit',
+            if (parentId != null && parentId.isNotEmpty) 'ParentId': parentId,
           },
         );
     return (await _requestPage(
@@ -431,6 +479,85 @@ class MediaLibraryService {
       cacheAge: _similarCacheAge,
       forceRefresh: forceRefresh,
     )).items;
+  }
+
+  Future<void> setFavorite(
+    AuthenticatedServer account,
+    String itemId, {
+    required bool favorite,
+  }) {
+    return setFavoriteForItems(account, [itemId], favorite: favorite);
+  }
+
+  Future<void> setPlayed(
+    AuthenticatedServer account,
+    String itemId, {
+    required bool played,
+  }) {
+    return setPlayedForItems(account, [itemId], played: played);
+  }
+
+  Future<void> setFavoriteForItems(
+    AuthenticatedServer account,
+    Iterable<String> itemIds, {
+    required bool favorite,
+  }) {
+    return _setUserItemsState(
+      account,
+      itemIds,
+      pathSegment: 'FavoriteItems',
+      enabled: favorite,
+    );
+  }
+
+  Future<void> setPlayedForItems(
+    AuthenticatedServer account,
+    Iterable<String> itemIds, {
+    required bool played,
+  }) {
+    return _setUserItemsState(
+      account,
+      itemIds,
+      pathSegment: 'PlayedItems',
+      enabled: played,
+    );
+  }
+
+  Future<void> _setUserItemsState(
+    AuthenticatedServer account,
+    Iterable<String> itemIds, {
+    required String pathSegment,
+    required bool enabled,
+  }) async {
+    final ids = itemIds.where((id) => id.isNotEmpty).toSet().toList();
+    if (ids.isEmpty) return;
+    try {
+      for (var start = 0; start < ids.length; start += 4) {
+        final end = (start + 4).clamp(0, ids.length);
+        await Future.wait(
+          ids.sublist(start, end).map((itemId) async {
+            final uri = _appendPath(
+              account.server.apiBaseUri,
+              'Users/${account.userId}/$pathSegment/$itemId',
+            );
+            final options = Options(headers: _authHeaders(account.accessToken));
+            if (enabled) {
+              await _dio.postUri<void>(uri, options: options);
+            } else {
+              await _dio.deleteUri<void>(uri, options: options);
+            }
+          }),
+        );
+      }
+    } on DioException catch (error) {
+      throw _mapDioException(error);
+    } finally {
+      try {
+        await _cache.clear();
+      } on Object {
+        // User state is already updated; cache cleanup must not report failure.
+      }
+    }
   }
 
   Future<MediaPage> _requestPage(
@@ -610,6 +737,7 @@ class MediaLibraryService {
         ? _readInt(userData['PlaybackPositionTicks'])
         : null;
     final played = userData is Map && userData['Played'] == true;
+    final favorite = userData is Map && userData['IsFavorite'] == true;
 
     return MediaItem(
       id: id,
@@ -648,7 +776,9 @@ class MediaLibraryService {
       parentIndexNumber: _readInt(data['ParentIndexNumber']),
       parentId: _readNullableString(data, 'ParentId'),
       seriesId: _readNullableString(data, 'SeriesId'),
+      collectionType: _readNullableString(data, 'CollectionType'),
       played: played,
+      favorite: favorite,
       resumePosition: resumeTicks == null
           ? Duration.zero
           : Duration(microseconds: resumeTicks ~/ 10),
@@ -835,6 +965,76 @@ class MediaLibraryService {
     }
     return null;
   }
+}
+
+enum MediaLibrarySort {
+  nameAscending,
+  dateCreatedDescending,
+  productionYearDescending,
+  ratingDescending,
+}
+
+extension MediaLibrarySortApi on MediaLibrarySort {
+  String get label => switch (this) {
+    MediaLibrarySort.nameAscending => '名称 A–Z',
+    MediaLibrarySort.dateCreatedDescending => '最近添加',
+    MediaLibrarySort.productionYearDescending => '上映年份',
+    MediaLibrarySort.ratingDescending => '评分最高',
+  };
+
+  String get apiSortBy => switch (this) {
+    MediaLibrarySort.nameAscending => 'SortName',
+    MediaLibrarySort.dateCreatedDescending => 'DateCreated,SortName',
+    MediaLibrarySort.productionYearDescending => 'ProductionYear,SortName',
+    MediaLibrarySort.ratingDescending => 'CommunityRating,SortName',
+  };
+
+  String get apiSortOrder => switch (this) {
+    MediaLibrarySort.nameAscending => 'Ascending',
+    _ => 'Descending',
+  };
+}
+
+enum MediaLibraryKindFilter { all, movies, series, episodes }
+
+extension MediaLibraryKindFilterApi on MediaLibraryKindFilter {
+  String get label => switch (this) {
+    MediaLibraryKindFilter.all => '全部类型',
+    MediaLibraryKindFilter.movies => '电影',
+    MediaLibraryKindFilter.series => '剧集',
+    MediaLibraryKindFilter.episodes => '单集',
+  };
+
+  String? get apiTypes => switch (this) {
+    MediaLibraryKindFilter.all => null,
+    MediaLibraryKindFilter.movies => 'Movie',
+    MediaLibraryKindFilter.series => 'Series',
+    MediaLibraryKindFilter.episodes => 'Episode',
+  };
+}
+
+enum MediaLibraryStatusFilter { all, unplayed, inProgress, played, favorites }
+
+extension MediaLibraryStatusFilterApi on MediaLibraryStatusFilter {
+  String get label => switch (this) {
+    MediaLibraryStatusFilter.all => '全部状态',
+    MediaLibraryStatusFilter.unplayed => '未观看',
+    MediaLibraryStatusFilter.inProgress => '观看中',
+    MediaLibraryStatusFilter.played => '已观看',
+    MediaLibraryStatusFilter.favorites => '已收藏',
+  };
+
+  bool? get isPlayed => switch (this) {
+    MediaLibraryStatusFilter.unplayed => false,
+    MediaLibraryStatusFilter.played => true,
+    _ => null,
+  };
+
+  String? get apiFilter => switch (this) {
+    MediaLibraryStatusFilter.inProgress => 'IsResumable',
+    MediaLibraryStatusFilter.favorites => 'IsFavorite',
+    _ => null,
+  };
 }
 
 enum MediaSearchScope { all, movies, series, episodes, people }

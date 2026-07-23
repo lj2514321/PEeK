@@ -13,6 +13,53 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('collapses the desktop sidebar and opens favorites', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final account = _account();
+    final library = _ShellLibraryService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          serverAuthenticationProvider.overrideWithValue(
+            _ShellAuthenticationService(account),
+          ),
+          mediaLibraryProvider.overrideWithValue(library),
+          searchHistoryStoreProvider.overrideWithValue(
+            MemorySearchHistoryStore(),
+          ),
+          playbackSettingsStoreProvider.overrideWithValue(
+            MemoryPlaybackSettingsStore(),
+          ),
+        ],
+        child: const EmbyPlayerApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PRIVATE CINEMA'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('sidebar-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('PRIVATE CINEMA'), findsNothing);
+
+    await tester.tap(find.byTooltip('收藏'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('我的收藏'), findsOneWidget);
+    expect(find.text('收藏影片'), findsOneWidget);
+    expect(library.favoriteRequests, 1);
+
+    await tester.tap(find.byKey(const ValueKey('sidebar-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('PRIVATE CINEMA'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('keeps search context when switching between main destinations', (
     tester,
   ) async {
@@ -41,7 +88,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(library.libraryRequests, 0);
+    expect(library.libraryRequests, 1);
 
     await tester.tap(find.text('搜索电影、剧集与人物'));
     await tester.pumpAndSettle();
@@ -92,6 +139,7 @@ class _ShellLibraryService extends MediaLibraryService {
 
   int libraryRequests = 0;
   int searchRequests = 0;
+  int favoriteRequests = 0;
 
   @override
   Future<List<MediaItem>> getLibraries(
@@ -100,7 +148,12 @@ class _ShellLibraryService extends MediaLibraryService {
   }) async {
     libraryRequests += 1;
     return const [
-      MediaItem(id: 'library', name: '电影', kind: MediaItemKind.folder),
+      MediaItem(
+        id: 'library',
+        name: '电影',
+        kind: MediaItemKind.folder,
+        collectionType: 'movies',
+      ),
     ];
   }
 
@@ -110,9 +163,35 @@ class _ShellLibraryService extends MediaLibraryService {
     required String parentId,
     int startIndex = 0,
     int limit = 60,
+    MediaLibrarySort sort = MediaLibrarySort.nameAscending,
+    MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
+    MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    int? productionYear,
     bool forceRefresh = false,
   }) async {
     return const MediaPage(items: [], totalRecordCount: 0, nextStartIndex: 0);
+  }
+
+  @override
+  Future<MediaPage> getFavoriteItems(
+    AuthenticatedServer account, {
+    int startIndex = 0,
+    int limit = 60,
+    bool forceRefresh = false,
+  }) async {
+    favoriteRequests += 1;
+    return const MediaPage(
+      items: [
+        MediaItem(
+          id: 'favorite',
+          name: '收藏影片',
+          kind: MediaItemKind.movie,
+          favorite: true,
+        ),
+      ],
+      totalRecordCount: 1,
+      nextStartIndex: 1,
+    );
   }
 
   @override
@@ -152,6 +231,7 @@ class _ShellLibraryService extends MediaLibraryService {
   Future<List<MediaItem>> getLatestMovies(
     AuthenticatedServer account, {
     int limit = 18,
+    String? parentId,
     bool forceRefresh = false,
   }) async => const [];
 

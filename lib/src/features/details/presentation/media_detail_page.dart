@@ -32,6 +32,8 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   List<MediaItem> _similarItems = const [];
   bool _loadingDetails = true;
   bool _planningPlayback = false;
+  bool _updatingFavorite = false;
+  bool _updatingPlayed = false;
   String? _detailError;
   String? _similarError;
   String? _playbackError;
@@ -111,6 +113,62 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
       _item.kind == MediaItemKind.episode ||
       _item.kind == MediaItemKind.video;
 
+  bool get _canMarkPlayed =>
+      _playable ||
+      _item.kind == MediaItemKind.series ||
+      _item.kind == MediaItemKind.season;
+
+  Future<void> _toggleFavorite() async {
+    if (_updatingFavorite) return;
+    final target = !_item.favorite;
+    setState(() => _updatingFavorite = true);
+    try {
+      await ref
+          .read(mediaLibraryProvider)
+          .setFavorite(widget.account, _item.id, favorite: target);
+      if (!mounted) return;
+      setState(() => _item = _item.copyWith(favorite: target));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(target ? '已加入收藏' : '已取消收藏')));
+    } on MediaLibraryException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新收藏失败：${error.message}')));
+    } finally {
+      if (mounted) setState(() => _updatingFavorite = false);
+    }
+  }
+
+  Future<void> _togglePlayed() async {
+    if (_updatingPlayed) return;
+    final target = !_item.played;
+    setState(() => _updatingPlayed = true);
+    try {
+      await ref
+          .read(mediaLibraryProvider)
+          .setPlayed(widget.account, _item.id, played: target);
+      if (!mounted) return;
+      setState(
+        () => _item = _item.copyWith(
+          played: target,
+          resumePosition: target ? Duration.zero : _item.resumePosition,
+        ),
+      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(target ? '已标记为已观看' : '已标记为未观看')));
+    } on MediaLibraryException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新观看状态失败：${error.message}')));
+    } finally {
+      if (mounted) setState(() => _updatingPlayed = false);
+    }
+  }
+
   Future<void> _openSimilar(MediaItem item) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -149,8 +207,13 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                 loading: _loadingDetails,
                 playable: _playable,
                 planningPlayback: _planningPlayback,
+                updatingFavorite: _updatingFavorite,
+                updatingPlayed: _updatingPlayed,
+                canMarkPlayed: _canMarkPlayed,
                 onPlay: () => _play(),
                 onPlayFromBeginning: () => _play(fromBeginning: true),
+                onToggleFavorite: _toggleFavorite,
+                onTogglePlayed: _togglePlayed,
               ),
             ),
             SliverToBoxAdapter(
@@ -215,16 +278,26 @@ class _DetailHero extends StatelessWidget {
     required this.loading,
     required this.playable,
     required this.planningPlayback,
+    required this.updatingFavorite,
+    required this.updatingPlayed,
+    required this.canMarkPlayed,
     required this.onPlay,
     required this.onPlayFromBeginning,
+    required this.onToggleFavorite,
+    required this.onTogglePlayed,
   });
 
   final MediaItem item;
   final bool loading;
   final bool playable;
   final bool planningPlayback;
+  final bool updatingFavorite;
+  final bool updatingPlayed;
+  final bool canMarkPlayed;
   final VoidCallback onPlay;
   final VoidCallback onPlayFromBeginning;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onTogglePlayed;
 
   @override
   Widget build(BuildContext context) {
@@ -258,8 +331,13 @@ class _DetailHero extends StatelessWidget {
                   compact: compact,
                   playable: playable,
                   planningPlayback: planningPlayback,
+                  updatingFavorite: updatingFavorite,
+                  updatingPlayed: updatingPlayed,
+                  canMarkPlayed: canMarkPlayed,
                   onPlay: onPlay,
                   onPlayFromBeginning: onPlayFromBeginning,
+                  onToggleFavorite: onToggleFavorite,
+                  onTogglePlayed: onTogglePlayed,
                 );
                 return Padding(
                   padding: EdgeInsets.fromLTRB(
@@ -356,16 +434,26 @@ class _DetailCopy extends StatelessWidget {
     required this.compact,
     required this.playable,
     required this.planningPlayback,
+    required this.updatingFavorite,
+    required this.updatingPlayed,
+    required this.canMarkPlayed,
     required this.onPlay,
     required this.onPlayFromBeginning,
+    required this.onToggleFavorite,
+    required this.onTogglePlayed,
   });
 
   final MediaItem item;
   final bool compact;
   final bool playable;
   final bool planningPlayback;
+  final bool updatingFavorite;
+  final bool updatingPlayed;
+  final bool canMarkPlayed;
   final VoidCallback onPlay;
   final VoidCallback onPlayFromBeginning;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onTogglePlayed;
 
   @override
   Widget build(BuildContext context) {
@@ -414,6 +502,17 @@ class _DetailCopy extends StatelessWidget {
             onPlayFromBeginning: onPlayFromBeginning,
           ),
         ],
+        const SizedBox(height: 12),
+        _UserStateActions(
+          compact: compact,
+          favorite: item.favorite,
+          played: item.played,
+          canMarkPlayed: canMarkPlayed,
+          updatingFavorite: updatingFavorite,
+          updatingPlayed: updatingPlayed,
+          onToggleFavorite: onToggleFavorite,
+          onTogglePlayed: onTogglePlayed,
+        ),
       ],
     );
   }
@@ -491,6 +590,89 @@ class _PlaybackActions extends StatelessWidget {
       spacing: 12,
       runSpacing: 12,
       children: [primary, if (resume) restart],
+    );
+  }
+}
+
+class _UserStateActions extends StatelessWidget {
+  const _UserStateActions({
+    required this.compact,
+    required this.favorite,
+    required this.played,
+    required this.canMarkPlayed,
+    required this.updatingFavorite,
+    required this.updatingPlayed,
+    required this.onToggleFavorite,
+    required this.onTogglePlayed,
+  });
+
+  final bool compact;
+  final bool favorite;
+  final bool played;
+  final bool canMarkPlayed;
+  final bool updatingFavorite;
+  final bool updatingPlayed;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onTogglePlayed;
+
+  @override
+  Widget build(BuildContext context) {
+    final favoriteButton = OutlinedButton.icon(
+      key: const ValueKey('detail-favorite-button'),
+      onPressed: updatingFavorite ? null : onToggleFavorite,
+      style: OutlinedButton.styleFrom(
+        backgroundColor: favorite
+            ? AppColors.spotlight.withValues(alpha: 0.12)
+            : null,
+        foregroundColor: favorite ? AppColors.spotlight : null,
+      ),
+      icon: updatingFavorite
+          ? const SizedBox.square(
+              dimension: 17,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            ),
+      label: Text(favorite ? '已收藏' : '收藏'),
+    );
+    final playedButton = OutlinedButton.icon(
+      key: const ValueKey('detail-played-button'),
+      onPressed: updatingPlayed ? null : onTogglePlayed,
+      style: OutlinedButton.styleFrom(
+        backgroundColor: played
+            ? AppColors.success.withValues(alpha: 0.12)
+            : null,
+        foregroundColor: played ? AppColors.success : null,
+      ),
+      icon: updatingPlayed
+          ? const SizedBox.square(
+              dimension: 17,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              played
+                  ? Icons.check_circle_rounded
+                  : Icons.check_circle_outline_rounded,
+            ),
+      label: Text(played ? '已观看' : '标为已观看'),
+    );
+
+    if (compact) {
+      return Row(
+        children: [
+          Expanded(child: favoriteButton),
+          if (canMarkPlayed) ...[
+            const SizedBox(width: 10),
+            Expanded(child: playedButton),
+          ],
+        ],
+      );
+    }
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [favoriteButton, if (canMarkPlayed) playedButton],
     );
   }
 }

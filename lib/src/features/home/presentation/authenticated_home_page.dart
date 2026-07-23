@@ -351,11 +351,23 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           horizontalPadding: horizontalPadding,
           compact: compact,
         ),
-      if (!feed.latestMovies.isEmpty || feed.latestMovies.hasError)
+      for (final group in feed.latestMovies.groups)
+        if (!group.section.isEmpty || group.section.hasError)
+          _sectionSliver(
+            title: '${group.library.name} · 最近添加',
+            eyebrow: 'RECENTLY ADDED MOVIES',
+            section: group.section,
+            portrait: true,
+            horizontalPadding: horizontalPadding,
+            compact: compact,
+            railId: 'latest-movies-${group.library.id}',
+            libraryActionLabel: '全部媒体库',
+          ),
+      if (feed.latestMovies.groups.isEmpty && feed.latestMovies.error != null)
         _sectionSliver(
           title: '最近添加的电影',
           eyebrow: 'NEW IN YOUR LIBRARY',
-          section: feed.latestMovies,
+          section: HomeFeedSection(error: feed.latestMovies.error),
           portrait: true,
           horizontalPadding: horizontalPadding,
           compact: compact,
@@ -379,6 +391,8 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     required bool portrait,
     required double horizontalPadding,
     required bool compact,
+    String? railId,
+    String libraryActionLabel = '查看媒体库',
   }) {
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(
@@ -403,6 +417,8 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                     items: section.items,
                     portrait: portrait,
                     compact: compact,
+                    railId: railId ?? title,
+                    libraryActionLabel: libraryActionLabel,
                     onOpen: (item) => unawaited(_openDetails(item)),
                     onOpenLibrary: widget.onOpenLibrary,
                   ),
@@ -910,6 +926,8 @@ class _MediaTrack extends StatelessWidget {
     required this.items,
     required this.portrait,
     required this.compact,
+    required this.railId,
+    required this.libraryActionLabel,
     required this.onOpen,
     required this.onOpenLibrary,
   });
@@ -919,6 +937,8 @@ class _MediaTrack extends StatelessWidget {
   final List<MediaItem> items;
   final bool portrait;
   final bool compact;
+  final String railId;
+  final String libraryActionLabel;
   final ValueChanged<MediaItem> onOpen;
   final VoidCallback onOpenLibrary;
 
@@ -946,12 +966,15 @@ class _MediaTrack extends StatelessWidget {
                 ],
               ),
             ),
-            TextButton(onPressed: onOpenLibrary, child: const Text('查看媒体库')),
+            TextButton(
+              onPressed: onOpenLibrary,
+              child: Text(libraryActionLabel),
+            ),
           ],
         ),
         const SizedBox(height: 14),
         PeekHorizontalRail(
-          railId: 'home-track-$title',
+          railId: 'home-track-$railId',
           semanticLabel: title,
           height: height,
           itemCount: items.length,

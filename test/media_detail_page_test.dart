@@ -61,10 +61,44 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('toggles favorite and watched state from details', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakeDetailService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: MediaDetailPage(account: account, initialItem: item),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('detail-favorite-button')));
+    await tester.pumpAndSettle();
+    expect(service.favoriteValue, isTrue);
+    expect(find.widgetWithText(OutlinedButton, '已收藏'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('detail-played-button')));
+    await tester.pumpAndSettle();
+    expect(service.playedValue, isTrue);
+    expect(find.widgetWithText(OutlinedButton, '已观看'), findsOneWidget);
+  });
 }
 
 class _FakeDetailService extends MediaLibraryService {
   _FakeDetailService() : super(Dio());
+
+  bool? favoriteValue;
+  bool? playedValue;
 
   @override
   Future<MediaItem> getItem(
@@ -103,5 +137,23 @@ class _FakeDetailService extends MediaLibraryService {
         productionYear: 2025,
       ),
     ];
+  }
+
+  @override
+  Future<void> setFavorite(
+    AuthenticatedServer account,
+    String itemId, {
+    required bool favorite,
+  }) async {
+    favoriteValue = favorite;
+  }
+
+  @override
+  Future<void> setPlayed(
+    AuthenticatedServer account,
+    String itemId, {
+    required bool played,
+  }) async {
+    playedValue = played;
   }
 }

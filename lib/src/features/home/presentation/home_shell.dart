@@ -6,6 +6,7 @@ import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/network/session_expiry_coordinator.dart';
+import 'package:embyplayer/src/features/favorites/presentation/favorites_page.dart';
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
 import 'package:embyplayer/src/features/home/presentation/authenticated_home_page.dart';
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
@@ -28,9 +29,11 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> {
   final _mediaHomePageKey = GlobalKey<AuthenticatedHomePageState>();
   final _libraryPageKey = GlobalKey<MediaLibraryPageState>();
+  final _favoritesPageKey = GlobalKey<FavoritesPageState>();
   final _searchPageKey = GlobalKey<MediaSearchPageState>();
   final _visitedDestinations = <int>{0};
   int _selectedIndex = 0;
+  bool _sidebarCollapsed = false;
   DiscoveredServer? _discoveredServer;
   AuthenticatedServer? _authenticatedServer;
   ServerAccountState _accountState = const ServerAccountState();
@@ -48,6 +51,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       '媒体库',
       Icons.video_library_outlined,
       Icons.video_library_rounded,
+    ),
+    _AppDestination(
+      '收藏',
+      Icons.favorite_border_rounded,
+      Icons.favorite_rounded,
     ),
     _AppDestination('搜索', Icons.search_rounded, Icons.search_rounded),
     _AppDestination('设置', Icons.tune_outlined, Icons.tune_rounded),
@@ -280,7 +288,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   void _selectDestination(int index) {
-    if (index == 2) {
+    if (index == 3) {
       _openSearch();
       return;
     }
@@ -293,6 +301,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         case 1:
           _libraryPageKey.currentState?.scrollToTop();
           return;
+        case 2:
+          _favoritesPageKey.currentState?.scrollToTop();
+          return;
         default:
           return;
       }
@@ -304,15 +315,19 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   void _openSearch() {
-    if (_selectedIndex != 2) {
+    if (_selectedIndex != 3) {
       setState(() {
-        _visitedDestinations.add(2);
-        _selectedIndex = 2;
+        _visitedDestinations.add(3);
+        _selectedIndex = 3;
       });
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchPageKey.currentState?.focusSearch();
     });
+  }
+
+  void _toggleSidebar() {
+    setState(() => _sidebarCollapsed = !_sidebarCollapsed);
   }
 
   Future<void> _handleSessionExpired([SessionExpiryEvent? event]) async {
@@ -360,6 +375,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): () {
           _openSearch();
         },
+        const SingleActivator(LogicalKeyboardKey.keyB, control: true): () {
+          _toggleSidebar();
+        },
         const SingleActivator(LogicalKeyboardKey.digit1, control: true): () {
           _selectDestination(0);
         },
@@ -372,13 +390,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         const SingleActivator(LogicalKeyboardKey.digit4, control: true): () {
           _selectDestination(3);
         },
+        const SingleActivator(LogicalKeyboardKey.digit5, control: true): () {
+          _selectDestination(4);
+        },
       },
       child: Focus(
         autofocus: true,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final showRail = constraints.maxWidth >= 720;
-            final extendedRail = constraints.maxWidth >= 1040;
+            final canExtendRail = constraints.maxWidth >= 1040;
+            final extendedRail = canExtendRail && !_sidebarCollapsed;
             final compactContent = constraints.maxWidth < 900;
 
             return Scaffold(
@@ -392,6 +414,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                           destinations: _destinations,
                           selectedIndex: _selectedIndex,
                           onSelected: _selectDestination,
+                          canToggle: canExtendRail,
+                          onToggle: _toggleSidebar,
                         ),
                       Expanded(
                         child: Column(
@@ -402,7 +426,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                               server: _discoveredServer,
                               account: _authenticatedServer,
                               onSearch: _openSearch,
-                              onAccount: () => _selectDestination(3),
+                              onAccount: () => _selectDestination(4),
                             ),
                             Expanded(
                               child: IndexedStack(
@@ -442,6 +466,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                   else
                                     const SizedBox.shrink(),
                                   if (_visitedDestinations.contains(2))
+                                    FavoritesPage(
+                                      key: _favoritesPageKey,
+                                      account: _authenticatedServer,
+                                      onGoHome: () => _selectDestination(0),
+                                      onOpenLibrary: () =>
+                                          _selectDestination(1),
+                                      onSessionExpired: _handleSessionExpired,
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
+                                  if (_visitedDestinations.contains(3))
                                     MediaSearchPage(
                                       key: _searchPageKey,
                                       account: _authenticatedServer,
@@ -450,7 +485,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                     )
                                   else
                                     const SizedBox.shrink(),
-                                  if (_visitedDestinations.contains(3))
+                                  if (_visitedDestinations.contains(4))
                                     ServerAccountsPage(
                                       key: const ValueKey('server-accounts'),
                                       state: _accountState,
@@ -522,44 +557,151 @@ class _AppRail extends StatelessWidget {
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
+    required this.canToggle,
+    required this.onToggle,
   });
 
   final bool extended;
   final List<_AppDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+  final bool canToggle;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
-    return GlassSurface(
-      radius: 0,
-      blur: 24,
-      tint: AppColors.glassSurface,
-      child: SizedBox(
-        width: extended ? 224 : 80,
-        child: NavigationRail(
-          extended: extended,
-          minWidth: 80,
-          minExtendedWidth: 224,
-          selectedIndex: selectedIndex,
-          onDestinationSelected: onSelected,
-          labelType: extended
-              ? NavigationRailLabelType.none
-              : NavigationRailLabelType.all,
-          groupAlignment: -0.72,
-          leading: _RailBrand(extended: extended),
-          destinations: [
-            for (final destination in destinations)
-              NavigationRailDestination(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                icon: Icon(destination.icon),
-                selectedIcon: _SelectedRailIcon(icon: destination.selectedIcon),
-                label: Text(destination.label),
-              ),
-          ],
+    final targetWidth = extended ? 224.0 : 80.0;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: targetWidth, end: targetWidth),
+      duration: AppMotion.responsive(context, AppMotion.standard),
+      curve: Curves.easeOutCubic,
+      builder: (context, width, _) {
+        final showLabels = extended && width >= 180;
+        return SizedBox(
+          width: width,
+          child: GlassSurface(
+            radius: 0,
+            blur: 24,
+            tint: AppColors.glassSurface,
+            child: Column(
+              children: [
+                _RailBrand(extended: showLabels),
+                _RailToggle(
+                  extended: showLabels,
+                  enabled: canToggle,
+                  onPressed: onToggle,
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    children: [
+                      for (var index = 0; index < destinations.length; index++)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _RailDestination(
+                            destination: destinations[index],
+                            extended: showLabels,
+                            selected: index == selectedIndex,
+                            onTap: () => onSelected(index),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RailDestination extends StatelessWidget {
+  const _RailDestination({
+    required this.destination,
+    required this.extended,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _AppDestination destination;
+  final bool extended;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? AppColors.spotlight : AppColors.textTertiary;
+    final item = Semantics(
+      button: true,
+      selected: selected,
+      label: destination.label,
+      child: Material(
+        key: ValueKey('sidebar-destination-${destination.label}'),
+        color: selected ? AppColors.glassSelected : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            height: 52,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: extended ? 48 : 56,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        selected ? destination.selectedIcon : destination.icon,
+                        color: foreground,
+                        size: selected ? 23 : 22,
+                      ),
+                      if (selected)
+                        Positioned(
+                          left: 0,
+                          child: Container(
+                            width: 3,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: AppColors.spotlight,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (extended) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      destination.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      style: TextStyle(
+                        color: selected
+                            ? AppColors.textPrimary
+                            : AppColors.textTertiary,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
+    return extended ? item : Tooltip(message: destination.label, child: item);
   }
 }
 
@@ -571,9 +713,8 @@ class _RailBrand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(extended ? 18 : 16, 18, 16, 32),
+      padding: EdgeInsets.fromLTRB(extended ? 18 : 16, 18, 16, 12),
       child: SizedBox(
-        width: extended ? 190 : 48,
         height: 56,
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -595,6 +736,8 @@ class _RailBrand extends StatelessWidget {
                     ),
                     Text(
                       'PRIVATE CINEMA',
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
                       style: TextStyle(
                         color: AppColors.textTertiary,
                         fontFamily: 'Cascadia Mono',
@@ -643,30 +786,51 @@ class _BrandMark extends StatelessWidget {
   }
 }
 
-class _SelectedRailIcon extends StatelessWidget {
-  const _SelectedRailIcon({required this.icon});
+class _RailToggle extends StatelessWidget {
+  const _RailToggle({
+    required this.extended,
+    required this.enabled,
+    required this.onPressed,
+  });
 
-  final IconData icon;
+  final bool extended;
+  final bool enabled;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.center,
-      children: [
-        Icon(icon),
-        Positioned(
-          left: -18,
-          child: Container(
-            width: 3,
-            height: 22,
-            decoration: BoxDecoration(
-              color: AppColors.spotlight,
-              borderRadius: BorderRadius.circular(99),
+    final tooltip = enabled
+        ? extended
+              ? '收起侧栏（Ctrl+B）'
+              : '展开侧栏（Ctrl+B）'
+        : '窗口加宽后可展开侧栏';
+    final button = IconButton(
+      key: const ValueKey('sidebar-toggle'),
+      onPressed: enabled ? onPressed : null,
+      tooltip: tooltip,
+      icon: Icon(
+        extended
+            ? Icons.keyboard_double_arrow_left_rounded
+            : Icons.keyboard_double_arrow_right_rounded,
+      ),
+    );
+    if (!extended) return button;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          button,
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              '收起侧栏',
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

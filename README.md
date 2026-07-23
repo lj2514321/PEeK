@@ -10,14 +10,16 @@
 - Jellyfin/Emby 公共信息接口探测
 - Jellyfin/Emby 用户名密码登录与 Windows Token 安全存储
 - 多服务器账户持久化、快速切换、退出登录与 401/403 失效恢复
-- 服务器与登录持久化、媒体库分页浏览和本地缓存
+- 服务器与登录持久化、媒体库分页浏览、本地缓存、服务端排序/筛选和三档海报密度
+- Jellyfin/Emby 收藏与已观看状态同步，支持独立收藏页、详情页快捷切换、媒体库批量操作和撤销
 - 海报、背景图和人物头像的统一磁盘缓存与安静占位图
-- 登录后每日自动更新的推荐轮播、继续观看、最近电影和最新剧集
-- 主导航保留媒体库层级、滚动位置与搜索现场，支持 Ctrl+1–4 和 Ctrl+K 快捷访问
+- 登录后每日自动更新的推荐轮播、继续观看、按电影媒体库分组的最近添加和最新剧集
+- 可收纳桌面侧栏与五项响应式主导航，保留页面现场并支持 Ctrl+1–5、Ctrl+B 和 Ctrl+K
 - 电影、剧集、演员详情、相似推荐和全局搜索；内容轨支持触控横滑与桌面方向控制
 - STRM、原码、直传与转码播放计划及播放进度上报
 - 可持久化的最大串流码率与解码方式设置，支持播放中切换画质上限并失败回滚
 - `media_kit/libmpv` 影院控制层、快捷键、全屏、倍速、音字幕轨道与章节导航
+- Windows 系统媒体面板、硬件媒体键、队列切换、时间轴跳转与 PEeK 音频会话音量联动
 - 可即时预览并持久化的字幕风格、字号、位置和音画延迟设置
 - 按需播放诊断面板、实际硬解/编码/码率/缓存/丢帧统计和可轮转的脱敏日志
 - 剧集队列、选集、上一集/下一集和可取消的片尾自动连播
@@ -27,7 +29,7 @@
 
 下一阶段将继续完善编解码器、字幕、HDR 与弱网兼容性验证。详细边界见 [架构说明](docs/ARCHITECTURE.md)、[开发路线](docs/ROADMAP.md) 和 [播放验证矩阵](docs/PLAYBACK_TEST_MATRIX.md)。
 
-视觉与交互实现遵循 [PEeK 设计系统](design-system/default/MASTER.md)，首页状态与响应式规则见 [首页规范](design-system/default/pages/home.md)。
+视觉与交互实现遵循 [PEeK 设计系统](design-system/default/MASTER.md)，页面规则见 [首页规范](design-system/default/pages/home.md)、[媒体库规范](design-system/default/pages/library.md) 与 [收藏页规范](design-system/default/pages/favorites.md)。
 
 ## 本地运行
 

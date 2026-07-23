@@ -41,6 +41,7 @@ void main() {
                       'Id': 'movies-id',
                       'Name': '电影',
                       'Type': 'CollectionFolder',
+                      'CollectionType': 'movies',
                       'ImageTags': {'Primary': 'image-tag'},
                     },
                   ],
@@ -58,6 +59,7 @@ void main() {
     expect(libraries, hasLength(1));
     expect(libraries.single.name, '电影');
     expect(libraries.single.kind, MediaItemKind.folder);
+    expect(libraries.single.collectionType, 'movies');
     expect(libraries.single.imageUri?.path, '/Items/movies-id/Images/Primary');
     expect(libraries.single.imageHeaders['X-Emby-Token'], 'secret-token');
   });
@@ -133,6 +135,7 @@ void main() {
                       'ImageTags': {'Primary': 'poster-tag'},
                       'UserData': {
                         'Played': false,
+                        'IsFavorite': true,
                         'PlaybackPositionTicks': 300000000,
                       },
                     },
@@ -160,6 +163,159 @@ void main() {
     expect(page.items.single.productionYear, 2026);
     expect(page.items.single.runTime, const Duration(minutes: 1));
     expect(page.items.single.resumePosition, const Duration(seconds: 30));
+    expect(page.items.single.favorite, isTrue);
+    expect(request?.uri.queryParameters['EnableUserData'], 'true');
+  });
+
+  test('passes sorting and filtering through the paged item query', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {'Items': [], 'TotalRecordCount': 0},
+              ),
+            );
+          },
+        ),
+      );
+
+    await MediaLibraryService(dio).getItems(
+      account,
+      parentId: 'movies-id',
+      sort: MediaLibrarySort.ratingDescending,
+      kind: MediaLibraryKindFilter.movies,
+      status: MediaLibraryStatusFilter.favorites,
+      productionYear: 2025,
+    );
+
+    expect(request?.uri.queryParameters['SortBy'], 'CommunityRating,SortName');
+    expect(request?.uri.queryParameters['SortOrder'], 'Descending');
+    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Movie');
+    expect(request?.uri.queryParameters['Filters'], 'IsFavorite');
+    expect(request?.uri.queryParameters['Years'], '2025');
+  });
+
+  test('loads global favorites across all media libraries', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {
+                  'TotalRecordCount': 1,
+                  'Items': [
+                    {
+                      'Id': 'favorite-id',
+                      'Name': '收藏影片',
+                      'Type': 'Movie',
+                      'UserData': {'IsFavorite': true},
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final page = await MediaLibraryService(
+      dio,
+    ).getFavoriteItems(account, startIndex: 60, limit: 30);
+
+    expect(request?.uri.path, '/Users/user-id/Items');
+    expect(request?.uri.queryParameters['ParentId'], isNull);
+    expect(request?.uri.queryParameters['Recursive'], 'true');
+    expect(request?.uri.queryParameters['Filters'], 'IsFavorite');
+    expect(
+      request?.uri.queryParameters['IncludeItemTypes'],
+      'Movie,Series,Episode,Video,Audio',
+    );
+    expect(request?.uri.queryParameters['EnableUserData'], 'true');
+    expect(request?.uri.queryParameters['StartIndex'], '60');
+    expect(request?.uri.queryParameters['Limit'], '30');
+    expect(page.items.single.favorite, isTrue);
+    expect(page.nextStartIndex, 61);
+  });
+
+  test(
+    'updates favorite and played state through user item endpoints',
+    () async {
+      final requests = <RequestOptions>[];
+      final cache = _TrackingCacheStore();
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requests.add(options);
+              handler.resolve(
+                Response<void>(requestOptions: options, statusCode: 204),
+              );
+            },
+          ),
+        );
+      final service = MediaLibraryService(dio, cache);
+
+      await service.setFavorite(account, 'movie-id', favorite: true);
+      await service.setFavorite(account, 'movie-id', favorite: false);
+      await service.setPlayed(account, 'movie-id', played: true);
+      await service.setPlayed(account, 'movie-id', played: false);
+
+      expect(requests.map((request) => request.method), [
+        'POST',
+        'DELETE',
+        'POST',
+        'DELETE',
+      ]);
+      expect(requests.map((request) => request.uri.path), [
+        '/Users/user-id/FavoriteItems/movie-id',
+        '/Users/user-id/FavoriteItems/movie-id',
+        '/Users/user-id/PlayedItems/movie-id',
+        '/Users/user-id/PlayedItems/movie-id',
+      ]);
+      expect(
+        requests.every(
+          (request) => request.headers['X-Emby-Token'] == 'secret-token',
+        ),
+        isTrue,
+      );
+      expect(cache.clearCount, 4);
+    },
+  );
+
+  test('clears media cache once after a batch user-state update', () async {
+    final requests = <RequestOptions>[];
+    final cache = _TrackingCacheStore();
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            requests.add(options);
+            handler.resolve(
+              Response<void>(requestOptions: options, statusCode: 204),
+            );
+          },
+        ),
+      );
+
+    await MediaLibraryService(dio, cache).setFavoriteForItems(account, [
+      'movie-1',
+      'movie-2',
+      'movie-2',
+    ], favorite: true);
+
+    expect(requests, hasLength(2));
+    expect(cache.clearCount, 1);
   });
 
   test('loads rich item details including backdrop metadata', () async {
@@ -513,11 +669,14 @@ void main() {
         ),
       );
 
-    final items = await MediaLibraryService(dio).getLatestMovies(account);
+    final items = await MediaLibraryService(
+      dio,
+    ).getLatestMovies(account, parentId: 'movies-id');
 
     expect(request?.uri.path, '/Users/user-id/Items/Latest');
     expect(request?.uri.queryParameters['IncludeItemTypes'], 'Movie');
     expect(request?.uri.queryParameters['GroupItems'], 'false');
+    expect(request?.uri.queryParameters['ParentId'], 'movies-id');
     expect(items.single.id, 'latest-id');
   });
 
@@ -656,4 +815,19 @@ void main() {
     );
     expect(items.single.id, 'random-id');
   });
+}
+
+class _TrackingCacheStore implements MediaCacheStore {
+  int clearCount = 0;
+
+  @override
+  Future<void> clear() async {
+    clearCount += 1;
+  }
+
+  @override
+  Future<MediaCacheEntry?> read(String key, {Duration? maxAge}) async => null;
+
+  @override
+  Future<void> write(String key, Map<String, dynamic> payload) async {}
 }

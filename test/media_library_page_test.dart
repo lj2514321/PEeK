@@ -92,6 +92,107 @@ void main() {
     expect(find.text('电影 61'), findsOneWidget);
   });
 
+  testWidgets('applies sorting, filters, year and grid density', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakeLibraryService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: MediaLibraryPage(account: account, onGoHome: () {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final initialGrid = tester.widget<GridView>(find.byType(GridView));
+    final initialColumns =
+        (initialGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+            .crossAxisCount;
+    await tester.tap(find.byTooltip('紧凑视图'));
+    await tester.pump();
+    final compactGrid = tester.widget<GridView>(find.byType(GridView));
+    expect(
+      (compactGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+          .crossAxisCount,
+      initialColumns + 1,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('library-sort-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('评分最高').last);
+    await tester.pumpAndSettle();
+    expect(service.requestedSorts.last, MediaLibrarySort.ratingDescending);
+
+    await tester.tap(find.byKey(const ValueKey('library-filter-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, '电影'));
+    await tester.tap(find.widgetWithText(FilterChip, '已收藏'));
+    await tester.enterText(
+      find.byKey(const ValueKey('library-year-filter')),
+      '2025',
+    );
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+
+    expect(service.requestedKinds.last, MediaLibraryKindFilter.movies);
+    expect(service.requestedStatuses.last, MediaLibraryStatusFilter.favorites);
+    expect(service.requestedYears.last, 2025);
+    expect(find.text('筛选 · 3'), findsOneWidget);
+  });
+
+  testWidgets('supports favorite and played bulk actions', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakeLibraryService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: MediaLibraryPage(account: account, onGoHome: () {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('library-select-button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('media-card-artwork-item-0')));
+    await tester.pump();
+    expect(find.text('已选择 1 项'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('bulk-favorite-button')));
+    await tester.pumpAndSettle();
+
+    expect(service.favoriteIds, {'item-0'});
+    expect(service.favoriteValue, isTrue);
+    expect(find.text('已收藏 1 项'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('library-select-button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('media-card-artwork-item-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('bulk-played-button')));
+    await tester.pumpAndSettle();
+
+    expect(service.playedIds, {'item-1'});
+    expect(service.playedValue, isTrue);
+  });
+
   testWidgets('opens nested series content and shows a breadcrumb', (
     tester,
   ) async {
@@ -131,6 +232,14 @@ class _FakeLibraryService extends MediaLibraryService {
 
   final requestedStartIndexes = <int>[];
   final requestedParentIds = <String>[];
+  final requestedSorts = <MediaLibrarySort>[];
+  final requestedKinds = <MediaLibraryKindFilter>[];
+  final requestedStatuses = <MediaLibraryStatusFilter>[];
+  final requestedYears = <int?>[];
+  Set<String> favoriteIds = {};
+  bool? favoriteValue;
+  Set<String> playedIds = {};
+  bool? playedValue;
 
   @override
   Future<List<MediaItem>> getLibraries(
@@ -153,10 +262,18 @@ class _FakeLibraryService extends MediaLibraryService {
     required String parentId,
     int startIndex = 0,
     int limit = 60,
+    MediaLibrarySort sort = MediaLibrarySort.nameAscending,
+    MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
+    MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    int? productionYear,
     bool forceRefresh = false,
   }) async {
     requestedStartIndexes.add(startIndex);
     requestedParentIds.add(parentId);
+    requestedSorts.add(sort);
+    requestedKinds.add(kind);
+    requestedStatuses.add(status);
+    requestedYears.add(productionYear);
     final allItems = parentId == 'series-id'
         ? const [
             MediaItem(
@@ -190,5 +307,25 @@ class _FakeLibraryService extends MediaLibraryService {
       totalRecordCount: allItems.length,
       nextStartIndex: end,
     );
+  }
+
+  @override
+  Future<void> setFavoriteForItems(
+    AuthenticatedServer account,
+    Iterable<String> itemIds, {
+    required bool favorite,
+  }) async {
+    favoriteIds = itemIds.toSet();
+    favoriteValue = favorite;
+  }
+
+  @override
+  Future<void> setPlayedForItems(
+    AuthenticatedServer account,
+    Iterable<String> itemIds, {
+    required bool played,
+  }) async {
+    playedIds = itemIds.toSet();
+    playedValue = played;
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/features/home/data/home_feed_service.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -43,7 +45,7 @@ void main() {
 
     expect(feed.heroItem?.id, 'recommendation-id');
     expect(feed.dailyRecommendations.items.single.id, 'recommendation-id');
-    expect(feed.latestMovies.items.single.id, 'movie-id');
+    expect(feed.latestMovies.groups.single.section.items.single.id, 'movie-id');
     expect(feed.latestEpisodes.items.single.id, 'episode-id');
     expect(feed.hasAnyError, isFalse);
   });
@@ -61,9 +63,95 @@ void main() {
     final feed = await service.load(account);
 
     expect(feed.heroItem?.id, 'resume-id');
-    expect(feed.latestMovies.items, isEmpty);
-    expect(feed.latestMovies.error, '电影分区失败');
+    expect(feed.latestMovies.groups.single.section.items, isEmpty);
+    expect(feed.latestMovies.groups.single.section.error, '电影分区失败');
     expect(feed.hasAnyError, isTrue);
+  });
+
+  test(
+    'groups latest movies by movie library and skips TV libraries',
+    () async {
+      final library = _FakeLibraryService(
+        libraries: const [
+          MediaItem(
+            id: 'movies-main',
+            name: '电影',
+            kind: MediaItemKind.folder,
+            collectionType: 'movies',
+          ),
+          MediaItem(
+            id: 'movies-docs',
+            name: '纪录片',
+            kind: MediaItemKind.folder,
+            collectionType: 'mixed',
+          ),
+          MediaItem(
+            id: 'shows',
+            name: '剧集',
+            kind: MediaItemKind.folder,
+            collectionType: 'tvshows',
+          ),
+        ],
+        latestMoviesByLibrary: const {
+          'movies-main': [
+            MediaItem(
+              id: 'movie-main',
+              name: '主电影库新片',
+              kind: MediaItemKind.movie,
+            ),
+          ],
+          'movies-docs': [
+            MediaItem(
+              id: 'movie-doc',
+              name: '纪录片新片',
+              kind: MediaItemKind.movie,
+            ),
+          ],
+        },
+      );
+
+      final feed = await HomeFeedService(library).load(account);
+
+      expect(feed.latestMovies.groups.map((group) => group.library.name), [
+        '电影',
+        '纪录片',
+      ]);
+      expect(library.latestMovieParentIds, ['movies-main', 'movies-docs']);
+      expect(
+        feed.latestMovies.groups.last.section.items.single.id,
+        'movie-doc',
+      );
+    },
+  );
+
+  test('limits latest movie library requests to four at a time', () async {
+    final release = Completer<void>();
+    final library = _FakeLibraryService(
+      libraries: List.generate(
+        6,
+        (index) => MediaItem(
+          id: 'movies-$index',
+          name: '电影库 $index',
+          kind: MediaItemKind.folder,
+          collectionType: 'movies',
+        ),
+      ),
+      latestMoviesRelease: release.future,
+    );
+
+    final load = HomeFeedService(library).load(account);
+    for (var turn = 0; turn < 5; turn++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(library.activeLatestMovieRequests, 4);
+    expect(library.maximumLatestMovieConcurrency, 4);
+
+    release.complete();
+    await load;
+
+    expect(library.latestMovieRequests, 6);
+    expect(library.maximumLatestMovieConcurrency, 4);
   });
 
   test('propagates an expired session instead of showing partial data', () {
@@ -175,17 +263,30 @@ void main() {
 
 class _FakeLibraryService extends MediaLibraryService {
   _FakeLibraryService({
+    this.libraries = const [
+      MediaItem(
+        id: 'movies',
+        name: '电影',
+        kind: MediaItemKind.folder,
+        collectionType: 'movies',
+      ),
+    ],
     this.recommendations = const [],
     this.resumeItems = const [],
     this.latestMovies = const [],
+    this.latestMoviesByLibrary = const {},
+    this.latestMoviesRelease,
     this.latestEpisodes = const [],
     this.resumeItemsError,
     this.latestMoviesError,
   }) : super(Dio());
 
+  final List<MediaItem> libraries;
   List<MediaItem> recommendations;
   final List<MediaItem> resumeItems;
   final List<MediaItem> latestMovies;
+  final Map<String, List<MediaItem>> latestMoviesByLibrary;
+  final Future<void>? latestMoviesRelease;
   final List<MediaItem> latestEpisodes;
   final MediaLibraryException? resumeItemsError;
   final MediaLibraryException? latestMoviesError;
@@ -193,6 +294,9 @@ class _FakeLibraryService extends MediaLibraryService {
   int resumeRequests = 0;
   int latestMovieRequests = 0;
   int latestEpisodeRequests = 0;
+  final latestMovieParentIds = <String?>[];
+  int activeLatestMovieRequests = 0;
+  int maximumLatestMovieConcurrency = 0;
   bool? lastResumeForceRefresh;
 
   void resetRequestCounts() {
@@ -200,7 +304,16 @@ class _FakeLibraryService extends MediaLibraryService {
     resumeRequests = 0;
     latestMovieRequests = 0;
     latestEpisodeRequests = 0;
+    latestMovieParentIds.clear();
     lastResumeForceRefresh = null;
+  }
+
+  @override
+  Future<List<MediaItem>> getLibraries(
+    AuthenticatedServer account, {
+    bool forceRefresh = false,
+  }) async {
+    return libraries;
   }
 
   @override
@@ -229,11 +342,22 @@ class _FakeLibraryService extends MediaLibraryService {
   Future<List<MediaItem>> getLatestMovies(
     AuthenticatedServer account, {
     int limit = 18,
+    String? parentId,
     bool forceRefresh = false,
   }) async {
     latestMovieRequests += 1;
-    if (latestMoviesError != null) throw latestMoviesError!;
-    return latestMovies;
+    latestMovieParentIds.add(parentId);
+    activeLatestMovieRequests += 1;
+    if (activeLatestMovieRequests > maximumLatestMovieConcurrency) {
+      maximumLatestMovieConcurrency = activeLatestMovieRequests;
+    }
+    try {
+      if (latestMoviesRelease != null) await latestMoviesRelease;
+      if (latestMoviesError != null) throw latestMoviesError!;
+      return latestMoviesByLibrary[parentId] ?? latestMovies;
+    } finally {
+      activeLatestMovieRequests -= 1;
+    }
   }
 
   @override

@@ -32,7 +32,9 @@ class MediaItem {
     this.parentIndexNumber,
     this.parentId,
     this.seriesId,
+    this.collectionType,
     this.played = false,
+    this.favorite = false,
     this.resumePosition = Duration.zero,
   });
 
@@ -57,8 +59,40 @@ class MediaItem {
   final int? parentIndexNumber;
   final String? parentId;
   final String? seriesId;
+  final String? collectionType;
   final bool played;
+  final bool favorite;
   final Duration resumePosition;
+
+  MediaItem copyWith({bool? played, bool? favorite, Duration? resumePosition}) {
+    return MediaItem(
+      id: id,
+      name: name,
+      kind: kind,
+      overview: overview,
+      productionYear: productionYear,
+      runTime: runTime,
+      imageTag: imageTag,
+      imageUri: imageUri,
+      backdropUri: backdropUri,
+      imageHeaders: imageHeaders,
+      chapters: chapters,
+      people: people,
+      genres: genres,
+      communityRating: communityRating,
+      officialRating: officialRating,
+      tagline: tagline,
+      seriesName: seriesName,
+      indexNumber: indexNumber,
+      parentIndexNumber: parentIndexNumber,
+      parentId: parentId,
+      seriesId: seriesId,
+      collectionType: collectionType,
+      played: played ?? this.played,
+      favorite: favorite ?? this.favorite,
+      resumePosition: resumePosition ?? this.resumePosition,
+    );
+  }
 }
 
 class MediaChapter {

@@ -15,6 +15,29 @@ class HomeFeedSection {
   bool get hasError => error != null;
 }
 
+class HomeFeedLibrarySection {
+  const HomeFeedLibrarySection({required this.library, required this.section});
+
+  final MediaItem library;
+  final HomeFeedSection section;
+}
+
+class HomeFeedLibrarySections {
+  const HomeFeedLibrarySections({
+    this.groups = const [],
+    this.error,
+    this.authenticationExpired = false,
+  });
+
+  final List<HomeFeedLibrarySection> groups;
+  final String? error;
+  final bool authenticationExpired;
+
+  bool get isEmpty => groups.every((group) => group.section.isEmpty);
+  bool get hasError =>
+      error != null || groups.any((group) => group.section.hasError);
+}
+
 class HomeFeed {
   const HomeFeed({
     this.dailyRecommendations = const HomeFeedSection(),
@@ -25,13 +48,13 @@ class HomeFeed {
 
   final HomeFeedSection dailyRecommendations;
   final HomeFeedSection continueWatching;
-  final HomeFeedSection latestMovies;
+  final HomeFeedLibrarySections latestMovies;
   final HomeFeedSection latestEpisodes;
 
   List<HomeFeedSection> get sections => [
     dailyRecommendations,
     continueWatching,
-    latestMovies,
+    for (final group in latestMovies.groups) group.section,
     latestEpisodes,
   ];
 
@@ -42,7 +65,9 @@ class HomeFeed {
     if (continueWatching.items.isNotEmpty) {
       return continueWatching.items.first;
     }
-    if (latestMovies.items.isNotEmpty) return latestMovies.items.first;
+    for (final group in latestMovies.groups) {
+      if (group.section.items.isNotEmpty) return group.section.items.first;
+    }
     if (latestEpisodes.items.isNotEmpty) return latestEpisodes.items.first;
     return null;
   }
@@ -56,5 +81,6 @@ class HomeFeed {
   }
 
   bool get isEmpty => sections.every((section) => section.isEmpty);
-  bool get hasAnyError => sections.any((section) => section.hasError);
+  bool get hasAnyError =>
+      latestMovies.hasError || sections.any((section) => section.hasError);
 }

@@ -34,8 +34,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('hero-next')), findsOneWidget);
-      await _scrollTo(tester, '最近添加的电影');
-      expect(find.text('最近添加的电影'), findsOneWidget);
+      await _scrollTo(tester, '电影 · 最近添加');
+      expect(find.text('电影 · 最近添加'), findsOneWidget);
+      await _scrollTo(tester, '纪录片 · 最近添加');
+      expect(find.text('纪录片 · 最近添加'), findsOneWidget);
       await _scrollTo(tester, '最新剧集');
       expect(find.text('最新剧集'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -131,7 +133,7 @@ void main() {
 
     expect(service.recommendationRequests, 2);
     expect(service.resumeRequests, 1);
-    expect(service.latestMovieRequests, 1);
+    expect(service.latestMovieRequests, 2);
     expect(service.latestEpisodeRequests, 1);
     expect(find.text('第二天推荐'), findsOneWidget);
   });
@@ -147,8 +149,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await _scrollTo(tester, '最近添加的电影：电影分区失败');
-    expect(find.text('最近添加的电影：电影分区失败'), findsOneWidget);
+    await _scrollTo(tester, '电影 · 最近添加：电影分区失败');
+    expect(find.text('电影 · 最近添加：电影分区失败'), findsOneWidget);
     await _scrollTo(tester, '最新剧集');
     expect(find.text('最新剧集'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -249,6 +251,33 @@ class _HomeLibraryService extends MediaLibraryService {
   }
 
   @override
+  Future<List<MediaItem>> getLibraries(
+    AuthenticatedServer account, {
+    bool forceRefresh = false,
+  }) async {
+    return const [
+      MediaItem(
+        id: 'movies',
+        name: '电影',
+        kind: MediaItemKind.folder,
+        collectionType: 'movies',
+      ),
+      MediaItem(
+        id: 'documentaries',
+        name: '纪录片',
+        kind: MediaItemKind.folder,
+        collectionType: 'movies',
+      ),
+      MediaItem(
+        id: 'shows',
+        name: '剧集',
+        kind: MediaItemKind.folder,
+        collectionType: 'tvshows',
+      ),
+    ];
+  }
+
+  @override
   Future<List<MediaItem>> getRecommendations(
     AuthenticatedServer account, {
     int limit = 6,
@@ -292,11 +321,24 @@ class _HomeLibraryService extends MediaLibraryService {
   Future<List<MediaItem>> getLatestMovies(
     AuthenticatedServer account, {
     int limit = 18,
+    String? parentId,
     bool forceRefresh = false,
   }) async {
     await _wait();
     latestMovieRequests += 1;
-    if (latestMoviesError != null) throw latestMoviesError!;
+    if (latestMoviesError != null && parentId == 'movies') {
+      throw latestMoviesError!;
+    }
+    if (parentId == 'documentaries') {
+      return const [
+        MediaItem(
+          id: 'documentary-1',
+          name: '最新纪录片',
+          kind: MediaItemKind.movie,
+          productionYear: 2026,
+        ),
+      ];
+    }
     return const [
       MediaItem(
         id: 'movie-1',

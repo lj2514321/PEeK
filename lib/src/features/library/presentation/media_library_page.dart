@@ -26,6 +26,8 @@ class MediaLibraryPage extends ConsumerStatefulWidget {
   ConsumerState<MediaLibraryPage> createState() => MediaLibraryPageState();
 }
 
+enum MediaGridDensity { spacious, standard, compact }
+
 class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   static const _pageSize = 60;
 
@@ -42,6 +44,14 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   String? _error;
   String? _paginationError;
   int _requestGeneration = 0;
+  MediaLibrarySort _sort = MediaLibrarySort.nameAscending;
+  MediaLibraryKindFilter _kindFilter = MediaLibraryKindFilter.all;
+  MediaLibraryStatusFilter _statusFilter = MediaLibraryStatusFilter.all;
+  int? _productionYear;
+  MediaGridDensity _density = MediaGridDensity.standard;
+  Set<String> _selectedIds = {};
+  bool _selectionMode = false;
+  String? _bulkActionLabel;
 
   @override
   void initState() {
@@ -106,6 +116,10 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               account,
               parentId: selected.id,
               limit: _pageSize,
+              sort: _sort,
+              kind: _kindFilter,
+              status: _statusFilter,
+              productionYear: _productionYear,
               forceRefresh: forceRefresh,
             );
       if (!mounted || generation != _requestGeneration) return;
@@ -116,6 +130,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         _items = page?.items ?? const [];
         _totalItemCount = page?.totalRecordCount ?? 0;
         _nextStartIndex = page?.nextStartIndex ?? 0;
+        _selectionMode = false;
+        _selectedIds = {};
       });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
@@ -173,6 +189,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       _loadingMore = false;
       _error = null;
       _paginationError = null;
+      _selectionMode = false;
+      _selectedIds = {};
     });
 
     try {
@@ -182,6 +200,10 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             account,
             parentId: node.id,
             limit: _pageSize,
+            sort: _sort,
+            kind: _kindFilter,
+            status: _statusFilter,
+            productionYear: _productionYear,
             forceRefresh: forceRefresh,
           );
       if (!mounted || generation != _requestGeneration) return;
@@ -247,6 +269,10 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             parentId: node.id,
             startIndex: _nextStartIndex,
             limit: _pageSize,
+            sort: _sort,
+            kind: _kindFilter,
+            status: _statusFilter,
+            productionYear: _productionYear,
           );
       if (!mounted || generation != _requestGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();
@@ -299,6 +325,15 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final horizontalPadding = constraints.maxWidth < 720 ? 20.0 : 32.0;
+        final selectedItems = _items
+            .where((item) => _selectedIds.contains(item.id))
+            .toList(growable: false);
+        final favoriteTarget =
+            selectedItems.isEmpty ||
+            !selectedItems.every((item) => item.favorite);
+        final playedTarget =
+            selectedItems.isEmpty ||
+            !selectedItems.every((item) => item.played);
         return RefreshIndicator(
           onRefresh: () => _loadCatalog(forceRefresh: true),
           child: SingleChildScrollView(
@@ -357,7 +392,38 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                             ? '正在同步'
                             : '已加载 ${_items.length} / $_totalItemCount 项',
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
+                      AnimatedSwitcher(
+                        duration: AppMotion.fast,
+                        child: _selectionMode
+                            ? _BulkActionBar(
+                                key: const ValueKey('bulk-action-bar'),
+                                selectedCount: selectedItems.length,
+                                allLoadedSelected:
+                                    _items.isNotEmpty &&
+                                    selectedItems.length == _items.length,
+                                busyLabel: _bulkActionLabel,
+                                favoriteTarget: favoriteTarget,
+                                playedTarget: playedTarget,
+                                onSelectAll: _selectAllLoaded,
+                                onFavorite: () =>
+                                    _applyBulkState(favorite: favoriteTarget),
+                                onPlayed: () =>
+                                    _applyBulkState(played: playedTarget),
+                                onClose: _exitSelectionMode,
+                              )
+                            : _LibraryToolbar(
+                                key: const ValueKey('library-toolbar'),
+                                sort: _sort,
+                                density: _density,
+                                activeFilterCount: _activeFilterCount,
+                                onSortChanged: _changeSort,
+                                onFilterPressed: _showFilters,
+                                onDensityChanged: _setDensity,
+                                onSelectPressed: _enterSelectionMode,
+                              ),
+                      ),
+                      const SizedBox(height: 18),
                       if (_error != null)
                         _InlineLibraryError(
                           message: _error!,
@@ -368,9 +434,30 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                       else if (_loadingItems)
                         const _ItemsLoadingGrid()
                       else if (_items.isEmpty)
-                        const _EmptyLibrary()
+                        _EmptyLibrary(
+                          filtered: _activeFilterCount > 0,
+                          onClearFilters: _activeFilterCount > 0
+                              ? () async {
+                                  setState(() {
+                                    _kindFilter = MediaLibraryKindFilter.all;
+                                    _statusFilter =
+                                        MediaLibraryStatusFilter.all;
+                                    _productionYear = null;
+                                  });
+                                  await _reloadCurrentNode();
+                                }
+                              : null,
+                        )
                       else ...[
-                        _MediaGrid(items: _items, onOpen: _openItem),
+                        _MediaGrid(
+                          items: _items,
+                          density: _density,
+                          selectionMode: _selectionMode,
+                          selectedIds: _selectedIds,
+                          onOpen: _openItem,
+                          onToggleSelection: _toggleSelection,
+                          onEnterSelection: _enterSelectionMode,
+                        ),
                         _PaginationFooter(
                           loadedCount: _items.length,
                           totalCount: _totalItemCount,
@@ -395,6 +482,178 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     if (_path.isEmpty) return _loadCatalog(forceRefresh: true);
     await _loadNode(_path.last, path: _path, forceRefresh: true);
   }
+
+  Future<void> _changeSort(MediaLibrarySort sort) async {
+    if (sort == _sort) return;
+    setState(() => _sort = sort);
+    await _reloadCurrentNode();
+  }
+
+  Future<void> _showFilters() async {
+    final result = await showDialog<_LibraryFilters>(
+      context: context,
+      builder: (context) => _LibraryFilterDialog(
+        initialValue: _LibraryFilters(
+          kind: _kindFilter,
+          status: _statusFilter,
+          productionYear: _productionYear,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    if (result.kind == _kindFilter &&
+        result.status == _statusFilter &&
+        result.productionYear == _productionYear) {
+      return;
+    }
+    setState(() {
+      _kindFilter = result.kind;
+      _statusFilter = result.status;
+      _productionYear = result.productionYear;
+    });
+    await _reloadCurrentNode();
+  }
+
+  void _setDensity(MediaGridDensity density) {
+    if (_density == density) return;
+    setState(() => _density = density);
+  }
+
+  void _enterSelectionMode([String? itemId]) {
+    setState(() {
+      _selectionMode = true;
+      if (itemId != null) _selectedIds = {..._selectedIds, itemId};
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (_bulkActionLabel != null) return;
+    setState(() {
+      _selectionMode = false;
+      _selectedIds = {};
+    });
+  }
+
+  void _toggleSelection(String itemId) {
+    setState(() {
+      final next = {..._selectedIds};
+      if (!next.add(itemId)) next.remove(itemId);
+      _selectedIds = next;
+    });
+  }
+
+  void _selectAllLoaded() {
+    setState(() => _selectedIds = _items.map((item) => item.id).toSet());
+  }
+
+  Future<void> _applyBulkState({bool? favorite, bool? played}) async {
+    final account = widget.account;
+    if (account == null || _selectedIds.isEmpty || _bulkActionLabel != null) {
+      return;
+    }
+    final ids = Set<String>.from(_selectedIds);
+    final label = favorite != null
+        ? favorite
+              ? '正在收藏'
+              : '正在取消收藏'
+        : played == true
+        ? '正在标记已观看'
+        : '正在标记未观看';
+    setState(() => _bulkActionLabel = label);
+    try {
+      final service = ref.read(mediaLibraryProvider);
+      if (favorite != null) {
+        await service.setFavoriteForItems(account, ids, favorite: favorite);
+      } else {
+        await service.setPlayedForItems(account, ids, played: played!);
+      }
+      if (!mounted) return;
+      setState(() {
+        _items = _items
+            .map(
+              (item) => ids.contains(item.id)
+                  ? item.copyWith(
+                      played: played,
+                      favorite: favorite,
+                      resumePosition: played == true
+                          ? Duration.zero
+                          : item.resumePosition,
+                    )
+                  : item,
+            )
+            .toList(growable: false);
+        _selectionMode = false;
+        _selectedIds = {};
+      });
+      final completedLabel = favorite != null
+          ? favorite
+                ? '已收藏 ${ids.length} 项'
+                : '已取消收藏 ${ids.length} 项'
+          : played == true
+          ? '已将 ${ids.length} 项标记为已观看'
+          : '已将 ${ids.length} 项标记为未观看';
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(completedLabel),
+            action: SnackBarAction(
+              label: '撤销',
+              onPressed: () => _undoBulkState(
+                ids,
+                favorite: favorite == null ? null : !favorite,
+                played: played == null ? null : !played,
+              ),
+            ),
+          ),
+        );
+      if (_statusFilter != MediaLibraryStatusFilter.all) {
+        await _reloadCurrentNode();
+      }
+    } on MediaLibraryException catch (error) {
+      if (!mounted) return;
+      if (error.authenticationExpired) widget.onSessionExpired?.call();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('批量操作失败：${error.message}')));
+    } finally {
+      if (mounted) setState(() => _bulkActionLabel = null);
+    }
+  }
+
+  Future<void> _undoBulkState(
+    Set<String> ids, {
+    bool? favorite,
+    bool? played,
+  }) async {
+    final account = widget.account;
+    if (account == null) return;
+    try {
+      final service = ref.read(mediaLibraryProvider);
+      if (favorite != null) {
+        await service.setFavoriteForItems(account, ids, favorite: favorite);
+      } else {
+        await service.setPlayedForItems(account, ids, played: played!);
+      }
+      if (!mounted) return;
+      await _reloadCurrentNode();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已撤销批量操作')));
+    } on MediaLibraryException catch (error) {
+      if (!mounted) return;
+      if (error.authenticationExpired) widget.onSessionExpired?.call();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('撤销失败：${error.message}')));
+    }
+  }
+
+  int get _activeFilterCount =>
+      (_kindFilter == MediaLibraryKindFilter.all ? 0 : 1) +
+      (_statusFilter == MediaLibraryStatusFilter.all ? 0 : 1) +
+      (_productionYear == null ? 0 : 1);
 
   bool _isBrowsable(MediaItem item) {
     return item.kind == MediaItemKind.folder ||
@@ -475,6 +734,438 @@ class _SectionLabel extends StatelessWidget {
           detail,
           style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
         ),
+      ],
+    );
+  }
+}
+
+class _LibraryToolbar extends StatelessWidget {
+  const _LibraryToolbar({
+    super.key,
+    required this.sort,
+    required this.density,
+    required this.activeFilterCount,
+    required this.onSortChanged,
+    required this.onFilterPressed,
+    required this.onDensityChanged,
+    required this.onSelectPressed,
+  });
+
+  final MediaLibrarySort sort;
+  final MediaGridDensity density;
+  final int activeFilterCount;
+  final ValueChanged<MediaLibrarySort> onSortChanged;
+  final VoidCallback onFilterPressed;
+  final ValueChanged<MediaGridDensity> onDensityChanged;
+  final VoidCallback onSelectPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        PopupMenuButton<MediaLibrarySort>(
+          key: const ValueKey('library-sort-menu'),
+          initialValue: sort,
+          tooltip: '更改排序方式',
+          onSelected: onSortChanged,
+          itemBuilder: (context) => [
+            for (final option in MediaLibrarySort.values)
+              PopupMenuItem(
+                value: option,
+                child: Row(
+                  children: [
+                    Icon(
+                      option == sort
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      size: 18,
+                      color: option == sort
+                          ? AppColors.spotlight
+                          : AppColors.textTertiary,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(option.label),
+                  ],
+                ),
+              ),
+          ],
+          child: _ToolbarControl(
+            icon: Icons.sort_rounded,
+            label: '排序：${sort.label}',
+          ),
+        ),
+        Semantics(
+          button: true,
+          label: activeFilterCount == 0
+              ? '筛选媒体'
+              : '筛选媒体，已启用 $activeFilterCount 项',
+          child: _ToolbarAction(
+            key: const ValueKey('library-filter-button'),
+            icon: Icons.tune_rounded,
+            label: activeFilterCount == 0 ? '筛选' : '筛选 · $activeFilterCount',
+            selected: activeFilterCount > 0,
+            onPressed: onFilterPressed,
+          ),
+        ),
+        _DensityControl(value: density, onChanged: onDensityChanged),
+        _ToolbarAction(
+          key: const ValueKey('library-select-button'),
+          icon: Icons.checklist_rounded,
+          label: '选择',
+          onPressed: onSelectPressed,
+        ),
+      ],
+    );
+  }
+}
+
+class _ToolbarControl extends StatelessWidget {
+  const _ToolbarControl({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: AppGlass.decoration(radius: 12),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 19),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 5),
+          const Icon(Icons.expand_more_rounded, size: 17),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolbarAction extends StatelessWidget {
+  const _ToolbarAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 44),
+        backgroundColor: selected
+            ? AppColors.spotlight.withValues(alpha: 0.12)
+            : null,
+        foregroundColor: selected ? AppColors.spotlight : null,
+      ),
+      icon: Icon(icon, size: 19),
+      label: Text(label),
+    );
+  }
+}
+
+class _DensityControl extends StatelessWidget {
+  const _DensityControl({required this.value, required this.onChanged});
+
+  final MediaGridDensity value;
+  final ValueChanged<MediaGridDensity> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('library-density-control'),
+      padding: const EdgeInsets.all(3),
+      decoration: AppGlass.decoration(radius: 12),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _DensityButton(
+            tooltip: '宽松视图',
+            icon: Icons.grid_view_rounded,
+            selected: value == MediaGridDensity.spacious,
+            onPressed: () => onChanged(MediaGridDensity.spacious),
+          ),
+          _DensityButton(
+            tooltip: '标准视图',
+            icon: Icons.apps_rounded,
+            selected: value == MediaGridDensity.standard,
+            onPressed: () => onChanged(MediaGridDensity.standard),
+          ),
+          _DensityButton(
+            tooltip: '紧凑视图',
+            icon: Icons.view_comfy_alt_rounded,
+            selected: value == MediaGridDensity.compact,
+            onPressed: () => onChanged(MediaGridDensity.compact),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DensityButton extends StatelessWidget {
+  const _DensityButton({
+    required this.tooltip,
+    required this.icon,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: tooltip,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        visualDensity: VisualDensity.compact,
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(44),
+          backgroundColor: selected
+              ? AppColors.spotlight.withValues(alpha: 0.16)
+              : Colors.transparent,
+          foregroundColor: selected
+              ? AppColors.spotlight
+              : AppColors.textSecondary,
+        ),
+        icon: Icon(icon, size: 18),
+      ),
+    );
+  }
+}
+
+class _BulkActionBar extends StatelessWidget {
+  const _BulkActionBar({
+    super.key,
+    required this.selectedCount,
+    required this.allLoadedSelected,
+    required this.busyLabel,
+    required this.favoriteTarget,
+    required this.playedTarget,
+    required this.onSelectAll,
+    required this.onFavorite,
+    required this.onPlayed,
+    required this.onClose,
+  });
+
+  final int selectedCount;
+  final bool allLoadedSelected;
+  final String? busyLabel;
+  final bool favoriteTarget;
+  final bool playedTarget;
+  final VoidCallback onSelectAll;
+  final VoidCallback onFavorite;
+  final VoidCallback onPlayed;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final busy = busyLabel != null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: AppGlass.decoration(radius: 14, selected: true),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (busy)
+            const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            const Icon(
+              Icons.check_circle_outline_rounded,
+              size: 20,
+              color: AppColors.spotlight,
+            ),
+          Text(
+            busy ? '$busyLabel…' : '已选择 $selectedCount 项',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          TextButton.icon(
+            onPressed: busy || allLoadedSelected ? null : onSelectAll,
+            icon: const Icon(Icons.select_all_rounded, size: 18),
+            label: const Text('全选已加载'),
+          ),
+          OutlinedButton.icon(
+            key: const ValueKey('bulk-favorite-button'),
+            onPressed: busy || selectedCount == 0 ? null : onFavorite,
+            icon: Icon(
+              favoriteTarget
+                  ? Icons.favorite_border_rounded
+                  : Icons.heart_broken_rounded,
+              size: 18,
+            ),
+            label: Text(favoriteTarget ? '收藏' : '取消收藏'),
+          ),
+          OutlinedButton.icon(
+            key: const ValueKey('bulk-played-button'),
+            onPressed: busy || selectedCount == 0 ? null : onPlayed,
+            icon: Icon(
+              playedTarget ? Icons.done_all_rounded : Icons.remove_done_rounded,
+              size: 18,
+            ),
+            label: Text(playedTarget ? '标为已观看' : '标为未观看'),
+          ),
+          IconButton(
+            tooltip: '退出批量选择',
+            onPressed: busy ? null : onClose,
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LibraryFilters {
+  const _LibraryFilters({
+    required this.kind,
+    required this.status,
+    required this.productionYear,
+  });
+
+  final MediaLibraryKindFilter kind;
+  final MediaLibraryStatusFilter status;
+  final int? productionYear;
+}
+
+class _LibraryFilterDialog extends StatefulWidget {
+  const _LibraryFilterDialog({required this.initialValue});
+
+  final _LibraryFilters initialValue;
+
+  @override
+  State<_LibraryFilterDialog> createState() => _LibraryFilterDialogState();
+}
+
+class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
+  late MediaLibraryKindFilter _kind = widget.initialValue.kind;
+  late MediaLibraryStatusFilter _status = widget.initialValue.status;
+  late final TextEditingController _yearController = TextEditingController(
+    text: widget.initialValue.productionYear?.toString() ?? '',
+  );
+  String? _yearError;
+
+  @override
+  void dispose() {
+    _yearController.dispose();
+    super.dispose();
+  }
+
+  void _apply() {
+    final text = _yearController.text.trim();
+    final year = text.isEmpty ? null : int.tryParse(text);
+    final maxYear = DateTime.now().year + 1;
+    if (text.isNotEmpty && (year == null || year < 1888 || year > maxYear)) {
+      setState(() => _yearError = '请输入 1888–$maxYear 之间的年份');
+      return;
+    }
+    Navigator.of(
+      context,
+    ).pop(_LibraryFilters(kind: _kind, status: _status, productionYear: year));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('筛选媒体库'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('内容类型', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final option in MediaLibraryKindFilter.values)
+                    FilterChip(
+                      label: Text(option.label),
+                      selected: _kind == option,
+                      onSelected: (_) => setState(() => _kind = option),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              const Text('观看状态', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final option in MediaLibraryStatusFilter.values)
+                    FilterChip(
+                      label: Text(option.label),
+                      selected: _status == option,
+                      onSelected: (_) => setState(() => _status = option),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              TextField(
+                key: const ValueKey('library-year-filter'),
+                controller: _yearController,
+                keyboardType: TextInputType.number,
+                onChanged: (_) {
+                  if (_yearError != null) setState(() => _yearError = null);
+                },
+                decoration: InputDecoration(
+                  labelText: '上映年份',
+                  hintText: '留空表示所有年份',
+                  errorText: _yearError,
+                  prefixIcon: const Icon(Icons.calendar_month_rounded),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _kind = MediaLibraryKindFilter.all;
+              _status = MediaLibraryStatusFilter.all;
+              _yearController.clear();
+              _yearError = null;
+            });
+          },
+          child: const Text('重置'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _apply, child: const Text('应用筛选')),
       ],
     );
   }
@@ -652,21 +1343,45 @@ class _LibraryIcon extends StatelessWidget {
 }
 
 class _MediaGrid extends StatelessWidget {
-  const _MediaGrid({required this.items, required this.onOpen});
+  const _MediaGrid({
+    required this.items,
+    required this.density,
+    required this.selectionMode,
+    required this.selectedIds,
+    required this.onOpen,
+    required this.onToggleSelection,
+    required this.onEnterSelection,
+  });
 
   final List<MediaItem> items;
+  final MediaGridDensity density;
+  final bool selectionMode;
+  final Set<String> selectedIds;
   final ValueChanged<MediaItem> onOpen;
+  final ValueChanged<String> onToggleSelection;
+  final ValueChanged<String> onEnterSelection;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = switch (constraints.maxWidth) {
+        final baseColumns = switch (constraints.maxWidth) {
           < 520 => 2,
           < 780 => 3,
           < 1040 => 4,
           < 1240 => 5,
           _ => 6,
+        };
+        final densityOffset = switch (density) {
+          MediaGridDensity.spacious => -1,
+          MediaGridDensity.standard => 0,
+          MediaGridDensity.compact => 1,
+        };
+        final columns = (baseColumns + densityOffset).clamp(2, 7);
+        final spacing = switch (density) {
+          MediaGridDensity.spacious => 18.0,
+          MediaGridDensity.standard => 14.0,
+          MediaGridDensity.compact => 10.0,
         };
         return GridView.builder(
           shrinkWrap: true,
@@ -674,13 +1389,17 @@ class _MediaGrid extends StatelessWidget {
           itemCount: items.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 20,
-            childAspectRatio: 0.62,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing + 6,
+            childAspectRatio: density == MediaGridDensity.compact ? 0.64 : 0.62,
           ),
           itemBuilder: (context, index) => _MediaCard(
             item: items[index],
+            selectionMode: selectionMode,
+            selected: selectedIds.contains(items[index].id),
             onOpen: () => onOpen(items[index]),
+            onToggleSelection: () => onToggleSelection(items[index].id),
+            onEnterSelection: () => onEnterSelection(items[index].id),
           ),
         );
       },
@@ -689,10 +1408,21 @@ class _MediaGrid extends StatelessWidget {
 }
 
 class _MediaCard extends StatelessWidget {
-  const _MediaCard({required this.item, required this.onOpen});
+  const _MediaCard({
+    required this.item,
+    required this.selectionMode,
+    required this.selected,
+    required this.onOpen,
+    required this.onToggleSelection,
+    required this.onEnterSelection,
+  });
 
   final MediaItem item;
+  final bool selectionMode;
+  final bool selected;
   final VoidCallback onOpen;
+  final VoidCallback onToggleSelection;
+  final VoidCallback onEnterSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -706,22 +1436,43 @@ class _MediaCard extends StatelessWidget {
         item.kind == MediaItemKind.season;
     return Semantics(
       label: '${item.name}，${_kindLabel(item.kind)}',
+      button: true,
+      selected: selected,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Material(
+              key: ValueKey('media-card-artwork-${item.id}'),
               color: AppColors.surfaceLow,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
+                side: selected
+                    ? const BorderSide(color: AppColors.spotlight, width: 2)
+                    : BorderSide.none,
               ),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                onTap: onOpen,
+                onTap: selectionMode ? onToggleSelection : onOpen,
+                onLongPress: selectionMode
+                    ? onToggleSelection
+                    : onEnterSelection,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     _MediaArtwork(item: item),
+                    if (selectionMode)
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: _SelectionBadge(selected: selected),
+                      )
+                    else if (item.favorite)
+                      const Positioned(
+                        top: 10,
+                        left: 10,
+                        child: _FavoriteBadge(),
+                      ),
                     if (item.played)
                       const Positioned(
                         top: 10,
@@ -835,6 +1586,53 @@ class _PlayedBadge extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: const Icon(Icons.check_rounded, color: AppColors.canvas, size: 18),
+    );
+  }
+}
+
+class _FavoriteBadge extends StatelessWidget {
+  const _FavoriteBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: AppColors.canvas.withValues(alpha: 0.84),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(
+        Icons.favorite_rounded,
+        color: AppColors.spotlight,
+        size: 17,
+      ),
+    );
+  }
+}
+
+class _SelectionBadge extends StatelessWidget {
+  const _SelectionBadge({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: AppMotion.fast,
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        color: selected ? AppColors.spotlight : Colors.black54,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: selected ? AppColors.spotlight : AppColors.textPrimary,
+          width: 2,
+        ),
+      ),
+      child: selected
+          ? const Icon(Icons.check_rounded, color: AppColors.canvas, size: 19)
+          : null,
     );
   }
 }
@@ -985,22 +1783,41 @@ class _ItemsLoadingGrid extends StatelessWidget {
 }
 
 class _EmptyLibrary extends StatelessWidget {
-  const _EmptyLibrary();
+  const _EmptyLibrary({this.filtered = false, this.onClearFilters});
+
+  final bool filtered;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 220,
+      constraints: const BoxConstraints(minHeight: 220),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.surfaceLow,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: const Column(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inbox_outlined, size: 34, color: AppColors.textTertiary),
-          SizedBox(height: 12),
-          Text('这个媒体库暂时没有可显示的内容'),
+          Icon(
+            filtered ? Icons.filter_alt_off_rounded : Icons.inbox_outlined,
+            size: 34,
+            color: AppColors.textTertiary,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            filtered ? '没有符合当前筛选条件的内容' : '这个媒体库暂时没有可显示的内容',
+            textAlign: TextAlign.center,
+          ),
+          if (filtered && onClearFilters != null) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onClearFilters,
+              icon: const Icon(Icons.restart_alt_rounded),
+              label: const Text('清除筛选'),
+            ),
+          ],
         ],
       ),
     );
