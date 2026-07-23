@@ -68,6 +68,10 @@ class GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.circular(radius);
+    final content = Padding(
+      padding: padding ?? EdgeInsets.zero,
+      child: child,
+    );
     return DecoratedBox(
       decoration: AppGlass.decoration(
         radius: radius,
@@ -78,10 +82,12 @@ class GlassSurface extends StatelessWidget {
       child: ClipRRect(
         borderRadius: borderRadius,
         clipBehavior: clipBehavior,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
-        ),
+        child: blur <= 0
+            ? content
+            : BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: content,
+              ),
       ),
     );
   }

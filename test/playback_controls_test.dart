@@ -165,6 +165,30 @@ void main() {
     expect(cancelCount, 1);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('shows compact transient feedback for keyboard seeking', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: const Scaffold(
+          backgroundColor: Colors.black,
+          body: Center(
+            child: PlaybackSeekFeedback(
+              deltaSeconds: 20,
+              position: Duration(minutes: 42, seconds: 8),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('快进 20 秒'), findsOneWidget);
+    expect(find.text('42:08'), findsOneWidget);
+    expect(find.byIcon(Icons.forward_10_rounded), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Widget _controlsApp({

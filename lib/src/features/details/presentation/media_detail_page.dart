@@ -4,6 +4,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -178,6 +179,27 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     );
   }
 
+  Future<void> _openPerson(MediaPerson person) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) => PersonWorksPage(
+          account: widget.account,
+          person: person,
+          onOpen: _openPersonWork,
+        ),
+      ),
+    );
+  }
+
+  void _openPersonWork(MediaItem item) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) =>
+            MediaDetailPage(account: widget.account, initialItem: item),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -243,7 +265,10 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                         _OverviewSection(item: _item),
                         if (_item.people.isNotEmpty) ...[
                           const SizedBox(height: 28),
-                          _CastSection(people: _item.people),
+                          _CastSection(
+                            people: _item.people,
+                            onOpen: _openPerson,
+                          ),
                         ],
                         if (_similarItems.isNotEmpty) ...[
                           const SizedBox(height: 28),
@@ -721,9 +746,10 @@ class _OverviewSection extends StatelessWidget {
 }
 
 class _CastSection extends StatelessWidget {
-  const _CastSection({required this.people});
+  const _CastSection({required this.people, required this.onOpen});
 
   final List<MediaPerson> people;
+  final ValueChanged<MediaPerson> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -745,62 +771,87 @@ class _CastSection extends StatelessWidget {
         height: 258,
         itemCount: visiblePeople.length,
         itemExtent: 132,
-        itemBuilder: (context, index) =>
-            _PersonCard(person: visiblePeople[index]),
+        itemBuilder: (context, index) => _PersonCard(
+          person: visiblePeople[index],
+          onOpen: () => onOpen(visiblePeople[index]),
+        ),
       ),
     );
   }
 }
 
 class _PersonCard extends StatelessWidget {
-  const _PersonCard({required this.person});
+  const _PersonCard({required this.person, required this.onOpen});
 
   final MediaPerson person;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 132,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 2 / 3,
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceHigh,
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: PeekMediaImage(
-                uri: person.imageUri,
-                headers: person.imageHeaders,
-                kind: PeekMediaImageKind.person,
-                placeholderBackground: AppColors.surfaceHigh,
-                placeholderIcon: Icons.person_outline_rounded,
-                placeholderIconSize: 38,
+    return Semantics(
+      button: true,
+      label: '查看 ${person.name} 的全部作品',
+      child: Tooltip(
+        message: '查看 ${person.name} 的全部作品',
+        child: SizedBox(
+          width: 132,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(13),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: ValueKey('person-card-${person.id}'),
+              borderRadius: BorderRadius.circular(13),
+              onTap: onOpen,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 2 / 3,
+                    child: DecoratedBox(
+                      decoration: const BoxDecoration(
+                        color: AppColors.surfaceHigh,
+                      ),
+                      child: PeekMediaImage(
+                        uri: person.imageUri,
+                        headers: person.imageHeaders,
+                        kind: PeekMediaImageKind.person,
+                        placeholderBackground: AppColors.surfaceHigh,
+                        placeholderIcon: Icons.person_outline_rounded,
+                        placeholderIconSize: 38,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 9, 2, 0),
+                    child: Text(
+                      person.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 3, 2, 8),
+                    child: Text(
+                      person.role ?? _personTypeLabel(person.type),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 10,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 9),
-          Text(
-            person.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            person.role ?? _personTypeLabel(person.type),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textTertiary,
-              fontSize: 10,
-              height: 1.3,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

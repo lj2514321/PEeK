@@ -43,7 +43,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('PRIVATE CINEMA'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width,
+      224,
+    );
     await tester.tap(find.byKey(const ValueKey('sidebar-toggle')));
+    await tester.pump();
+    expect(tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width, 80);
     await tester.pumpAndSettle();
     expect(find.text('PRIVATE CINEMA'), findsNothing);
 
@@ -55,6 +61,11 @@ void main() {
     expect(library.favoriteRequests, 1);
 
     await tester.tap(find.byKey(const ValueKey('sidebar-toggle')));
+    await tester.pump();
+    expect(
+      tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width,
+      224,
+    );
     await tester.pumpAndSettle();
     expect(find.text('PRIVATE CINEMA'), findsOneWidget);
     expect(tester.takeException(), isNull);

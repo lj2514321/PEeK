@@ -92,6 +92,40 @@ void main() {
     expect(service.playedValue, isTrue);
     expect(find.widgetWithText(OutlinedButton, '已观看'), findsOneWidget);
   });
+
+  testWidgets('opens the selected actor filmography from the cast card', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakeDetailService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: MediaDetailPage(account: account, initialItem: item),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final actorCard = find.byKey(const ValueKey('person-card-person-id'));
+    await tester.drag(
+      find.byType(CustomScrollView).first,
+      const Offset(0, -720),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(actorCard);
+    await tester.pumpAndSettle();
+
+    expect(service.requestedPersonIds, ['person-id']);
+    expect(find.byKey(const ValueKey('person-work-credit-id')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _FakeDetailService extends MediaLibraryService {
@@ -99,6 +133,7 @@ class _FakeDetailService extends MediaLibraryService {
 
   bool? favoriteValue;
   bool? playedValue;
+  final requestedPersonIds = <String>[];
 
   @override
   Future<MediaItem> getItem(
@@ -137,6 +172,29 @@ class _FakeDetailService extends MediaLibraryService {
         productionYear: 2025,
       ),
     ];
+  }
+
+  @override
+  Future<MediaPage> getItemsForPerson(
+    AuthenticatedServer account, {
+    required String personId,
+    int startIndex = 0,
+    int limit = 40,
+    bool forceRefresh = false,
+  }) async {
+    requestedPersonIds.add(personId);
+    return const MediaPage(
+      items: [
+        MediaItem(
+          id: 'credit-id',
+          name: '演员作品',
+          kind: MediaItemKind.movie,
+          productionYear: 2026,
+        ),
+      ],
+      totalRecordCount: 1,
+      nextStartIndex: 1,
+    );
   }
 
   @override

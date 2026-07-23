@@ -89,7 +89,11 @@ class PlaybackControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final motion = AppMotion.responsive(context, AppMotion.fast);
+    final motion = AppMotion.responsive(
+      context,
+      visible ? AppMotion.fast : const Duration(milliseconds: 130),
+    );
+    final curve = visible ? Curves.easeOutCubic : Curves.easeInCubic;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -98,6 +102,7 @@ class PlaybackControls extends StatelessWidget {
           child: AnimatedOpacity(
             opacity: visible ? 1 : 0,
             duration: motion,
+            curve: curve,
             child: _PlaybackTopBar(
               title: title,
               method: method,
@@ -121,12 +126,13 @@ class PlaybackControls extends StatelessWidget {
           child: IgnorePointer(
             ignoring: !visible,
             child: AnimatedSlide(
-              offset: visible ? Offset.zero : const Offset(0, 0.16),
+              offset: visible ? Offset.zero : const Offset(0, 0.08),
               duration: motion,
-              curve: Curves.easeOutCubic,
+              curve: curve,
               child: AnimatedOpacity(
                 opacity: visible ? 1 : 0,
                 duration: motion,
+                curve: curve,
                 child: _PlaybackBottomBar(
                   playing: playing,
                   position: position,
@@ -341,7 +347,7 @@ class _PlaybackBottomBar extends StatelessWidget {
           padding: padding,
           child: GlassSurface(
             radius: compact ? 16 : 20,
-            blur: 24,
+            blur: 0,
             tint: const Color(0xB80D1018),
             elevated: true,
             padding: EdgeInsets.fromLTRB(
@@ -861,6 +867,80 @@ class _BufferingIndicator extends StatelessWidget {
           const SizedBox(width: 12),
           Text(label),
         ],
+      ),
+    );
+  }
+}
+
+class PlaybackSeekFeedback extends StatelessWidget {
+  const PlaybackSeekFeedback({
+    super.key,
+    required this.deltaSeconds,
+    required this.position,
+  });
+
+  final int deltaSeconds;
+  final Duration position;
+
+  @override
+  Widget build(BuildContext context) {
+    final forward = deltaSeconds >= 0;
+    final seconds = deltaSeconds.abs();
+    final label = '${forward ? '快进' : '快退'} $seconds 秒';
+    return Semantics(
+      liveRegion: true,
+      label: '$label，当前位置 ${_time(position)}',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xE60D1018),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.32),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                forward
+                    ? Icons.forward_10_rounded
+                    : Icons.replay_10_rounded,
+                color: AppColors.spotlight,
+                size: 30,
+              ),
+              const SizedBox(width: 12),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _time(position),
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontFamily: 'Cascadia Mono',
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

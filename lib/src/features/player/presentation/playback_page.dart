@@ -71,6 +71,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Timer? _subtitleSettingsTimer;
   Timer? _systemTimelineTimer;
   Timer? _systemVolumeRetryTimer;
+  Timer? _seekCommitTimer;
+  Timer? _seekFeedbackTimer;
   late final PlaybackDiagnosticLog _diagnosticLog;
   late final SystemMediaSession _systemMediaSession;
   final PlaybackDiagnosticsService _diagnosticsService =
@@ -80,6 +82,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Duration _duration = Duration.zero;
   Duration _buffer = Duration.zero;
   Duration? _previewPosition;
+  Duration? _pendingSeekTarget;
+  late final ValueNotifier<_PlaybackTimeline> _timelineNotifier;
+  final ValueNotifier<_SeekFeedback?> _seekFeedbackNotifier = ValueNotifier(
+    null,
+  );
+  bool _seekCommitRunning = false;
   Tracks _tracks = const Tracks();
   Track _track = const Track();
   double _volume = 100;
@@ -126,6 +134,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     AppChrome.enterImmersive();
     _duration = widget.plan.duration ?? Duration.zero;
     _position = widget.plan.startPosition;
+    _timelineNotifier = ValueNotifier(
+      _PlaybackTimeline(
+        position: _position,
+        duration: _effectiveDuration,
+        buffer: _buffer,
+      ),
+    );
     _selectedAudioStreamIndex = widget.plan.audioStreamIndex;
     _selectedSubtitleStreamIndex = widget.plan.subtitleStreamIndex;
     _subtitlesDisabled = widget.plan.subtitleStreamIndex == null;
@@ -139,18 +154,23 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _player.stream.playing.listen(_playingChanged),
       _player.stream.position.listen((value) {
         if (mounted && _previewPosition == null) {
-          setState(() => _position = value);
+          _position = value;
+          _publishTimeline();
           _scheduleSystemTimelineSync();
         }
       }),
       _player.stream.duration.listen((value) {
         if (mounted && value > Duration.zero) {
-          setState(() => _duration = value);
+          _duration = value;
+          _publishTimeline();
           _scheduleSystemTimelineSync(immediate: true);
         }
       }),
       _player.stream.buffer.listen((value) {
-        if (mounted) setState(() => _buffer = value);
+        if (mounted) {
+          _buffer = value;
+          _publishTimeline();
+        }
       }),
       _player.stream.buffering.listen((value) {
         if (mounted) {
@@ -224,7 +244,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         await _close();
       case SystemMediaCommandType.seek:
         final position = command.position;
-        if (position != null) await _seek(position);
+        if (position != null) await _seek(position, showControls: false);
     }
   }
 
@@ -402,8 +422,27 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   void _showControls() {
     if (!mounted) return;
     if (_diagnosticsVisible) return;
+    _publishTimeline(force: true);
     if (!_controlsVisible) setState(() => _controlsVisible = true);
     _scheduleControlsHide();
+  }
+
+  void _hideControls({bool force = false}) {
+    _controlsTimer?.cancel();
+    if (!mounted || _diagnosticsVisible) return;
+    if (!force &&
+        (!_playing || _changingSource || _error != null)) {
+      return;
+    }
+    if (_controlsVisible) setState(() => _controlsVisible = false);
+  }
+
+  void _toggleControlsVisibility() {
+    if (_controlsVisible && _playing) {
+      _hideControls(force: true);
+    } else {
+      _showControls();
+    }
   }
 
   void _scheduleControlsHide() {
@@ -413,7 +452,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     }
     _controlsTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && _playing && !_changingSource && _error == null) {
-        setState(() => _controlsVisible = false);
+        _hideControls(force: true);
       }
     });
   }
@@ -425,23 +464,89 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   void _previewSeek(Duration position) {
     _showControls();
-    setState(() => _previewPosition = _clampPosition(position));
+    _previewPosition = _clampPosition(position);
+    _publishTimeline();
   }
 
-  Future<void> _seek(Duration position) async {
+  Future<void> _seek(
+    Duration position, {
+    bool showControls = true,
+  }) async {
+    _seekCommitTimer?.cancel();
+    _pendingSeekTarget = null;
     final target = _clampPosition(position);
-    setState(() {
-      _position = target;
-      _previewPosition = null;
-    });
+    _position = target;
+    _previewPosition = null;
+    _publishTimeline();
     await _player.seek(target);
     await _safeReportProgress('TimeUpdate');
     _scheduleSystemTimelineSync(immediate: true);
-    _showControls();
+    if (showControls) _showControls();
   }
 
   Future<void> _seekRelative(Duration offset) {
-    return _seek(_position + offset);
+    final base = _pendingSeekTarget ?? _previewPosition ?? _position;
+    final target = _clampPosition(base + offset);
+    _pendingSeekTarget = target;
+    _position = target;
+    _previewPosition = null;
+    _publishTimeline();
+    _showSeekFeedback(offset, target);
+    _seekCommitTimer?.cancel();
+    _seekCommitTimer = Timer(
+      const Duration(milliseconds: 110),
+      () => unawaited(_commitPendingSeek()),
+    );
+    return Future<void>.value();
+  }
+
+  void _showSeekFeedback(Duration offset, Duration target) {
+    final current = _seekFeedbackNotifier.value;
+    final nextDelta = (current?.deltaSeconds ?? 0) + offset.inSeconds;
+    _seekFeedbackNotifier.value = _SeekFeedback(
+      deltaSeconds: nextDelta,
+      position: target,
+    );
+    _seekFeedbackTimer?.cancel();
+    _seekFeedbackTimer = Timer(const Duration(milliseconds: 850), () {
+      if (mounted) _seekFeedbackNotifier.value = null;
+    });
+  }
+
+  Future<void> _commitPendingSeek() async {
+    if (_seekCommitRunning || _playerDisposed || _closing) return;
+    _seekCommitRunning = true;
+    var changed = false;
+    try {
+      while (mounted && !_playerDisposed && !_closing) {
+        final target = _pendingSeekTarget;
+        if (target == null) break;
+        _pendingSeekTarget = null;
+        await _player.seek(target);
+        changed = true;
+      }
+      if (changed && mounted && !_closing) {
+        await _safeReportProgress('TimeUpdate');
+        _scheduleSystemTimelineSync(immediate: true);
+      }
+    } finally {
+      _seekCommitRunning = false;
+      if (_pendingSeekTarget != null && mounted && !_closing) {
+        unawaited(_commitPendingSeek());
+      }
+    }
+  }
+
+  void _publishTimeline({bool force = false}) {
+    if (!force && _playing && !_controlsVisible) return;
+    final next = _PlaybackTimeline(
+      position: _previewPosition ?? _position,
+      duration: _effectiveDuration,
+      buffer: _buffer,
+    );
+    if (_timelineNotifier.value != next) {
+      _timelineNotifier.value = next;
+    }
   }
 
   Duration _clampPosition(Duration value) {
@@ -522,6 +627,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _handleEscape() async {
     if (_diagnosticsVisible) {
       _closeDiagnostics();
+      return;
+    }
+    if (_controlsVisible && _playing) {
+      _hideControls(force: true);
       return;
     }
     if (_fullScreen) {
@@ -1087,6 +1196,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           _buffer = Duration.zero;
           _error = null;
         });
+        _publishTimeline();
       }
       await _restorePlanTracks(
         nextPlan,
@@ -1470,6 +1580,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _position = nextPlan.startPosition;
       _previewPosition = null;
       _buffer = Duration.zero;
+      _publishTimeline();
       _syncSystemMetadata();
       _syncSystemPlayback();
       _scheduleSystemTimelineSync(immediate: true);
@@ -1544,6 +1655,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _subtitleSettingsTimer?.cancel();
     _systemTimelineTimer?.cancel();
     _systemVolumeRetryTimer?.cancel();
+    _seekCommitTimer?.cancel();
+    _seekFeedbackTimer?.cancel();
     await _persistPlaybackPreferences();
     _writeDiagnosticLog('playback_closed');
     await _safeReportStopped();
@@ -1587,6 +1700,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _subtitleSettingsTimer?.cancel();
     _systemTimelineTimer?.cancel();
     _systemVolumeRetryTimer?.cancel();
+    _seekCommitTimer?.cancel();
+    _seekFeedbackTimer?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -1596,12 +1711,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (!_reportedStopped) unawaited(_safeReportStopped());
     if (!_systemMediaDisposed) unawaited(_disposeSystemMedia());
     if (!_playerDisposed) unawaited(_disposePlayer());
+    _timelineNotifier.dispose();
+    _seekFeedbackNotifier.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final shownPosition = _previewPosition ?? _position;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -1673,91 +1789,140 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
               },
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: _showControls,
+                onTap: _toggleControlsVisibility,
                 onDoubleTap: () => unawaited(_toggleFullScreen()),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Video(
-                      controller: _controller,
-                      controls: NoVideoControls,
-                      subtitleViewConfiguration: SubtitleViewConfiguration(
-                        style: TextStyle(
-                          height: 1.35,
-                          fontSize: _subtitlePreferences.fontSize,
-                          color: _subtitleForeground(
-                            _subtitlePreferences.appearance,
+                    RepaintBoundary(
+                      child: Video(
+                        controller: _controller,
+                        controls: NoVideoControls,
+                        subtitleViewConfiguration: SubtitleViewConfiguration(
+                          style: TextStyle(
+                            height: 1.35,
+                            fontSize: _subtitlePreferences.fontSize,
+                            color: _subtitleForeground(
+                              _subtitlePreferences.appearance,
+                            ),
+                            backgroundColor: _subtitleBackground(
+                              _subtitlePreferences.appearance,
+                            ),
+                            fontWeight: FontWeight.w600,
+                            shadows: _subtitleShadows(
+                              _subtitlePreferences.appearance,
+                            ),
                           ),
-                          backgroundColor: _subtitleBackground(
-                            _subtitlePreferences.appearance,
+                          padding: EdgeInsets.fromLTRB(
+                            32,
+                            24,
+                            32,
+                            _subtitlePreferences.bottomPadding,
                           ),
-                          fontWeight: FontWeight.w600,
-                          shadows: _subtitleShadows(
-                            _subtitlePreferences.appearance,
-                          ),
-                        ),
-                        padding: EdgeInsets.fromLTRB(
-                          32,
-                          24,
-                          32,
-                          _subtitlePreferences.bottomPadding,
                         ),
                       ),
                     ),
-                    PlaybackControls(
-                      title: _item.name,
-                      method: _plan.method,
-                      quality: _maxStreamingBitrate,
-                      visible:
-                          (_controlsVisible || !_playing) &&
-                          !_diagnosticsVisible,
-                      playing: _playing,
-                      buffering: _buffering,
-                      changingSource: _changingSource,
-                      sourceChangeLabel: _sourceChangeLabel,
-                      position: shownPosition,
-                      duration: _effectiveDuration,
-                      buffer: _buffer,
-                      volume: _volume,
-                      rate: _rate,
-                      fullScreen: _fullScreen,
-                      audioLabel: _currentAudioLabel,
-                      subtitleLabel: _currentSubtitleLabel,
-                      chapters: _plan.chapters,
-                      queueAvailable: (_queue?.items.length ?? 0) > 1,
-                      canPrevious: _queue?.hasPrevious ?? false,
-                      canNext: _queue?.hasNext ?? false,
-                      onBack: () => unawaited(_close()),
-                      onPlayPause: () => unawaited(_togglePlayPause()),
-                      onSeekPreview: _previewSeek,
-                      onSeek: (value) => unawaited(_seek(value)),
-                      onSeekBack: () => unawaited(
-                        _seekRelative(const Duration(seconds: -10)),
+                    ValueListenableBuilder<_PlaybackTimeline>(
+                      valueListenable: _timelineNotifier,
+                      builder: (context, timeline, _) {
+                        return RepaintBoundary(
+                          child: PlaybackControls(
+                            title: _item.name,
+                            method: _plan.method,
+                            quality: _maxStreamingBitrate,
+                            visible:
+                                (_controlsVisible || !_playing) &&
+                                !_diagnosticsVisible,
+                            playing: _playing,
+                            buffering: _buffering,
+                            changingSource: _changingSource,
+                            sourceChangeLabel: _sourceChangeLabel,
+                            position: timeline.position,
+                            duration: timeline.duration,
+                            buffer: timeline.buffer,
+                            volume: _volume,
+                            rate: _rate,
+                            fullScreen: _fullScreen,
+                            audioLabel: _currentAudioLabel,
+                            subtitleLabel: _currentSubtitleLabel,
+                            chapters: _plan.chapters,
+                            queueAvailable: (_queue?.items.length ?? 0) > 1,
+                            canPrevious: _queue?.hasPrevious ?? false,
+                            canNext: _queue?.hasNext ?? false,
+                            onBack: () => unawaited(_close()),
+                            onPlayPause: () => unawaited(_togglePlayPause()),
+                            onSeekPreview: _previewSeek,
+                            onSeek: (value) => unawaited(_seek(value)),
+                            onSeekBack: () => unawaited(
+                              _seekRelative(const Duration(seconds: -10)),
+                            ),
+                            onSeekForward: () => unawaited(
+                              _seekRelative(const Duration(seconds: 10)),
+                            ),
+                            onVolumeChanged: (value) =>
+                                unawaited(_setVolume(value)),
+                            onMute: () => unawaited(_toggleMute()),
+                            onRateChanged: (value) =>
+                                unawaited(_setRate(value)),
+                            onAudio: () => unawaited(_showAudioTracks()),
+                            onSubtitle: () =>
+                                unawaited(_showSubtitleTracks()),
+                            onChapters: () => unawaited(_showChapters()),
+                            onPrevious: () {
+                              final queue = _queue;
+                              if (queue != null && queue.hasPrevious) {
+                                unawaited(
+                                  _playQueueIndex(queue.currentIndex - 1),
+                                );
+                              }
+                            },
+                            onNext: () {
+                              final queue = _queue;
+                              if (queue != null && queue.hasNext) {
+                                unawaited(
+                                  _playQueueIndex(queue.currentIndex + 1),
+                                );
+                              }
+                            },
+                            onEpisodes: () => unawaited(_showEpisodes()),
+                            onDiagnostics: _toggleDiagnostics,
+                            onQuality: () =>
+                                unawaited(_showQualityOptions()),
+                            onFullScreen: () =>
+                                unawaited(_toggleFullScreen()),
+                          ),
+                        );
+                      },
+                    ),
+                    Center(
+                      child: ValueListenableBuilder<_SeekFeedback?>(
+                        valueListenable: _seekFeedbackNotifier,
+                        builder: (context, feedback, _) {
+                          return AnimatedSwitcher(
+                            duration: AppMotion.responsive(
+                              context,
+                              const Duration(milliseconds: 160),
+                            ),
+                            reverseDuration: AppMotion.responsive(
+                              context,
+                              const Duration(milliseconds: 110),
+                            ),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            child: feedback == null
+                                ? const SizedBox.shrink(
+                                    key: ValueKey('seek-feedback-hidden'),
+                                  )
+                                : PlaybackSeekFeedback(
+                                    key: const ValueKey(
+                                      'player-seek-feedback',
+                                    ),
+                                    deltaSeconds: feedback.deltaSeconds,
+                                    position: feedback.position,
+                                  ),
+                          );
+                        },
                       ),
-                      onSeekForward: () =>
-                          unawaited(_seekRelative(const Duration(seconds: 10))),
-                      onVolumeChanged: (value) => unawaited(_setVolume(value)),
-                      onMute: () => unawaited(_toggleMute()),
-                      onRateChanged: (value) => unawaited(_setRate(value)),
-                      onAudio: () => unawaited(_showAudioTracks()),
-                      onSubtitle: () => unawaited(_showSubtitleTracks()),
-                      onChapters: () => unawaited(_showChapters()),
-                      onPrevious: () {
-                        final queue = _queue;
-                        if (queue != null && queue.hasPrevious) {
-                          unawaited(_playQueueIndex(queue.currentIndex - 1));
-                        }
-                      },
-                      onNext: () {
-                        final queue = _queue;
-                        if (queue != null && queue.hasNext) {
-                          unawaited(_playQueueIndex(queue.currentIndex + 1));
-                        }
-                      },
-                      onEpisodes: () => unawaited(_showEpisodes()),
-                      onDiagnostics: _toggleDiagnostics,
-                      onQuality: () => unawaited(_showQualityOptions()),
-                      onFullScreen: () => unawaited(_toggleFullScreen()),
                     ),
                     if (_diagnosticsVisible)
                       Positioned.fill(
@@ -1841,6 +2006,39 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       ),
     );
   }
+}
+
+class _PlaybackTimeline {
+  const _PlaybackTimeline({
+    required this.position,
+    required this.duration,
+    required this.buffer,
+  });
+
+  final Duration position;
+  final Duration duration;
+  final Duration buffer;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _PlaybackTimeline &&
+        other.position == position &&
+        other.duration == duration &&
+        other.buffer == buffer;
+  }
+
+  @override
+  int get hashCode => Object.hash(position, duration, buffer);
+}
+
+class _SeekFeedback {
+  const _SeekFeedback({
+    required this.deltaSeconds,
+    required this.position,
+  });
+
+  final int deltaSeconds;
+  final Duration position;
 }
 
 class _EpisodeSheet extends StatelessWidget {
