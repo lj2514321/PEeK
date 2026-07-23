@@ -24,7 +24,7 @@
 - 按需播放诊断面板、实际硬解/编码/码率/缓存/丢帧统计和可轮转的脱敏日志
 - 剧集队列、选集、上一集/下一集和可取消的片尾自动连播
 - 统一服务器、媒体条目和播放计划模型
-- Riverpod、Dio、Drift、安全凭据存储及 media_kit 依赖
+- Riverpod、Dio、JSON 本地存储、安全凭据存储及 media_kit 依赖
 - 基础组件测试
 
 下一阶段将继续完善编解码器、字幕、HDR 与弱网兼容性验证。详细边界见 [架构说明](docs/ARCHITECTURE.md)、[开发路线](docs/ROADMAP.md) 和 [播放验证矩阵](docs/PLAYBACK_TEST_MATRIX.md)。

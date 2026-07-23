@@ -14,18 +14,18 @@ Application
 Domain
   ├── ServerProfile / MediaItem
   ├── PlaybackPlan / PlaybackSessionSnapshot
-  └── MediaServerGateway / PlaybackEngine
+  └── MediaServerGateway / 播放策略模型
 Infrastructure
   ├── JellyfinGateway / EmbyGateway
   ├── Dio 网络客户端
-  ├── Drift 本地数据库
+  ├── JSON 文件缓存与偏好存储
   ├── 系统安全凭据存储
-  └── media_kit/libmpv
+  └── PlaybackRuntime / media_kit / libmpv
 ```
 
 UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO。两个服务端适配器可以复用公共 HTTP 工具，但必须分别处理接口差异和版本兼容。
 
-主导航使用按需创建、访问后保活的索引栈承载首页、媒体库、收藏、搜索和设置；切换一级页面不得销毁其滚动位置、媒体库路径或搜索上下文，也不得在首次访问前提前请求隐藏页面数据。宽屏侧栏允许用户主动收起，720–1039px 自动使用紧凑图标栏，小屏使用五项底部导航；收起态必须保留 Tooltip、语义标签和可见激活态。离屏页面停止非必要轮播并释放输入焦点，账户切换仍通过 `didUpdateWidget` 清理用户隔离状态。
+主导航使用按需创建、访问后保活的 `PageView` 承载首页、媒体库、收藏、搜索和设置；切换一级页面不得销毁其滚动位置、媒体库路径或搜索上下文，也不得在首次访问前提前请求隐藏页面数据。宽屏侧栏允许用户主动收起，720–1039px 自动使用紧凑图标栏，小屏使用五项底部导航；收起态必须保留 Tooltip、语义标签和可见激活态。离屏页面停止非必要轮播并释放输入焦点，账户切换仍通过 `didUpdateWidget` 清理用户隔离状态。
 
 首页最近添加的电影按媒体库分组：先读取用户可见媒体库的 `CollectionType`，只为 `movies`、`mixed` 及缺少类型的兼容库请求 `Items/Latest`，并通过 `ParentId` 保持归属。每库最多读取 12 项、最多四个请求并发；空分组隐藏，单库失败只在对应位置恢复，不得清空其他首页轨道。缺少 `CollectionType` 时允许发起兼容查询，由空结果自然淘汰非电影库。
 
@@ -38,7 +38,7 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
 1. 适配器向服务器请求 PlaybackInfo 与 MediaSources。
 2. 播放策略根据客户端能力、用户码率、音轨和字幕生成 `PlaybackPlan`。
 3. 播放准备阶段并行读取本地解码偏好；自动模式向 libmpv 传递 `auto-safe`，不支持的格式由底层回退到软件解码，兼容模式传递 `no`。
-4. `PlaybackEngine` 将流地址、认证请求头和起始位置交给 libmpv；播放中切换画质时先准备新计划，打开失败则恢复原播放源。
+4. 可替换的 `PlaybackRuntime` 将流地址、认证请求头和起始位置交给 media_kit/libmpv；页面测试使用假运行时验证生命周期，播放中切换画质时先准备新计划，打开失败则恢复原播放源。
 5. 会话协调器发送 Started，并每约十秒及状态变化时发送 Progress。
 6. 播放完成、切换条目或关闭窗口时发送 Stopped。
 7. 诊断面板仅在打开时每三秒读取一次 libmpv 安全属性；关闭面板立即停止采样。
@@ -61,7 +61,7 @@ Windows 音量联动只操作当前 PEeK 进程的 WASAPI 音频会话：播放�
 
 ## 本地数据
 
-- Drift：服务器资料、用户资料、媒体缓存、播放设置。
+- JSON 文件：媒体缓存、搜索历史和播放设置；写入失败不得阻断核心浏览与播放。
 - 系统安全存储：服务器账户目录不包含密码或 token；每个 ServerId/UserId 的访问 token 使用独立键保存，当前账户只记录资料 ID。
 - 文件缓存：海报、背景图与临时字幕；媒体图片按服务器完整 URL 和图片 Tag 隔离，保留 30 天且最多 600 个对象。
 - 每日推荐缓存按服务器、用户和本地自然日隔离；当天直接复用，跨日只更新推荐分区，网络失败时保留上一批内容。

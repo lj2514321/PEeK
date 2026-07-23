@@ -68,10 +68,7 @@ class GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.circular(radius);
-    final content = Padding(
-      padding: padding ?? EdgeInsets.zero,
-      child: child,
-    );
+    final content = Padding(padding: padding ?? EdgeInsets.zero, child: child);
     return DecoratedBox(
       decoration: AppGlass.decoration(
         radius: radius,

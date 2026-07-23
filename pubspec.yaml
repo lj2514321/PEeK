@@ -34,8 +34,6 @@ dependencies:
   flutter_riverpod: ^3.3.2
   dio: ^5.10.0
   flutter_secure_storage: ^10.3.1
-  drift: ^2.34.2
-  drift_flutter: ^0.3.1
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_windows_video: ^1.0.11
@@ -53,8 +51,6 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  build_runner: ^2.15.1
-  drift_dev: ^2.34.0
   msix: ^3.18.0
 
 # For information on the generic Dart part of this file, see the

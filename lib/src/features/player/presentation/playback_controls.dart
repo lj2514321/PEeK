@@ -908,9 +908,7 @@ class PlaybackSeekFeedback extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                forward
-                    ? Icons.forward_10_rounded
-                    : Icons.replay_10_rounded,
+                forward ? Icons.forward_10_rounded : Icons.replay_10_rounded,
                 color: AppColors.spotlight,
                 size: 30,
               ),

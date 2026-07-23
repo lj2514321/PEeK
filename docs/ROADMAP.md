@@ -4,7 +4,7 @@
 
 - [x] Flutter Windows 工程
 - [x] 首版视觉系统与响应式桌面壳层
-- [x] Riverpod、Dio、Drift、安全存储和 media_kit 依赖
+- [x] Riverpod、Dio、JSON 本地存储、安全存储和 media_kit 依赖
 - [x] Jellyfin/Emby 服务发现
 - [x] 统一服务器、媒体条目与播放领域接口
 - [x] 开启 Windows 开发者模式并验证完整 Debug 构建

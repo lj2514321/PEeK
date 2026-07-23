@@ -16,7 +16,9 @@ import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/player/domain/playback_source_transition.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_controls.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_diagnostics_panel.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_interaction_coordinator.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_quality_sheet.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +38,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
     this.hardwareDecodingMode = HardwareDecodingMode.automatic,
     this.maxStreamingBitrate = PlaybackBitrate.original,
     this.subtitlePreferences = const SubtitlePreferences(),
+    this.runtime,
   });
 
   final AuthenticatedServer account;
@@ -45,34 +48,28 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final HardwareDecodingMode hardwareDecodingMode;
   final PlaybackBitrate maxStreamingBitrate;
   final SubtitlePreferences subtitlePreferences;
+  final PlaybackRuntime? runtime;
 
   @override
   ConsumerState<PlaybackPage> createState() => _PlaybackPageState();
 }
 
 class _PlaybackPageState extends ConsumerState<PlaybackPage> {
-  late final Player _player = Player();
-  late final VideoController _controller = VideoController(
-    _player,
-    configuration: VideoControllerConfiguration(
-      hwdec: widget.hardwareDecodingMode.mpvValue,
-      enableHardwareAcceleration: true,
-    ),
-  );
+  late final PlaybackRuntime _runtime =
+      widget.runtime ??
+      MediaKitPlaybackRuntime(decodingMode: widget.hardwareDecodingMode);
+  late final PlaybackInteractionCoordinator _interactions;
   late PlaybackPlan _plan = widget.plan;
   late MediaItem _item = widget.item;
   late PlaybackQueue? _queue = widget.queue;
 
   final _subscriptions = <StreamSubscription<dynamic>>[];
   Timer? _progressTimer;
-  Timer? _controlsTimer;
   Timer? _nextEpisodeTimer;
   Timer? _diagnosticsTimer;
   Timer? _subtitleSettingsTimer;
   Timer? _systemTimelineTimer;
   Timer? _systemVolumeRetryTimer;
-  Timer? _seekCommitTimer;
-  Timer? _seekFeedbackTimer;
   late final PlaybackDiagnosticLog _diagnosticLog;
   late final SystemMediaSession _systemMediaSession;
   final PlaybackDiagnosticsService _diagnosticsService =
@@ -82,12 +79,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Duration _duration = Duration.zero;
   Duration _buffer = Duration.zero;
   Duration? _previewPosition;
-  Duration? _pendingSeekTarget;
   late final ValueNotifier<_PlaybackTimeline> _timelineNotifier;
-  final ValueNotifier<_SeekFeedback?> _seekFeedbackNotifier = ValueNotifier(
-    null,
-  );
-  bool _seekCommitRunning = false;
   Tracks _tracks = const Tracks();
   Track _track = const Track();
   double _volume = 100;
@@ -98,7 +90,6 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   bool _subtitlesDisabled = false;
   bool _playing = false;
   bool _buffering = false;
-  bool _controlsVisible = true;
   bool _reportedStarted = false;
   bool _reportedStopped = false;
   bool _playerDisposed = false;
@@ -120,6 +111,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   late SubtitlePreferences _subtitlePreferences = widget.subtitlePreferences;
 
   static const _autoNextSeconds = 8;
+
+  bool get _controlsVisible => _interactions.controlsVisible;
 
   Duration get _effectiveDuration {
     if (_duration > Duration.zero) return _duration;
@@ -144,6 +137,19 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _selectedAudioStreamIndex = widget.plan.audioStreamIndex;
     _selectedSubtitleStreamIndex = widget.plan.subtitleStreamIndex;
     _subtitlesDisabled = widget.plan.subtitleStreamIndex == null;
+    _interactions = PlaybackInteractionCoordinator(
+      canShowControls: () => !_diagnosticsVisible,
+      canAutoHideControls: () =>
+          _playing &&
+          !_changingSource &&
+          _error == null &&
+          !_diagnosticsVisible,
+      isActive: () => mounted && !_closing && !_playerDisposed,
+      onControlsShown: () => _publishTimeline(force: true),
+      onControlsVisibilityChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
     _listenToPlayer();
     Future<void>.microtask(_initializeSystemMedia);
     Future<void>.microtask(_openInitialMedia);
@@ -151,51 +157,51 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   void _listenToPlayer() {
     _subscriptions.addAll([
-      _player.stream.playing.listen(_playingChanged),
-      _player.stream.position.listen((value) {
+      _runtime.playingStream.listen(_playingChanged),
+      _runtime.positionStream.listen((value) {
         if (mounted && _previewPosition == null) {
           _position = value;
           _publishTimeline();
           _scheduleSystemTimelineSync();
         }
       }),
-      _player.stream.duration.listen((value) {
+      _runtime.durationStream.listen((value) {
         if (mounted && value > Duration.zero) {
           _duration = value;
           _publishTimeline();
           _scheduleSystemTimelineSync(immediate: true);
         }
       }),
-      _player.stream.buffer.listen((value) {
+      _runtime.bufferStream.listen((value) {
         if (mounted) {
           _buffer = value;
           _publishTimeline();
         }
       }),
-      _player.stream.buffering.listen((value) {
+      _runtime.bufferingStream.listen((value) {
         if (mounted) {
           setState(() => _buffering = value);
           _syncSystemPlayback();
         }
       }),
-      _player.stream.volume.listen((value) {
+      _runtime.volumeStream.listen((value) {
         if (!mounted || _systemVolumeLinked) return;
         if (value > 0) _lastAudibleVolume = value;
         setState(() => _volume = value);
       }),
-      _player.stream.rate.listen((value) {
+      _runtime.rateStream.listen((value) {
         if (mounted) setState(() => _rate = value);
       }),
-      _player.stream.tracks.listen((value) {
+      _runtime.tracksStream.listen((value) {
         if (mounted) setState(() => _tracks = value);
       }),
-      _player.stream.track.listen((value) {
+      _runtime.trackStream.listen((value) {
         if (mounted) setState(() => _track = value);
       }),
-      _player.stream.completed.listen((completed) {
+      _runtime.completedStream.listen((completed) {
         if (completed) _finishCompletedPlayback();
       }),
-      _player.stream.error.listen((message) {
+      _runtime.errorStream.listen((message) {
         if (mounted && message.isNotEmpty) {
           _writeDiagnosticLog('player_error', fields: {'message': message});
           setState(() => _error = '播放器无法继续播放：$message');
@@ -227,9 +233,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (!mounted || _closing || _playerDisposed) return;
     switch (command.type) {
       case SystemMediaCommandType.play:
-        if (!_playing) await _player.play();
+        if (!_playing) await _runtime.play();
       case SystemMediaCommandType.pause:
-        if (_playing) await _player.pause();
+        if (_playing) await _runtime.pause();
       case SystemMediaCommandType.next:
         final queue = _queue;
         if (queue != null && queue.hasNext) {
@@ -288,7 +294,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
     _systemVolumeLinked = true;
     _systemVolumeBindAttempts = 0;
-    await _player.setVolume(100);
+    await _runtime.setVolume(100);
     if (!mounted || _closing) return;
     final effective = volume.effectiveLevel;
     if (effective > 0) _lastAudibleVolume = volume.level;
@@ -393,14 +399,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     required bool play,
     Duration? startPosition,
   }) async {
-    await _player.open(
-      Media(
-        plan.streamUri.toString(),
-        httpHeaders: plan.httpHeaders,
-        start: startPosition ?? plan.startPosition,
-      ),
-      play: play,
-    );
+    await _runtime.open(plan, play: play, startPosition: startPosition);
     await _applySubtitleDelay();
   }
 
@@ -410,8 +409,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (playing) {
       _scheduleControlsHide();
     } else {
-      _controlsTimer?.cancel();
-      if (!_controlsVisible) setState(() => _controlsVisible = true);
+      _interactions.cancelControlsHide();
+      _interactions.showControls();
     }
     if (_reportedStarted && !_closing && !_changingSource) {
       _safeReportProgress(playing ? 'Unpause' : 'Pause');
@@ -420,46 +419,24 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   void _showControls() {
-    if (!mounted) return;
-    if (_diagnosticsVisible) return;
-    _publishTimeline(force: true);
-    if (!_controlsVisible) setState(() => _controlsVisible = true);
-    _scheduleControlsHide();
+    _interactions.showControls();
   }
 
   void _hideControls({bool force = false}) {
-    _controlsTimer?.cancel();
-    if (!mounted || _diagnosticsVisible) return;
-    if (!force &&
-        (!_playing || _changingSource || _error != null)) {
-      return;
-    }
-    if (_controlsVisible) setState(() => _controlsVisible = false);
+    _interactions.hideControls(force: force);
   }
 
   void _toggleControlsVisibility() {
-    if (_controlsVisible && _playing) {
-      _hideControls(force: true);
-    } else {
-      _showControls();
-    }
+    _interactions.toggleControls(playing: _playing);
   }
 
   void _scheduleControlsHide() {
-    _controlsTimer?.cancel();
-    if (!_playing || _changingSource || _error != null || _diagnosticsVisible) {
-      return;
-    }
-    _controlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _playing && !_changingSource && _error == null) {
-        _hideControls(force: true);
-      }
-    });
+    _interactions.scheduleControlsHide();
   }
 
   Future<void> _togglePlayPause() async {
     _showControls();
-    await _player.playOrPause();
+    await _runtime.playOrPause();
   }
 
   void _previewSeek(Duration position) {
@@ -468,73 +445,35 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _publishTimeline();
   }
 
-  Future<void> _seek(
-    Duration position, {
-    bool showControls = true,
-  }) async {
-    _seekCommitTimer?.cancel();
-    _pendingSeekTarget = null;
+  Future<void> _seek(Duration position, {bool showControls = true}) async {
+    _interactions.cancelPendingSeek();
     final target = _clampPosition(position);
     _position = target;
     _previewPosition = null;
     _publishTimeline();
-    await _player.seek(target);
+    await _runtime.seek(target);
     await _safeReportProgress('TimeUpdate');
     _scheduleSystemTimelineSync(immediate: true);
     if (showControls) _showControls();
   }
 
   Future<void> _seekRelative(Duration offset) {
-    final base = _pendingSeekTarget ?? _previewPosition ?? _position;
-    final target = _clampPosition(base + offset);
-    _pendingSeekTarget = target;
+    final base =
+        _interactions.pendingSeekTarget ?? _previewPosition ?? _position;
+    final target = _interactions.queueRelativeSeek(
+      base: base,
+      offset: offset,
+      duration: _effectiveDuration,
+      commit: _runtime.seek,
+      afterCommitted: () async {
+        await _safeReportProgress('TimeUpdate');
+        _scheduleSystemTimelineSync(immediate: true);
+      },
+    );
     _position = target;
     _previewPosition = null;
     _publishTimeline();
-    _showSeekFeedback(offset, target);
-    _seekCommitTimer?.cancel();
-    _seekCommitTimer = Timer(
-      const Duration(milliseconds: 110),
-      () => unawaited(_commitPendingSeek()),
-    );
     return Future<void>.value();
-  }
-
-  void _showSeekFeedback(Duration offset, Duration target) {
-    final current = _seekFeedbackNotifier.value;
-    final nextDelta = (current?.deltaSeconds ?? 0) + offset.inSeconds;
-    _seekFeedbackNotifier.value = _SeekFeedback(
-      deltaSeconds: nextDelta,
-      position: target,
-    );
-    _seekFeedbackTimer?.cancel();
-    _seekFeedbackTimer = Timer(const Duration(milliseconds: 850), () {
-      if (mounted) _seekFeedbackNotifier.value = null;
-    });
-  }
-
-  Future<void> _commitPendingSeek() async {
-    if (_seekCommitRunning || _playerDisposed || _closing) return;
-    _seekCommitRunning = true;
-    var changed = false;
-    try {
-      while (mounted && !_playerDisposed && !_closing) {
-        final target = _pendingSeekTarget;
-        if (target == null) break;
-        _pendingSeekTarget = null;
-        await _player.seek(target);
-        changed = true;
-      }
-      if (changed && mounted && !_closing) {
-        await _safeReportProgress('TimeUpdate');
-        _scheduleSystemTimelineSync(immediate: true);
-      }
-    } finally {
-      _seekCommitRunning = false;
-      if (_pendingSeekTarget != null && mounted && !_closing) {
-        unawaited(_commitPendingSeek());
-      }
-    }
   }
 
   void _publishTimeline({bool force = false}) {
@@ -564,7 +503,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (_systemVolumeLinked) {
       await _systemMediaSession.setVolume(normalized);
     } else {
-      await _player.setVolume(normalized);
+      await _runtime.setVolume(normalized);
     }
   }
 
@@ -579,7 +518,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _setRate(double value) async {
     _showControls();
     setState(() => _rate = value);
-    await _player.setRate(value);
+    await _runtime.setRate(value);
     await _safeReportProgress('PlaybackRateChange');
     _scheduleSystemTimelineSync(immediate: true);
   }
@@ -645,10 +584,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _closeDiagnostics();
       return;
     }
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
+    _interactions.hideControls(force: true);
     setState(() {
       _diagnosticsVisible = true;
-      _controlsVisible = false;
     });
     _writeDiagnosticLog('diagnostics_opened');
     unawaited(_refreshDiagnostics());
@@ -709,21 +648,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<String?> _readMpvProperty(String property) async {
-    final platform = _player.platform;
-    if (platform is! NativePlayer || _playerDisposed) return null;
-    try {
-      return await platform.getProperty(property);
-    } on Object {
-      return null;
-    }
+    if (_playerDisposed) return null;
+    return _runtime.readNativeProperty(property);
   }
 
   Future<void> _applySubtitleDelay() async {
-    final platform = _player.platform;
-    if (platform is! NativePlayer || _playerDisposed) return;
+    if (_playerDisposed) return;
     try {
-      final seconds = _subtitlePreferences.delayMilliseconds / 1000;
-      await platform.setProperty('sub-delay', seconds.toStringAsFixed(3));
+      await _runtime.setSubtitleDelay(_subtitlePreferences.delay);
     } on Object {
       // Subtitle styling remains available if the native delay is unsupported.
     }
@@ -802,7 +734,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Future<void> _showQualityOptions() async {
     if (_changingSource || _closing) return;
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
     _showControls();
     final selected = await showModalBottomSheet<PlaybackBitrate>(
       context: context,
@@ -846,7 +778,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _showSubtitleTracks() {
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
     _showControls();
     return showModalBottomSheet<void>(
       context: context,
@@ -869,7 +801,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     required List<_TrackMenuOption> options,
     required String emptyMessage,
   }) async {
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
     _showControls();
     await showModalBottomSheet<void>(
       context: context,
@@ -973,7 +905,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     AudioTrack? engineTrack,
   ) async {
     if (_plan.method != PlaybackMethod.transcode && engineTrack != null) {
-      await _player.setAudioTrack(engineTrack);
+      await _runtime.setAudioTrack(engineTrack);
       if (mounted) setState(() => _selectedAudioStreamIndex = info.index);
       await _safeReportProgress('AudioTrackChange');
       return;
@@ -987,7 +919,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _selectEngineAudio(AudioTrack track) async {
-    await _player.setAudioTrack(track);
+    await _runtime.setAudioTrack(track);
     if (mounted) setState(() => _selectedAudioStreamIndex = null);
     await _safeReportProgress('AudioTrackChange');
   }
@@ -999,7 +931,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (_plan.method != PlaybackMethod.transcode &&
         info.isExternal &&
         info.deliveryUri != null) {
-      await _player.setSubtitleTrack(
+      await _runtime.setSubtitleTrack(
         SubtitleTrack.uri(
           info.deliveryUri.toString(),
           title: info.label,
@@ -1016,7 +948,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       return;
     }
     if (_plan.method != PlaybackMethod.transcode && engineTrack != null) {
-      await _player.setSubtitleTrack(engineTrack);
+      await _runtime.setSubtitleTrack(engineTrack);
       if (mounted) {
         setState(() {
           _selectedSubtitleStreamIndex = info.index;
@@ -1033,7 +965,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _selectEngineSubtitle(SubtitleTrack track) async {
-    await _player.setSubtitleTrack(track);
+    await _runtime.setSubtitleTrack(track);
     if (mounted) {
       setState(() {
         _selectedSubtitleStreamIndex = null;
@@ -1052,7 +984,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       );
       return;
     }
-    await _player.setSubtitleTrack(SubtitleTrack.no());
+    await _runtime.setSubtitleTrack(SubtitleTrack.no());
     if (mounted) {
       setState(() {
         _selectedSubtitleStreamIndex = null;
@@ -1094,7 +1026,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     bool? subtitlesDisabledAfterSwitch,
   }) async {
     if (_changingSource || _closing) return false;
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
     _progressTimer?.cancel();
     final oldPlan = _plan;
     final oldTrack = _track;
@@ -1118,13 +1050,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     setState(() {
       _changingSource = true;
       _sourceChangeLabel = statusLabel;
-      _controlsVisible = true;
       _error = null;
     });
+    _interactions.showControls();
 
     try {
       try {
-        await _player.pause();
+        await _runtime.pause();
       } on Object catch (error) {
         _reportRecoveredSourceChangeFailure(actionLabel, error);
         return false;
@@ -1230,7 +1162,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Future<void> _resumeQuietly() async {
     try {
-      await _player.play();
+      await _runtime.play();
     } on Object {
       // The player error stream will surface a failure to resume.
     }
@@ -1268,12 +1200,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     required double rate,
   }) async {
     try {
-      await _player.setVolume(volume);
+      await _runtime.setVolume(volume);
     } on Object {
       // A media source switch should still succeed if volume restore fails.
     }
     try {
-      await _player.setRate(rate);
+      await _runtime.setRate(rate);
     } on Object {
       // A media source switch should still succeed if rate restore fails.
     }
@@ -1285,7 +1217,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     required bool subtitlesDisabled,
   }) async {
     if (plan.method == PlaybackMethod.transcode) return;
-    final tracks = _player.state.tracks;
+    final tracks = _runtime.tracks;
     final audioTracks = tracks.audio
         .where((track) => track.id != 'auto' && track.id != 'no')
         .toList(growable: false);
@@ -1297,13 +1229,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         (track) => track.index == plan.audioStreamIndex,
       );
       if (selectedAudioIndex >= 0 && selectedAudioIndex < audioTracks.length) {
-        await _player.setAudioTrack(audioTracks[selectedAudioIndex]);
+        await _runtime.setAudioTrack(audioTracks[selectedAudioIndex]);
       } else {
         final previousAudioIndex = audioTracks.indexWhere(
           (track) => track.id == previousTrack.audio.id,
         );
         if (previousAudioIndex >= 0) {
-          await _player.setAudioTrack(audioTracks[previousAudioIndex]);
+          await _runtime.setAudioTrack(audioTracks[previousAudioIndex]);
         }
       }
     } on Object {
@@ -1312,7 +1244,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
     try {
       if (subtitlesDisabled) {
-        await _player.setSubtitleTrack(SubtitleTrack.no());
+        await _runtime.setSubtitleTrack(SubtitleTrack.no());
         return;
       }
       PlaybackTrackInfo? selectedSubtitle;
@@ -1324,7 +1256,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       }
       if (selectedSubtitle?.isExternal == true &&
           selectedSubtitle?.deliveryUri != null) {
-        await _player.setSubtitleTrack(
+        await _runtime.setSubtitleTrack(
           SubtitleTrack.uri(
             selectedSubtitle!.deliveryUri.toString(),
             title: selectedSubtitle.label,
@@ -1340,14 +1272,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         (track) => track.index == plan.subtitleStreamIndex,
       );
       if (embeddedIndex >= 0 && embeddedIndex < subtitleTracks.length) {
-        await _player.setSubtitleTrack(subtitleTracks[embeddedIndex]);
+        await _runtime.setSubtitleTrack(subtitleTracks[embeddedIndex]);
         return;
       }
       final previousSubtitleIndex = subtitleTracks.indexWhere(
         (track) => track.id == previousTrack.subtitle.id,
       );
       if (previousSubtitleIndex >= 0) {
-        await _player.setSubtitleTrack(subtitleTracks[previousSubtitleIndex]);
+        await _runtime.setSubtitleTrack(subtitleTracks[previousSubtitleIndex]);
       }
     } on Object {
       // The server-selected subtitle remains the safe fallback.
@@ -1465,7 +1397,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _showEpisodes() async {
     final queue = _queue;
     if (queue == null || queue.items.isEmpty) return;
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
     _showControls();
     final index = await showModalBottomSheet<int>(
       context: context,
@@ -1482,7 +1414,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Future<void> _showChapters() async {
     if (_plan.chapters.isEmpty) return;
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
     _showControls();
     final target = await showModalBottomSheet<Duration>(
       context: context,
@@ -1502,8 +1434,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _nextEpisodeTimer?.cancel();
     setState(() {
       _nextEpisodeCountdown = _autoNextSeconds;
-      _controlsVisible = true;
     });
+    _interactions.showControls();
     _nextEpisodeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted || _closing) {
         timer.cancel();
@@ -1548,15 +1480,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     final preservedRate = _rate;
     _cancelNextEpisodeCountdown(showControls: false);
     _progressTimer?.cancel();
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
     setState(() {
       _changingSource = true;
       _sourceChangeLabel = automatic ? '正在播放下一集' : '正在切换剧集';
-      _controlsVisible = true;
       _error = null;
     });
+    _interactions.showControls();
     _syncSystemPlayback();
-    await _player.pause();
+    await _runtime.pause();
     try {
       final nextPlan = await ref
           .read(playbackServiceProvider)
@@ -1587,8 +1519,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       await _openMedia(nextPlan, play: true);
       _writeDiagnosticLog('queue_item_opened');
       if (_diagnosticsVisible) unawaited(_refreshDiagnostics());
-      await _player.setVolume(_systemVolumeLinked ? 100 : preservedVolume);
-      await _player.setRate(preservedRate);
+      await _runtime.setVolume(_systemVolumeLinked ? 100 : preservedVolume);
+      await _runtime.setRate(preservedRate);
       unawaited(_bindSystemVolume(resetAttempts: true));
       await _safeReportStarted();
       _startProgressTimer();
@@ -1598,7 +1530,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         fields: {'message': error.message},
       );
       if (mounted) setState(() => _error = '无法播放所选剧集：${error.message}');
-      if (wasPlaying) await _player.play();
+      if (wasPlaying) await _runtime.play();
       _startProgressTimer();
     } on Object catch (error) {
       _writeDiagnosticLog(
@@ -1606,7 +1538,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         fields: {'message': error.toString()},
       );
       if (mounted) setState(() => _error = '无法播放所选剧集：$error');
-      if (wasPlaying) await _player.play();
+      if (wasPlaying) await _runtime.play();
       _startProgressTimer();
     } finally {
       if (mounted) {
@@ -1634,13 +1566,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   PlaybackSessionSnapshot _snapshot() {
     return PlaybackSessionSnapshot(
       plan: _plan,
-      position: _player.state.position,
-      isPaused: !_player.state.playing,
+      position: _runtime.position,
+      isPaused: !_runtime.playing,
       volume: _volume,
       audioStreamIndex: _selectedAudioStreamIndex,
       subtitleStreamIndex: _selectedSubtitleStreamIndex,
       subtitlesDisabled: _subtitlesDisabled,
-      playbackRate: _player.state.rate,
+      playbackRate: _runtime.rate,
       subtitleOffset: _subtitlePreferences.delay,
     );
   }
@@ -1649,14 +1581,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (_closing) return;
     setState(() => _closing = true);
     _progressTimer?.cancel();
-    _controlsTimer?.cancel();
+    _interactions.cancelControlsHide();
     _nextEpisodeTimer?.cancel();
     _diagnosticsTimer?.cancel();
     _subtitleSettingsTimer?.cancel();
     _systemTimelineTimer?.cancel();
     _systemVolumeRetryTimer?.cancel();
-    _seekCommitTimer?.cancel();
-    _seekFeedbackTimer?.cancel();
+    _interactions.cancelPendingSeek();
     await _persistPlaybackPreferences();
     _writeDiagnosticLog('playback_closed');
     await _safeReportStopped();
@@ -1676,7 +1607,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _disposePlayer() async {
     if (_playerDisposed) return;
     _playerDisposed = true;
-    await _player.dispose();
+    await _runtime.dispose();
   }
 
   Future<void> _disposeSystemMedia() async {
@@ -1694,14 +1625,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   void dispose() {
     AppChrome.leaveImmersive();
     _progressTimer?.cancel();
-    _controlsTimer?.cancel();
     _nextEpisodeTimer?.cancel();
     _diagnosticsTimer?.cancel();
     _subtitleSettingsTimer?.cancel();
     _systemTimelineTimer?.cancel();
     _systemVolumeRetryTimer?.cancel();
-    _seekCommitTimer?.cancel();
-    _seekFeedbackTimer?.cancel();
+    _interactions.dispose();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -1712,7 +1641,6 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (!_systemMediaDisposed) unawaited(_disposeSystemMedia());
     if (!_playerDisposed) unawaited(_disposePlayer());
     _timelineNotifier.dispose();
-    _seekFeedbackNotifier.dispose();
     super.dispose();
   }
 
@@ -1795,10 +1723,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                   fit: StackFit.expand,
                   children: [
                     RepaintBoundary(
-                      child: Video(
-                        controller: _controller,
-                        controls: NoVideoControls,
-                        subtitleViewConfiguration: SubtitleViewConfiguration(
+                      child: _runtime.buildVideoSurface(
+                        subtitleConfiguration: SubtitleViewConfiguration(
                           style: TextStyle(
                             height: 1.35,
                             fontSize: _subtitlePreferences.fontSize,
@@ -1865,8 +1791,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                             onRateChanged: (value) =>
                                 unawaited(_setRate(value)),
                             onAudio: () => unawaited(_showAudioTracks()),
-                            onSubtitle: () =>
-                                unawaited(_showSubtitleTracks()),
+                            onSubtitle: () => unawaited(_showSubtitleTracks()),
                             onChapters: () => unawaited(_showChapters()),
                             onPrevious: () {
                               final queue = _queue;
@@ -1886,17 +1811,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                             },
                             onEpisodes: () => unawaited(_showEpisodes()),
                             onDiagnostics: _toggleDiagnostics,
-                            onQuality: () =>
-                                unawaited(_showQualityOptions()),
-                            onFullScreen: () =>
-                                unawaited(_toggleFullScreen()),
+                            onQuality: () => unawaited(_showQualityOptions()),
+                            onFullScreen: () => unawaited(_toggleFullScreen()),
                           ),
                         );
                       },
                     ),
                     Center(
-                      child: ValueListenableBuilder<_SeekFeedback?>(
-                        valueListenable: _seekFeedbackNotifier,
+                      child: ValueListenableBuilder<PlaybackSeekFeedbackState?>(
+                        valueListenable: _interactions.seekFeedback,
                         builder: (context, feedback, _) {
                           return AnimatedSwitcher(
                             duration: AppMotion.responsive(
@@ -1914,9 +1837,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                                     key: ValueKey('seek-feedback-hidden'),
                                   )
                                 : PlaybackSeekFeedback(
-                                    key: const ValueKey(
-                                      'player-seek-feedback',
-                                    ),
+                                    key: const ValueKey('player-seek-feedback'),
                                     deltaSeconds: feedback.deltaSeconds,
                                     position: feedback.position,
                                   ),
@@ -2029,16 +1950,6 @@ class _PlaybackTimeline {
 
   @override
   int get hashCode => Object.hash(position, duration, buffer);
-}
-
-class _SeekFeedback {
-  const _SeekFeedback({
-    required this.deltaSeconds,
-    required this.position,
-  });
-
-  final int deltaSeconds;
-  final Duration position;
 }
 
 class _EpisodeSheet extends StatelessWidget {
