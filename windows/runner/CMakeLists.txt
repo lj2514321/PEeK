@@ -20,6 +20,12 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
+# C++/WinRT falls back to the deprecated <experimental/coroutine> header when
+# the runner is compiled as C++17. MSVC 14.51 rejects that header, so keep the
+# app runner on the standard C++20 coroutine implementation. This is scoped to
+# PEeK and does not change the language standard used by Flutter plugins.
+target_compile_features(${BINARY_NAME} PRIVATE cxx_std_20)
+
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")

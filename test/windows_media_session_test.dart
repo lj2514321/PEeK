@@ -163,6 +163,14 @@ void main() {
 
     expect(cmake, contains('"windows_media_session.cpp"'));
     expect(cmake, contains('"windowsapp.lib"'));
+    expect(
+      cmake,
+      contains(r'target_compile_features(${BINARY_NAME} PRIVATE cxx_std_20)'),
+    );
+    expect(
+      cmake,
+      isNot(contains('_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS')),
+    );
     expect(window, contains('WindowsMediaSessionBridge::Create'));
     expect(bridge, contains('ISystemMediaTransportControlsInterop'));
     expect(bridge, contains('IAudioSessionEvents'));
