@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/branding/peek_app_icon.png" width="112" alt="PEeK application icon">
+
 # PEeK
 
 **为 Jellyfin 与 Emby 打造的 Windows 桌面影院。**

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -47,6 +48,41 @@ void main() {
       isTrue,
     );
     expect(File('docs/WINDOWS_RELEASE.md').existsSync(), isTrue);
+  });
+
+  test('ships PEeK artwork as a multi-resolution Windows icon', () {
+    final artwork = File('assets/branding/peek_app_icon.png');
+    final icon = File('windows/runner/resources/app_icon.ico');
+
+    expect(artwork.existsSync(), isTrue);
+    expect(artwork.lengthSync(), greaterThan(10000));
+    expect(icon.existsSync(), isTrue);
+
+    final bytes = icon.readAsBytesSync();
+    final data = ByteData.sublistView(bytes);
+    expect(data.getUint16(0, Endian.little), 0);
+    expect(data.getUint16(2, Endian.little), 1);
+
+    final imageCount = data.getUint16(4, Endian.little);
+    expect(imageCount, 9);
+
+    final sizes = <int>{};
+    for (var index = 0; index < imageCount; index++) {
+      final entryOffset = 6 + (index * 16);
+      final encodedWidth = bytes[entryOffset];
+      final encodedHeight = bytes[entryOffset + 1];
+      final width = encodedWidth == 0 ? 256 : encodedWidth;
+      final height = encodedHeight == 0 ? 256 : encodedHeight;
+      final payloadLength = data.getUint32(entryOffset + 8, Endian.little);
+      final payloadOffset = data.getUint32(entryOffset + 12, Endian.little);
+
+      expect(height, width);
+      expect(payloadLength, greaterThan(0));
+      expect(payloadOffset + payloadLength, lessThanOrEqualTo(bytes.length));
+      sizes.add(width);
+    }
+
+    expect(sizes, {16, 20, 24, 32, 40, 48, 64, 128, 256});
   });
 
   test('automates Windows builds and tagged GitHub releases', () {
