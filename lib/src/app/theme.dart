@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
@@ -28,8 +29,35 @@ abstract final class AppMotion {
   static const standard = Duration(milliseconds: 240);
   static const slow = Duration(milliseconds: 320);
 
+  static const enterCurve = Curves.easeOutCubic;
+  static const exitCurve = Curves.easeInCubic;
+
   static Duration responsive(BuildContext context, Duration duration) {
     return MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
+  }
+}
+
+class PeekPageTransitionsBuilder extends PageTransitionsBuilder {
+  const PeekPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T>? route,
+    BuildContext? context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (context != null && MediaQuery.disableAnimationsOf(context)) {
+      return child;
+    }
+    return SharedAxisTransition(
+      animation: animation,
+      secondaryAnimation: secondaryAnimation,
+      transitionType: SharedAxisTransitionType.horizontal,
+      fillColor: AppColors.canvas,
+      child: child,
+    );
   }
 }
 
@@ -65,6 +93,9 @@ abstract final class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.canvas,
       canvasColor: AppColors.canvas,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {TargetPlatform.windows: PeekPageTransitionsBuilder()},
+      ),
       focusColor: AppColors.indigo.withValues(alpha: 0.24),
       hoverColor: AppColors.textPrimary.withValues(alpha: 0.055),
       splashColor: AppColors.textPrimary.withValues(alpha: 0.08),

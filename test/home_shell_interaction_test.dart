@@ -43,30 +43,83 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('PRIVATE CINEMA'), findsOneWidget);
+    final topBar = tester.element(
+      find.byKey(const ValueKey('top-command-bar')),
+    );
+    expect(find.byKey(const ValueKey('top-destination-title')), findsOneWidget);
+    expect(find.text('CURRENT VIEW'), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width,
       224,
     );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('main-content-pane'))).dx,
+      224,
+    );
     await tester.tap(find.byKey(const ValueKey('sidebar-toggle')));
     await tester.pump();
-    expect(tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width, 80);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width,
+      224,
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('main-content-pane'))).dx,
+      224,
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(
+      tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width,
+      inExclusiveRange(80, 224),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('main-content-pane'))).dx,
+      inExclusiveRange(80, 224),
+    );
     await tester.pumpAndSettle();
+    expect(tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width, 80);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('main-content-pane'))).dx,
+      80,
+    );
     expect(find.text('PRIVATE CINEMA'), findsNothing);
 
-    await tester.tap(find.byTooltip('收藏'));
+    await tester.tap(find.byIcon(Icons.favorite_border_rounded));
     await tester.pumpAndSettle();
 
+    expect(
+      tester.element(find.byKey(const ValueKey('top-command-bar'))),
+      same(topBar),
+    );
+    expect(find.text('收藏').first, findsOneWidget);
     expect(find.text('我的收藏'), findsOneWidget);
     expect(find.text('收藏影片'), findsOneWidget);
     expect(library.favoriteRequests, 1);
 
     await tester.tap(find.byKey(const ValueKey('sidebar-toggle')));
     await tester.pump();
+    expect(tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width, 80);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('main-content-pane'))).dx,
+      80,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width,
+      inExclusiveRange(80, 224),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('main-content-pane'))).dx,
+      inExclusiveRange(80, 224),
+    );
+    await tester.pumpAndSettle();
     expect(
       tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width,
       224,
     );
-    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('main-content-pane'))).dx,
+      224,
+    );
     expect(find.text('PRIVATE CINEMA'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

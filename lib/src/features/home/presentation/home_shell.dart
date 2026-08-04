@@ -6,6 +6,7 @@ import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/network/session_expiry_coordinator.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/favorites/presentation/favorites_page.dart';
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
 import 'package:embyplayer/src/features/home/presentation/authenticated_home_page.dart';
@@ -31,7 +32,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   final _libraryPageKey = GlobalKey<MediaLibraryPageState>();
   final _favoritesPageKey = GlobalKey<FavoritesPageState>();
   final _searchPageKey = GlobalKey<MediaSearchPageState>();
-  final _pageController = PageController();
   final _visitedDestinations = <int>{0};
   int _selectedIndex = 0;
   bool _sidebarCollapsed = false;
@@ -76,7 +76,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   void dispose() {
     _sessionExpirySubscription.cancel();
-    _pageController.dispose();
     super.dispose();
   }
 
@@ -314,7 +313,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       _visitedDestinations.add(index);
       _selectedIndex = index;
     });
-    _jumpToDestination(index);
   }
 
   void _openSearch() {
@@ -323,22 +321,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         _visitedDestinations.add(3);
         _selectedIndex = 3;
       });
-      _jumpToDestination(3);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchPageKey.currentState?.focusSearch();
-    });
-  }
-
-  void _jumpToDestination(int index) {
-    if (_pageController.hasClients) {
-      _pageController.jumpToPage(index);
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _pageController.hasClients) {
-        _pageController.jumpToPage(index);
-      }
     });
   }
 
@@ -378,7 +363,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       _selectedIndex = 0;
       _clearingExpiredSession = false;
     });
-    _jumpToDestination(0);
     if (event != null) coordinator.acknowledge(event);
     ScaffoldMessenger.of(
       context,
@@ -419,23 +403,29 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             final canExtendRail = constraints.maxWidth >= 1040;
             final extendedRail = canExtendRail && !_sidebarCollapsed;
             final compactContent = constraints.maxWidth < 900;
+            final sidebarDuration = AppMotion.responsive(
+              context,
+              extendedRail ? AppMotion.slow : AppMotion.standard,
+            );
+            final sidebarCurve = extendedRail
+                ? Curves.easeOutExpo
+                : Curves.easeInOutCubic;
 
             return Scaffold(
               body: AmbientBackdrop(
                 child: SafeArea(
-                  child: Row(
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      if (showRail)
-                        _AppRail(
-                          extended: extendedRail,
-                          destinations: _destinations,
-                          selectedIndex: _selectedIndex,
-                          onSelected: _selectDestination,
-                          canToggle: canExtendRail,
-                          onToggle: _toggleSidebar,
-                        ),
-                      Expanded(
+                      AnimatedPositioned(
+                        duration: sidebarDuration,
+                        curve: sidebarCurve,
+                        left: showRail ? (extendedRail ? 224 : 80) : 0,
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
                         child: RepaintBoundary(
+                          key: const ValueKey('main-content-pane'),
                           child: Column(
                             children: [
                               _TopCommandBar(
@@ -447,10 +437,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                 onAccount: () => _selectDestination(4),
                               ),
                               Expanded(
-                                child: PageView(
+                                child: PeekIndexedTransitionStack(
                                   key: const ValueKey('main-page-view'),
-                                  controller: _pageController,
-                                  physics: const NeverScrollableScrollPhysics(),
+                                  index: _selectedIndex,
                                   children: [
                                     _KeepAliveDestination(
                                       active: _selectedIndex == 0,
@@ -565,6 +554,20 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                           ),
                         ),
                       ),
+                      if (showRail)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: _AppRail(
+                            extended: extendedRail,
+                            destinations: _destinations,
+                            selectedIndex: _selectedIndex,
+                            onSelected: _selectDestination,
+                            canToggle: canExtendRail,
+                            onToggle: _toggleSidebar,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -618,7 +621,7 @@ class _KeepAliveDestinationState extends State<_KeepAliveDestination>
   }
 }
 
-class _AppRail extends StatelessWidget {
+class _AppRail extends StatefulWidget {
   const _AppRail({
     required this.extended,
     required this.destinations,
@@ -636,55 +639,90 @@ class _AppRail extends StatelessWidget {
   final VoidCallback onToggle;
 
   @override
+  State<_AppRail> createState() => _AppRailState();
+}
+
+class _AppRailState extends State<_AppRail>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _disableAnimations = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      value: widget.extended ? 1 : 0,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _controller.value = widget.extended ? 1 : 0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AppRail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.extended == widget.extended) return;
+    if (_disableAnimations) {
+      _controller.value = widget.extended ? 1 : 0;
+      return;
+    }
+    _controller.animateTo(
+      widget.extended ? 1 : 0,
+      duration: widget.extended ? AppMotion.slow : AppMotion.standard,
+      curve: widget.extended ? Curves.easeOutExpo : Curves.easeInOutCubic,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final targetWidth = extended ? 224.0 : 80.0;
-    return SizedBox(
-      key: const ValueKey('app-sidebar'),
-      width: targetWidth,
-      child: RepaintBoundary(
-        child: ClipRect(
-          child: GlassSurface(
-            radius: 0,
-            blur: 0,
-            tint: AppColors.glassSurface,
-            child: AnimatedSwitcher(
-              duration: AppMotion.responsive(
-                context,
-                const Duration(milliseconds: 150),
-              ),
-              reverseDuration: AppMotion.responsive(
-                context,
-                const Duration(milliseconds: 110),
-              ),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) =>
-                  FadeTransition(opacity: animation, child: child),
-              layoutBuilder: (currentChild, previousChildren) => Stack(
-                alignment: Alignment.topLeft,
-                fit: StackFit.expand,
-                children: [...previousChildren, ?currentChild],
-              ),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final progress = _controller.value;
+        final width = 80 + (144 * progress);
+        return SizedBox(
+          key: const ValueKey('app-sidebar'),
+          width: width,
+          child: RepaintBoundary(
+            child: ClipRect(
               child: OverflowBox(
-                key: ValueKey(
-                  'app-sidebar-${extended ? 'extended' : 'compact'}',
-                ),
                 alignment: Alignment.topLeft,
-                minWidth: targetWidth,
-                maxWidth: targetWidth,
-                child: _AppRailContents(
-                  extended: extended,
-                  destinations: destinations,
-                  selectedIndex: selectedIndex,
-                  onSelected: onSelected,
-                  canToggle: canToggle,
-                  onToggle: onToggle,
+                minWidth: 224,
+                maxWidth: 224,
+                child: GlassSurface(
+                  radius: 0,
+                  blur: 0,
+                  tint: AppColors.glassSurface,
+                  child: _AppRailContents(
+                    extended: widget.extended,
+                    progress: progress,
+                    destinations: widget.destinations,
+                    selectedIndex: widget.selectedIndex,
+                    onSelected: widget.onSelected,
+                    canToggle: widget.canToggle,
+                    onToggle: widget.onToggle,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -692,6 +730,7 @@ class _AppRail extends StatelessWidget {
 class _AppRailContents extends StatelessWidget {
   const _AppRailContents({
     required this.extended,
+    required this.progress,
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
@@ -700,6 +739,7 @@ class _AppRailContents extends StatelessWidget {
   });
 
   final bool extended;
+  final double progress;
   final List<_AppDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
@@ -710,9 +750,10 @@ class _AppRailContents extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _RailBrand(extended: extended),
+        _RailBrand(progress: _motionInterval(progress, 0.1, 0.55)),
         _RailToggle(
           extended: extended,
+          revealProgress: _motionInterval(progress, 0.16, 0.62),
           enabled: canToggle,
           onPressed: onToggle,
         ),
@@ -727,6 +768,11 @@ class _AppRailContents extends StatelessWidget {
                   child: _RailDestination(
                     destination: destinations[index],
                     extended: extended,
+                    revealProgress: _motionInterval(
+                      progress,
+                      0.22 + (index * 0.055),
+                      0.68 + (index * 0.055),
+                    ),
                     selected: index == selectedIndex,
                     onTap: () => onSelected(index),
                   ),
@@ -743,83 +789,128 @@ class _RailDestination extends StatelessWidget {
   const _RailDestination({
     required this.destination,
     required this.extended,
+    required this.revealProgress,
     required this.selected,
     required this.onTap,
   });
 
   final _AppDestination destination;
   final bool extended;
+  final double revealProgress;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = selected ? AppColors.spotlight : AppColors.textTertiary;
     final item = Semantics(
       button: true,
       selected: selected,
       label: destination.label,
-      child: Material(
-        key: ValueKey('sidebar-destination-${destination.label}'),
-        color: selected ? AppColors.glassSelected : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: SizedBox(
-            height: 52,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: extended ? 48 : 56,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: selected ? 1 : 0),
+        duration: AppMotion.responsive(context, AppMotion.fast),
+        curve: AppMotion.enterCurve,
+        builder: (context, selection, child) {
+          final foreground = Color.lerp(
+            AppColors.textTertiary,
+            AppColors.spotlight,
+            selection,
+          );
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              color: Color.lerp(
+                Colors.transparent,
+                AppColors.glassSelected,
+                selection,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.spotlight.withValues(
+                    alpha: 0.055 * selection,
+                  ),
+                  blurRadius: 18 * selection,
+                  spreadRadius: -4,
+                ),
+              ],
+            ),
+            child: Material(
+              key: ValueKey('sidebar-destination-${destination.label}'),
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  height: 52,
+                  child: Row(
                     children: [
-                      Icon(
-                        selected ? destination.selectedIcon : destination.icon,
-                        color: foreground,
-                        size: selected ? 23 : 22,
+                      SizedBox(
+                        width: 56,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.center,
+                          children: [
+                            Transform.scale(
+                              scale: 1 + (0.08 * selection),
+                              child: Icon(
+                                selected
+                                    ? destination.selectedIcon
+                                    : destination.icon,
+                                color: foreground,
+                                size: 22,
+                              ),
+                            ),
+                            Positioned(
+                              left: 0,
+                              child: Opacity(
+                                opacity: selection,
+                                child: Transform.scale(
+                                  scaleY: 0.35 + (0.65 * selection),
+                                  child: Container(
+                                    width: 3,
+                                    height: 22,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.spotlight,
+                                      borderRadius: BorderRadius.circular(99),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      if (selected)
-                        Positioned(
-                          left: 0,
-                          child: Container(
-                            width: 3,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: AppColors.spotlight,
-                              borderRadius: BorderRadius.circular(99),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _RailReveal(
+                          progress: revealProgress,
+                          child: Text(
+                            destination.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
+                            style: TextStyle(
+                              color: Color.lerp(
+                                AppColors.textTertiary,
+                                AppColors.textPrimary,
+                                selection,
+                              ),
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
                             ),
                           ),
                         ),
+                      ),
+                      const SizedBox(width: 12),
                     ],
                   ),
                 ),
-                if (extended) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      destination.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      style: TextStyle(
-                        color: selected
-                            ? AppColors.textPrimary
-                            : AppColors.textTertiary,
-                        fontWeight: selected
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
     return extended ? item : Tooltip(message: destination.label, child: item);
@@ -827,24 +918,25 @@ class _RailDestination extends StatelessWidget {
 }
 
 class _RailBrand extends StatelessWidget {
-  const _RailBrand({required this.extended});
+  const _RailBrand({required this.progress});
 
-  final bool extended;
+  final double progress;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(extended ? 18 : 16, 18, 16, 12),
+      padding: const EdgeInsets.fromLTRB(18, 18, 16, 12),
       child: SizedBox(
         height: 56,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const _BrandMark(),
-            if (extended) ...[
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
+            const SizedBox(width: 12),
+            Expanded(
+              child: _RailReveal(
+                progress: progress,
+                child: const Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -869,7 +961,7 @@ class _RailBrand extends StatelessWidget {
                   ],
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -910,11 +1002,13 @@ class _BrandMark extends StatelessWidget {
 class _RailToggle extends StatelessWidget {
   const _RailToggle({
     required this.extended,
+    required this.revealProgress,
     required this.enabled,
     required this.onPressed,
   });
 
   final bool extended;
+  final double revealProgress;
   final bool enabled;
   final VoidCallback onPressed;
 
@@ -925,17 +1019,17 @@ class _RailToggle extends StatelessWidget {
               ? '收起侧栏（Ctrl+B）'
               : '展开侧栏（Ctrl+B）'
         : '窗口加宽后可展开侧栏';
-    final button = IconButton(
-      key: const ValueKey('sidebar-toggle'),
-      onPressed: enabled ? onPressed : null,
-      tooltip: tooltip,
-      icon: Icon(
-        extended
-            ? Icons.keyboard_double_arrow_left_rounded
-            : Icons.keyboard_double_arrow_right_rounded,
+    final button = AnimatedRotation(
+      turns: extended ? 0.5 : 0,
+      duration: AppMotion.responsive(context, AppMotion.standard),
+      curve: Curves.easeOutBack,
+      child: IconButton(
+        key: const ValueKey('sidebar-toggle'),
+        onPressed: enabled ? onPressed : null,
+        tooltip: tooltip,
+        icon: const Icon(Icons.keyboard_double_arrow_right_rounded),
       ),
     );
-    if (!extended) return button;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -943,14 +1037,44 @@ class _RailToggle extends StatelessWidget {
           button,
           const SizedBox(width: 4),
           Expanded(
-            child: Text(
-              '收起侧栏',
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-              style: Theme.of(context).textTheme.bodyMedium,
+            child: _RailReveal(
+              progress: revealProgress,
+              child: Text(
+                '收起侧栏',
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+double _motionInterval(double value, double begin, double end) {
+  return ((value - begin) / (end - begin)).clamp(0.0, 1.0).toDouble();
+}
+
+class _RailReveal extends StatelessWidget {
+  const _RailReveal({required this.progress, required this.child});
+
+  final double progress;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (progress <= 0) return const SizedBox.shrink();
+    return Opacity(
+      opacity: progress,
+      child: Transform.translate(
+        offset: Offset(-10 * (1 - progress), 0),
+        child: Transform.scale(
+          scale: 0.98 + (0.02 * progress),
+          alignment: Alignment.centerLeft,
+          child: child,
+        ),
       ),
     );
   }
@@ -980,6 +1104,7 @@ class _TopCommandBar extends StatelessWidget {
         ? AppChrome.windowControlsWidth
         : 0.0;
     return GlassSurface(
+      key: const ValueKey('top-command-bar'),
       radius: 0,
       blur: 22,
       tint: AppColors.glassSurface,
@@ -992,12 +1117,7 @@ class _TopCommandBar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Expanded(
-                child: Text(
-                  destination.label,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
+              Expanded(child: _TopDestinationHeading(destination: destination)),
               if (!compact) ...[
                 _SearchCommand(onTap: onSearch),
                 const SizedBox(width: 16),
@@ -1017,6 +1137,108 @@ class _TopCommandBar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TopDestinationHeading extends StatelessWidget {
+  const _TopDestinationHeading({required this.destination});
+
+  final _AppDestination destination;
+
+  @override
+  Widget build(BuildContext context) {
+    final accentDuration = AppMotion.responsive(context, AppMotion.fast);
+    return Semantics(
+      header: true,
+      label: '当前页面：${destination.label}',
+      excludeSemantics: true,
+      child: RepaintBoundary(
+        child: Row(
+          key: const ValueKey('top-destination-heading'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TweenAnimationBuilder<double>(
+              key: ValueKey('top-destination-icon-${destination.label}'),
+              duration: AppMotion.responsive(context, AppMotion.standard),
+              curve: Curves.easeOutBack,
+              tween: Tween(begin: 0, end: 1),
+              builder: (context, value, child) => Transform.rotate(
+                angle: -0.055 * (1 - value),
+                child: Transform.scale(
+                  scale: 0.84 + (0.16 * value),
+                  child: child,
+                ),
+              ),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.spotlight.withValues(alpha: 0.11),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  destination.selectedIcon,
+                  size: 20,
+                  color: AppColors.spotlight,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'CURRENT VIEW',
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: AppColors.textTertiary,
+                      fontSize: 9,
+                      letterSpacing: 1.05,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          destination.label,
+                          key: const ValueKey('top-destination-title'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 24,
+                        height: 2,
+                        child: TweenAnimationBuilder<double>(
+                          key: ValueKey(
+                            'top-destination-accent-${destination.label}',
+                          ),
+                          duration: accentDuration,
+                          curve: AppMotion.enterCurve,
+                          tween: Tween(begin: 0, end: 1),
+                          builder: (context, value, child) => Transform.scale(
+                            scaleX: value,
+                            alignment: Alignment.centerLeft,
+                            child: child,
+                          ),
+                          child: const ColoredBox(color: AppColors.spotlight),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
