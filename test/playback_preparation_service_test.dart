@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/features/player/data/playback_preparation_service.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_store.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
@@ -67,6 +69,44 @@ void main() {
     expect(prepared.queue, isNull);
     expect(playback.requestedStartPosition, Duration.zero);
   });
+
+  test('prepares local playback without a server account', () async {
+    final playback = _FakePlaybackService();
+    final preparation = PlaybackPreparationService(
+      playback,
+      _FakeEpisodeLibrary(),
+      MemoryPlaybackSettingsStore(),
+      _FakeLocalLibraryService(),
+    );
+    const movie = MediaItem(
+      id: 'local-movie',
+      name: '本地电影',
+      kind: MediaItemKind.video,
+      source: MediaItemSource.local,
+      sourcePath: r'C:\Media\Movie.mkv',
+    );
+
+    final prepared = await preparation.prepare(null, movie);
+
+    expect(prepared.plan.streamUri.scheme, 'file');
+    expect(prepared.queue, isNull);
+    expect(playback.requestedStartPosition, isNull);
+  });
+}
+
+class _FakeLocalLibraryService extends LocalMediaLibraryService {
+  _FakeLocalLibraryService() : super(MemoryLocalMediaLibraryStore());
+
+  @override
+  Future<PlaybackPlan> createPlaybackPlan(MediaItem item) async {
+    return PlaybackPlan(
+      itemId: item.id,
+      mediaSourceId: 'local',
+      playSessionId: 'local-session',
+      streamUri: Uri.file(item.sourcePath!, windows: true),
+      method: PlaybackMethod.directPlay,
+    );
+  }
 }
 
 class _FakePlaybackService extends PlaybackService {

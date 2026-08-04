@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
+import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/settings/presentation/playback_settings_section.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,11 @@ class ServerAccountsPage extends StatelessWidget {
     this.onPlaybackBitrateChanged,
     this.onHardwareDecodingModeChanged,
     this.busyProfileId,
+    this.localLibraries = const [],
+    this.addingLocalLibrary = false,
+    this.busyLocalLibraryId,
+    this.onAddLocalLibrary,
+    this.onRemoveLocalLibrary,
   });
 
   final ServerAccountState state;
@@ -38,6 +44,11 @@ class ServerAccountsPage extends StatelessWidget {
   final ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged;
   final ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged;
   final String? busyProfileId;
+  final List<LocalMediaLibrary> localLibraries;
+  final bool addingLocalLibrary;
+  final String? busyLocalLibraryId;
+  final VoidCallback? onAddLocalLibrary;
+  final Future<void> Function(LocalMediaLibrary library)? onRemoveLocalLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +86,14 @@ class ServerAccountsPage extends StatelessWidget {
                     onBitrateChanged: onPlaybackBitrateChanged,
                     onHardwareDecodingModeChanged:
                         onHardwareDecodingModeChanged,
+                  ),
+                  const SizedBox(height: 32),
+                  _LocalLibrarySection(
+                    libraries: localLibraries,
+                    adding: addingLocalLibrary,
+                    busyLibraryId: busyLocalLibraryId,
+                    onAdd: onAddLocalLibrary,
+                    onRemove: onRemoveLocalLibrary,
                   ),
                   const SizedBox(height: 32),
                   Text('服务器与账户', style: Theme.of(context).textTheme.titleLarge),
@@ -212,7 +231,7 @@ class _PageHeader extends StatelessWidget {
         Text('设置', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 8),
         const Text(
-          '调整播放质量，并管理保存在这台设备上的 Jellyfin 与 Emby 放映源。',
+          '调整播放质量，并管理本地媒体库与 Jellyfin / Emby 放映源。',
           style: TextStyle(color: AppColors.textSecondary),
         ),
       ],
@@ -237,6 +256,190 @@ class _PageHeader extends StatelessWidget {
         const SizedBox(width: 24),
         action,
       ],
+    );
+  }
+}
+
+class _LocalLibrarySection extends StatelessWidget {
+  const _LocalLibrarySection({
+    required this.libraries,
+    required this.adding,
+    required this.busyLibraryId,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final List<LocalMediaLibrary> libraries;
+  final bool adding;
+  final String? busyLibraryId;
+  final VoidCallback? onAdd;
+  final Future<void> Function(LocalMediaLibrary library)? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('本地媒体库', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 5),
+                  const Text(
+                    '选择电脑或局域网共享文件夹，PEeK 会直接读取并播放其中的媒体。',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 18),
+            FilledButton.tonalIcon(
+              key: const ValueKey('add-local-library'),
+              onPressed: adding ? null : onAdd,
+              icon: adding
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.create_new_folder_outlined),
+              label: const Text('添加文件夹'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (libraries.isEmpty)
+          Container(
+            key: const ValueKey('empty-local-libraries'),
+            padding: const EdgeInsets.all(22),
+            decoration: AppGlass.decoration(radius: 16),
+            child: const Row(
+              children: [
+                Icon(Icons.folder_copy_outlined, color: AppColors.textTertiary),
+                SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    '尚未添加本地文件夹。支持常见视频、音频和 STRM 文件。',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          for (var index = 0; index < libraries.length; index++) ...[
+            _LocalLibraryCard(
+              library: libraries[index],
+              busy: libraries[index].id == busyLibraryId,
+              onRemove: onRemove == null
+                  ? null
+                  : () => _confirmRemove(context, libraries[index]),
+            ),
+            if (index != libraries.length - 1) const SizedBox(height: 10),
+          ],
+      ],
+    );
+  }
+
+  Future<void> _confirmRemove(
+    BuildContext context,
+    LocalMediaLibrary library,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移除本地媒体库？'),
+        content: Text('将从 PEeK 中移除“${library.name}”。原文件夹和其中的媒体不会被删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await onRemove?.call(library);
+  }
+}
+
+class _LocalLibraryCard extends StatelessWidget {
+  const _LocalLibraryCard({
+    required this.library,
+    required this.busy,
+    required this.onRemove,
+  });
+
+  final LocalMediaLibrary library;
+  final bool busy;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('local-library-${library.id}'),
+      constraints: const BoxConstraints(minHeight: 82),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: AppGlass.decoration(radius: 16),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.spotlight.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: const Icon(
+              Icons.folder_copy_rounded,
+              color: AppColors.spotlight,
+            ),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  library.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  library.path,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textTertiary,
+                    fontFamily: 'Cascadia Mono',
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (busy)
+            const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            IconButton(
+              key: ValueKey('remove-local-library-${library.id}'),
+              tooltip: '移除媒体库（不会删除文件）',
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
+        ],
+      ),
     );
   }
 }

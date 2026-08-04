@@ -2,6 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_store.dart';
+import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -90,6 +93,48 @@ void main() {
 
     expect(service.requestedStartIndexes, contains(60));
     expect(find.text('电影 61'), findsOneWidget);
+  });
+
+  testWidgets('browses a local library without a server account', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localMediaLibraryProvider.overrideWithValue(
+            _FakeLocalLibraryService(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: MediaLibraryPage(
+              account: null,
+              localLibraries: [
+                LocalMediaLibrary(
+                  id: 'local-library',
+                  name: '本地电影',
+                  path: r'C:\Media',
+                  addedAt: DateTime(2026, 8, 4),
+                ),
+              ],
+              onGoHome: _noop,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('你的本地放映架'), findsOneWidget);
+    expect(find.text('Local Movie 2026'), findsOneWidget);
+    expect(find.byKey(const ValueKey('library-select-button')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('applies sorting, filters, year and grid density', (
@@ -225,6 +270,48 @@ void main() {
     expect(find.text('第 1 季'), findsOneWidget);
     expect(find.text('媒体库 1'), findsWidgets);
   });
+}
+
+void _noop() {}
+
+class _FakeLocalLibraryService extends LocalMediaLibraryService {
+  _FakeLocalLibraryService() : super(MemoryLocalMediaLibraryStore());
+
+  @override
+  MediaItem libraryItem(LocalMediaLibrary library) {
+    return const MediaItem(
+      id: 'local-library:local-library',
+      name: '本地电影',
+      kind: MediaItemKind.folder,
+      source: MediaItemSource.local,
+      sourcePath: r'C:\Media',
+    );
+  }
+
+  @override
+  Future<MediaPage> getItems(
+    MediaItem parent, {
+    int startIndex = 0,
+    int limit = 60,
+    MediaLibrarySort sort = MediaLibrarySort.nameAscending,
+    MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
+    MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    int? productionYear,
+  }) async {
+    return const MediaPage(
+      items: [
+        MediaItem(
+          id: 'local-item',
+          name: 'Local Movie 2026',
+          kind: MediaItemKind.video,
+          source: MediaItemSource.local,
+          sourcePath: r'C:\Media\Local.Movie.2026.mkv',
+        ),
+      ],
+      totalRecordCount: 1,
+      nextStartIndex: 1,
+    );
+  }
 }
 
 class _FakeLibraryService extends MediaLibraryService {

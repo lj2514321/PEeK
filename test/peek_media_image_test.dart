@@ -67,6 +67,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('uses a file image provider for local artwork', (tester) async {
+    late Widget builtImage;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Builder(
+          builder: (context) {
+            builtImage = PeekMediaImage(
+              uri: Uri.file(r'C:\Media\poster.jpg', windows: true),
+            ).build(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(builtImage, isA<Image>());
+    expect((builtImage as Image).image, isA<FileImage>());
+  });
+
   testWidgets('uses the basic cache manager without client-side resizing', (
     tester,
   ) async {

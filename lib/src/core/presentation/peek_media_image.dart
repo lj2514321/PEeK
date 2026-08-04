@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:flutter/material.dart';
@@ -75,6 +77,19 @@ class PeekMediaImage extends StatelessWidget {
     final imageUri = uri;
     if (imageUri == null) {
       return _placeholder(loading: false, failed: false);
+    }
+
+    if (imageUri.scheme == 'file') {
+      return Image.file(
+        File.fromUri(imageUri),
+        width: width,
+        height: height,
+        fit: fit,
+        alignment: alignment,
+        filterQuality: FilterQuality.medium,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => _placeholder(loading: false, failed: true),
+      );
     }
 
     final disableAnimations = MediaQuery.disableAnimationsOf(context);

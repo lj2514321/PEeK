@@ -84,7 +84,7 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onEpisodes;
   final VoidCallback onDiagnostics;
-  final VoidCallback onQuality;
+  final VoidCallback? onQuality;
   final VoidCallback onFullScreen;
 
   @override
@@ -191,7 +191,7 @@ class _PlaybackTopBar extends StatelessWidget {
   final String sourceChangeLabel;
   final VoidCallback onBack;
   final VoidCallback onDiagnostics;
-  final VoidCallback onQuality;
+  final VoidCallback? onQuality;
 
   @override
   Widget build(BuildContext context) {
@@ -257,15 +257,42 @@ class _PlaybackTopBar extends StatelessWidget {
                   icon: Icons.monitor_heart_outlined,
                   onPressed: onDiagnostics,
                 ),
-                _MethodBadge(
-                  method: method,
-                  quality: quality,
-                  onPressed: changingSource ? null : onQuality,
-                ),
+                if (onQuality != null)
+                  _MethodBadge(
+                    method: method,
+                    quality: quality,
+                    onPressed: changingSource ? null : onQuality,
+                  )
+                else
+                  const _LocalSourceBadge(),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LocalSourceBadge extends StatelessWidget {
+  const _LocalSourceBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('player-local-source'),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceHigh.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.storage_rounded, size: 15),
+          SizedBox(width: 6),
+          Text('本地直放', style: TextStyle(fontSize: 10)),
+        ],
       ),
     );
   }

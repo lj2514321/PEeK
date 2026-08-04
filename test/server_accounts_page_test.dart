@@ -1,4 +1,5 @@
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:embyplayer/src/features/servers/presentation/server_accounts_page.dart';
@@ -110,6 +111,36 @@ void main() {
     expect(selected, HardwareDecodingMode.software);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('shows and removes a saved local media library', (tester) async {
+    final library = LocalMediaLibrary(
+      id: 'local-library',
+      name: 'Local Videos',
+      path: r'C:\Media',
+      addedAt: DateTime(2026, 8, 4),
+    );
+    LocalMediaLibrary? removed;
+    await tester.pumpWidget(
+      _app(
+        state: _state(),
+        localLibraries: [library],
+        onRemoveLocalLibrary: (value) async => removed = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final removeButton = find.byKey(
+      const ValueKey('remove-local-library-local-library'),
+    );
+    await tester.ensureVisible(removeButton);
+    await tester.tap(removeButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认移除'));
+    await tester.pumpAndSettle();
+
+    expect(removed?.id, library.id);
+    expect(find.text('Local Videos'), findsOneWidget);
+  });
 }
 
 Widget _app({
@@ -119,6 +150,8 @@ Widget _app({
   PlaybackSettings playbackSettings = const PlaybackSettings(),
   ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged,
   ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged,
+  List<LocalMediaLibrary> localLibraries = const [],
+  Future<void> Function(LocalMediaLibrary)? onRemoveLocalLibrary,
 }) {
   return MaterialApp(
     theme: AppTheme.dark(),
@@ -134,6 +167,8 @@ Widget _app({
         playbackSettings: playbackSettings,
         onPlaybackBitrateChanged: onPlaybackBitrateChanged,
         onHardwareDecodingModeChanged: onHardwareDecodingModeChanged,
+        localLibraries: localLibraries,
+        onRemoveLocalLibrary: onRemoveLocalLibrary,
       ),
     ),
   );

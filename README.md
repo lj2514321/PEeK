@@ -4,9 +4,9 @@
 
 # PEeK
 
-**为 Jellyfin 与 Emby 打造的 Windows 桌面影院。**
+**连接本地媒体与 Jellyfin / Emby 的 Windows 桌面影院。**
 
-浏览媒体库、继续观看、搜索与收藏，并通过 `media_kit / libmpv` 完成原码、直传、转码及 STRM 播放。
+浏览本地文件夹与远程媒体库、继续观看、搜索与收藏，并通过 `media_kit / libmpv` 完成本地直放、原码、直传、转码及 STRM 播放。
 
 [![Windows](https://img.shields.io/badge/Windows-10%202004%2B-0078D4?logo=windows&logoColor=white)](https://github.com/lj2514321/PEeK)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.6-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
@@ -27,6 +27,7 @@
 PEeK 希望提供一套真正适合桌面使用的 Jellyfin/Emby 体验：快速进入内容、清晰管理媒体库，并在播放时尽量保持安静和沉浸。
 
 - **统一连接**：兼容 Jellyfin 与 Emby，支持局域网地址、端口和反向代理路径。
+- **本地媒体库**：可添加电脑磁盘或局域网共享文件夹，分层浏览常见视频、音频和 STRM，并记住媒体库配置。
 - **桌面优先**：无原生白色标题栏、可收纳侧栏、响应式布局及完整键盘快捷键。
 - **媒体中心**：每日推荐、继续观看、按媒体库分组的最近添加、最新剧集和全局搜索。
 - **完整详情**：电影、剧集、演员作品、演职员信息、相似推荐、收藏及已观看状态。
@@ -41,9 +42,9 @@ PEeK 希望提供一套真正适合桌面使用的 Jellyfin/Emby 体验：快速
 | --- | --- |
 | 服务器 | Jellyfin/Emby 探测、登录、多账户保存与切换、401/403 会话失效恢复 |
 | 首页 | 每日推荐轮播、继续观看、最近添加电影、最新剧集 |
-| 媒体库 | 分页、层级浏览、服务端排序与筛选、三档海报密度、批量操作 |
+| 媒体库 | 本地/远程媒体库统一入口、分页、层级浏览、排序筛选、三档海报密度、远程批量操作 |
 | 搜索与详情 | 全局搜索、人物结果、演员作品、相似内容、收藏与观看状态 |
-| 播放 | STRM、Direct Play、Direct Stream、Transcode、断点续播与进度上报 |
+| 播放 | 本地文件/STRM 直放、Direct Play、Direct Stream、Transcode、断点续播与远程进度上报 |
 | 播放控制 | 音轨、字幕、章节、倍速、画质、全屏、上一集/下一集 |
 | 本地体验 | 登录持久化、JSON 媒体缓存、图片磁盘缓存、搜索历史与播放偏好 |
 | Windows | SMTC 系统媒体面板、媒体键、应用音频会话音量、MSIX/App Installer |
@@ -87,10 +88,11 @@ flutter build windows --profile
 
 ## 使用方式
 
-1. 启动 PEeK，输入 Jellyfin/Emby 服务器地址，例如 `http://192.168.1.10:8096`。
-2. 使用服务器账户登录；访问令牌会交给 Windows 安全存储保管。
-3. 从首页、媒体库、收藏或搜索进入详情页。
-4. PEeK 会根据媒体源和设置选择原码、直传或转码，并同步播放进度。
+1. 本地播放：打开“设置 → 本地媒体库 → 添加文件夹”，选择电脑磁盘或局域网共享目录。
+2. 远程播放：输入 Jellyfin/Emby 服务器地址，例如 `http://192.168.1.10:8096`，并登录服务器账户。
+3. 从媒体库选择本地或远程库；本地文件直接播放，远程内容按能力选择原码、直传或转码。
+
+本地媒体库支持常见视频、音频和 `.strm` 文件。海报可使用与媒体同名的 `.jpg/.jpeg/.png/.webp`，或目录中的 `poster.jpg`、`folder.jpg`、`cover.jpg`；移除媒体库只删除 PEeK 的目录记录，不会删除原文件。
 
 反向代理用户可以直接填写包含路径的完整地址。PEeK 会保存探测得到的实际 API 根路径，不会在后续请求中重复猜测。
 
@@ -128,13 +130,13 @@ Flutter Presentation
              ▼
 Application & Services
   ├── HomeFeedService / PlaybackPreparationService
-  ├── MediaLibraryService / PlaybackService
+  ├── MediaLibraryService / LocalMediaLibraryService / PlaybackService
   └── SessionExpiryCoordinator
              │
              ▼
 Infrastructure
-  ├── Dio + Jellyfin/Emby API
-  ├── Windows Secure Storage + JSON Cache
+  ├── Dio + Jellyfin/Emby API + 本地文件系统
+  ├── Windows Secure Storage + JSON Cache/Catalog
   ├── PlaybackRuntime → media_kit / libmpv
   └── Windows SMTC / WASAPI Session
 ```
@@ -152,6 +154,7 @@ lib/src/
 └── features/
     ├── home/             # 首页与主导航
     ├── library/          # 媒体库浏览
+    ├── local_library/    # 本地目录、扫描、持久化与播放计划
     ├── favorites/        # 收藏页
     ├── search/           # 全局搜索
     ├── details/          # 媒体与演员详情

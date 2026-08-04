@@ -1,4 +1,5 @@
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
@@ -25,18 +26,36 @@ class PlaybackPreparationService {
   const PlaybackPreparationService(
     this._playback,
     this._library,
-    this._settingsStore,
-  );
+    this._settingsStore, [
+    this._localLibrary,
+  ]);
 
   final PlaybackService _playback;
   final MediaLibraryService _library;
   final PlaybackSettingsStore _settingsStore;
+  final LocalMediaLibraryService? _localLibrary;
 
   Future<PreparedPlayback> prepare(
-    AuthenticatedServer account,
+    AuthenticatedServer? account,
     MediaItem item, {
     bool fromBeginning = false,
   }) async {
+    if (item.isLocal) {
+      final localLibrary = _localLibrary;
+      if (localLibrary == null) {
+        throw const PlaybackServiceException('本地媒体库服务尚未初始化。');
+      }
+      final settingsFuture = _readSettings();
+      final plan = await localLibrary.createPlaybackPlan(item);
+      return PreparedPlayback(
+        item: item,
+        plan: plan,
+        settings: await settingsFuture,
+      );
+    }
+    if (account == null) {
+      throw const PlaybackServiceException('请先登录媒体服务器。');
+    }
     final queueFuture = _buildQueue(account, item);
     final settingsFuture = _readSettings();
     final plan = await _playback.createPlan(

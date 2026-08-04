@@ -4,6 +4,8 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
+import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -15,11 +17,15 @@ class MediaLibraryPage extends ConsumerStatefulWidget {
     super.key,
     required this.account,
     required this.onGoHome,
+    this.localLibraries = const [],
+    this.onAddLocalLibrary,
     this.onSessionExpired,
   });
 
   final AuthenticatedServer? account;
   final VoidCallback onGoHome;
+  final List<LocalMediaLibrary> localLibraries;
+  final VoidCallback? onAddLocalLibrary;
   final VoidCallback? onSessionExpired;
 
   @override
@@ -43,6 +49,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   bool _loadingMore = false;
   String? _error;
   String? _paginationError;
+  String? _catalogNotice;
   int _requestGeneration = 0;
   MediaLibrarySort _sort = MediaLibrarySort.nameAscending;
   MediaLibraryKindFilter _kindFilter = MediaLibraryKindFilter.all;
@@ -57,7 +64,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_loadMoreNearEnd);
-    if (widget.account != null) Future<void>.microtask(_loadCatalog);
+    Future<void>.microtask(_loadCatalog);
   }
 
   @override
@@ -71,29 +78,19 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     super.didUpdateWidget(oldWidget);
     final previous = oldWidget.account;
     final current = widget.account;
+    final localLibrariesChanged = !_sameLocalLibraries(
+      oldWidget.localLibraries,
+      widget.localLibraries,
+    );
     if (previous?.userId != current?.userId ||
-        previous?.server.serverId != current?.server.serverId) {
-      if (current == null) {
-        _requestGeneration++;
-        setState(() {
-          _libraries = const [];
-          _items = const [];
-          _path = const [];
-          _selectedLibrary = null;
-          _totalItemCount = 0;
-          _nextStartIndex = 0;
-          _error = null;
-          _paginationError = null;
-        });
-      } else {
-        _loadCatalog();
-      }
+        previous?.server.serverId != current?.server.serverId ||
+        localLibrariesChanged) {
+      _loadCatalog();
     }
   }
 
   Future<void> _loadCatalog({bool forceRefresh = false}) async {
     final account = widget.account;
-    if (account == null) return;
     final generation = ++_requestGeneration;
     setState(() {
       _loadingCatalog = true;
@@ -101,25 +98,38 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       _loadingMore = false;
       _error = null;
       _paginationError = null;
+      _catalogNotice = null;
     });
 
     try {
-      final service = ref.read(mediaLibraryProvider);
-      final libraries = await service.getLibraries(
-        account,
-        forceRefresh: forceRefresh,
+      final localService = ref.read(localMediaLibraryProvider);
+      final localLibraries = widget.localLibraries
+          .map(localService.libraryItem)
+          .toList(growable: false);
+      var remoteLibraries = <MediaItem>[];
+      String? catalogNotice;
+      if (account != null) {
+        try {
+          remoteLibraries = await ref
+              .read(mediaLibraryProvider)
+              .getLibraries(account, forceRefresh: forceRefresh);
+        } on MediaLibraryException catch (error) {
+          if (error.authenticationExpired) widget.onSessionExpired?.call();
+          if (localLibraries.isEmpty) rethrow;
+          catalogNotice = '远程媒体库暂时无法读取：${error.message}';
+        }
+      }
+      final libraries = [...localLibraries, ...remoteLibraries];
+      final previousSelection = _selectedLibrary?.id;
+      final selected = libraries.cast<MediaItem?>().firstWhere(
+        (library) => library?.id == previousSelection,
+        orElse: () => libraries.isEmpty ? null : libraries.first,
       );
-      final selected = libraries.isEmpty ? null : libraries.first;
       final page = selected == null
           ? null
-          : await service.getItems(
-              account,
-              parentId: selected.id,
+          : await _getPage(
+              selected,
               limit: _pageSize,
-              sort: _sort,
-              kind: _kindFilter,
-              status: _statusFilter,
-              productionYear: _productionYear,
               forceRefresh: forceRefresh,
             );
       if (!mounted || generation != _requestGeneration) return;
@@ -130,12 +140,16 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         _items = page?.items ?? const [];
         _totalItemCount = page?.totalRecordCount ?? 0;
         _nextStartIndex = page?.nextStartIndex ?? 0;
+        _catalogNotice = catalogNotice;
         _selectionMode = false;
         _selectedIds = {};
       });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
+      setState(() => _error = error.message);
+    } on LocalMediaLibraryException catch (error) {
+      if (!mounted || generation != _requestGeneration) return;
       setState(() => _error = error.message);
     } finally {
       if (mounted && generation == _requestGeneration) {
@@ -157,8 +171,10 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (context) =>
-            MediaDetailPage(account: widget.account!, initialItem: item),
+        builder: (context) => MediaDetailPage(
+          account: item.isLocal ? null : widget.account,
+          initialItem: item,
+        ),
       ),
     );
     if (mounted) await _reloadCurrentNode();
@@ -177,8 +193,6 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     required List<MediaItem> path,
     bool forceRefresh = false,
   }) async {
-    final account = widget.account;
-    if (account == null) return;
     final generation = ++_requestGeneration;
     setState(() {
       _path = path;
@@ -194,18 +208,11 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     });
 
     try {
-      final page = await ref
-          .read(mediaLibraryProvider)
-          .getItems(
-            account,
-            parentId: node.id,
-            limit: _pageSize,
-            sort: _sort,
-            kind: _kindFilter,
-            status: _statusFilter,
-            productionYear: _productionYear,
-            forceRefresh: forceRefresh,
-          );
+      final page = await _getPage(
+        node,
+        limit: _pageSize,
+        forceRefresh: forceRefresh,
+      );
       if (!mounted || generation != _requestGeneration) return;
       setState(() {
         _items = page.items;
@@ -215,6 +222,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
+      setState(() => _error = error.message);
+    } on LocalMediaLibraryException catch (error) {
+      if (!mounted || generation != _requestGeneration) return;
       setState(() => _error = error.message);
     } finally {
       if (mounted && generation == _requestGeneration) {
@@ -245,9 +255,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   }
 
   Future<void> _loadMore() async {
-    final account = widget.account;
-    if (account == null ||
-        _path.isEmpty ||
+    if (_path.isEmpty ||
         _loadingCatalog ||
         _loadingItems ||
         _loadingMore ||
@@ -262,18 +270,11 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     });
 
     try {
-      final page = await ref
-          .read(mediaLibraryProvider)
-          .getItems(
-            account,
-            parentId: node.id,
-            startIndex: _nextStartIndex,
-            limit: _pageSize,
-            sort: _sort,
-            kind: _kindFilter,
-            status: _statusFilter,
-            productionYear: _productionYear,
-          );
+      final page = await _getPage(
+        node,
+        startIndex: _nextStartIndex,
+        limit: _pageSize,
+      );
       if (!mounted || generation != _requestGeneration) return;
       final existingIds = _items.map((item) => item.id).toSet();
       setState(() {
@@ -288,6 +289,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
       setState(() => _paginationError = error.message);
+    } on LocalMediaLibraryException catch (error) {
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() => _paginationError = error.message);
     } finally {
       if (mounted && generation == _requestGeneration) {
         setState(() => _loadingMore = false);
@@ -295,18 +299,47 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     }
   }
 
+  Future<MediaPage> _getPage(
+    MediaItem node, {
+    int startIndex = 0,
+    int limit = _pageSize,
+    bool forceRefresh = false,
+  }) {
+    if (node.isLocal) {
+      return ref
+          .read(localMediaLibraryProvider)
+          .getItems(
+            node,
+            startIndex: startIndex,
+            limit: limit,
+            sort: _sort,
+            kind: _kindFilter,
+            status: _statusFilter,
+            productionYear: _productionYear,
+          );
+    }
+    final account = widget.account;
+    if (account == null) {
+      throw const MediaLibraryException('请先登录对应的媒体服务器。');
+    }
+    return ref
+        .read(mediaLibraryProvider)
+        .getItems(
+          account,
+          parentId: node.id,
+          startIndex: startIndex,
+          limit: limit,
+          sort: _sort,
+          kind: _kindFilter,
+          status: _statusFilter,
+          productionYear: _productionYear,
+          forceRefresh: forceRefresh,
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.account;
-    if (account == null) {
-      return _LibraryMessage(
-        icon: Icons.lock_outline_rounded,
-        title: '登录后读取媒体库',
-        message: '先连接并登录 Jellyfin 或 Emby，媒体库内容才会显示在这里。',
-        actionLabel: '返回首页连接',
-        onAction: widget.onGoHome,
-      );
-    }
 
     if (_loadingCatalog && _libraries.isEmpty) {
       return const _LoadingLibrary();
@@ -353,16 +386,26 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                   children: [
                     _LibraryHeader(
                       account: account,
+                      localLibraryCount: widget.localLibraries.length,
                       onRefresh: () => _loadCatalog(forceRefresh: true),
                     ),
                     const SizedBox(height: 28),
+                    if (_catalogNotice != null) ...[
+                      _InlineLibraryError(
+                        message: _catalogNotice!,
+                        onRetry: () => _loadCatalog(forceRefresh: true),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
                     if (_libraries.isEmpty)
                       _LibraryMessage(
-                        icon: Icons.video_library_outlined,
-                        title: '服务器没有可见媒体库',
-                        message: '请检查当前用户的媒体库访问权限，然后重新加载。',
-                        actionLabel: '重新加载',
-                        onAction: _loadCatalog,
+                        icon: Icons.create_new_folder_outlined,
+                        title: account == null ? '还没有媒体库' : '没有可见媒体库',
+                        message: account == null
+                            ? '添加电脑或局域网共享文件夹，也可以返回首页连接 Jellyfin / Emby。'
+                            : '添加本地文件夹，或检查当前用户的服务器媒体库权限。',
+                        actionLabel: '添加本地媒体库',
+                        onAction: widget.onAddLocalLibrary,
                         embedded: true,
                       )
                     else ...[
@@ -420,7 +463,10 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                 onSortChanged: _changeSort,
                                 onFilterPressed: _showFilters,
                                 onDensityChanged: _setDensity,
-                                onSelectPressed: _enterSelectionMode,
+                                onSelectPressed:
+                                    _selectedLibrary?.isLocal == true
+                                    ? null
+                                    : _enterSelectionMode,
                               ),
                       ),
                       const SizedBox(height: 18),
@@ -457,6 +503,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                           onOpen: _openItem,
                           onToggleSelection: _toggleSelection,
                           onEnterSelection: _enterSelectionMode,
+                          selectionAvailable: _selectedLibrary?.isLocal != true,
                         ),
                         _PaginationFooter(
                           loadedCount: _items.length,
@@ -663,9 +710,14 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
 }
 
 class _LibraryHeader extends StatelessWidget {
-  const _LibraryHeader({required this.account, required this.onRefresh});
+  const _LibraryHeader({
+    required this.account,
+    required this.localLibraryCount,
+    required this.onRefresh,
+  });
 
-  final AuthenticatedServer account;
+  final AuthenticatedServer? account;
+  final int localLibraryCount;
   final VoidCallback onRefresh;
 
   @override
@@ -683,12 +735,16 @@ class _LibraryHeader extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '晚上好，${account.userName}',
+                account == null ? '你的本地放映架' : '晚上好，${account!.userName}',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 6),
               Text(
-                '正在浏览 ${account.server.name} · ${account.server.kind.label} ${account.server.version}',
+                account == null
+                    ? '已连接 $localLibraryCount 个本地文件夹'
+                    : '正在浏览 ${account!.server.name} · '
+                          '${account!.server.kind.label} ${account!.server.version}'
+                          '${localLibraryCount == 0 ? '' : '，以及 $localLibraryCount 个本地文件夹'}',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
@@ -757,7 +813,7 @@ class _LibraryToolbar extends StatelessWidget {
   final ValueChanged<MediaLibrarySort> onSortChanged;
   final VoidCallback onFilterPressed;
   final ValueChanged<MediaGridDensity> onDensityChanged;
-  final VoidCallback onSelectPressed;
+  final VoidCallback? onSelectPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -811,12 +867,13 @@ class _LibraryToolbar extends StatelessWidget {
           ),
         ),
         _DensityControl(value: density, onChanged: onDensityChanged),
-        _ToolbarAction(
-          key: const ValueKey('library-select-button'),
-          icon: Icons.checklist_rounded,
-          label: '选择',
-          onPressed: onSelectPressed,
-        ),
+        if (onSelectPressed != null)
+          _ToolbarAction(
+            key: const ValueKey('library-select-button'),
+            icon: Icons.checklist_rounded,
+            label: '选择',
+            onPressed: onSelectPressed!,
+          ),
       ],
     );
   }
@@ -1351,6 +1408,7 @@ class _MediaGrid extends StatelessWidget {
     required this.onOpen,
     required this.onToggleSelection,
     required this.onEnterSelection,
+    this.selectionAvailable = true,
   });
 
   final List<MediaItem> items;
@@ -1360,6 +1418,7 @@ class _MediaGrid extends StatelessWidget {
   final ValueChanged<MediaItem> onOpen;
   final ValueChanged<String> onToggleSelection;
   final ValueChanged<String> onEnterSelection;
+  final bool selectionAvailable;
 
   @override
   Widget build(BuildContext context) {
@@ -1399,7 +1458,9 @@ class _MediaGrid extends StatelessWidget {
             selected: selectedIds.contains(items[index].id),
             onOpen: () => onOpen(items[index]),
             onToggleSelection: () => onToggleSelection(items[index].id),
-            onEnterSelection: () => onEnterSelection(items[index].id),
+            onEnterSelection: selectionAvailable
+                ? () => onEnterSelection(items[index].id)
+                : null,
           ),
         );
       },
@@ -1422,7 +1483,7 @@ class _MediaCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onOpen;
   final VoidCallback onToggleSelection;
-  final VoidCallback onEnterSelection;
+  final VoidCallback? onEnterSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -1838,7 +1899,7 @@ class _LibraryMessage extends StatelessWidget {
   final String title;
   final String message;
   final String actionLabel;
-  final VoidCallback onAction;
+  final VoidCallback? onAction;
   final bool embedded;
 
   @override
@@ -1859,12 +1920,18 @@ class _LibraryMessage extends StatelessWidget {
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(height: 22),
-          OutlinedButton.icon(
-            onPressed: onAction,
-            icon: const Icon(Icons.refresh_rounded),
-            label: Text(actionLabel),
-          ),
+          if (onAction != null) ...[
+            const SizedBox(height: 22),
+            OutlinedButton.icon(
+              onPressed: onAction,
+              icon: Icon(
+                actionLabel.contains('添加')
+                    ? Icons.create_new_folder_outlined
+                    : Icons.refresh_rounded,
+              ),
+              label: Text(actionLabel),
+            ),
+          ],
         ],
       ),
     );
@@ -1876,6 +1943,20 @@ class _LibraryMessage extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _sameLocalLibraries(
+  List<LocalMediaLibrary> left,
+  List<LocalMediaLibrary> right,
+) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index].id != right[index].id ||
+        left[index].path != right[index].path) {
+      return false;
+    }
+  }
+  return true;
 }
 
 String _kindLabel(MediaItemKind kind) {

@@ -21,7 +21,7 @@ class MediaDetailPage extends ConsumerStatefulWidget {
     required this.initialItem,
   });
 
-  final AuthenticatedServer account;
+  final AuthenticatedServer? account;
   final MediaItem initialItem;
 
   @override
@@ -51,14 +51,28 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
       _detailError = null;
       _similarError = null;
     });
+    if (_item.isLocal) {
+      if (mounted) setState(() => _loadingDetails = false);
+      return;
+    }
+    final account = widget.account;
+    if (account == null) {
+      if (mounted) {
+        setState(() {
+          _loadingDetails = false;
+          _detailError = '请先登录对应的媒体服务器。';
+        });
+      }
+      return;
+    }
     final service = ref.read(mediaLibraryProvider);
     final detailRequest = service.getItem(
-      widget.account,
+      account,
       widget.initialItem.id,
       forceRefresh: forceRefresh,
     );
     final similarRequest = service.getSimilar(
-      widget.account,
+      account,
       widget.initialItem.id,
       forceRefresh: forceRefresh,
     );
@@ -101,9 +115,11 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
           ),
         ),
       );
-      if (mounted) await _loadDetails(forceRefresh: true);
+      if (mounted && !item.isLocal) await _loadDetails(forceRefresh: true);
     } on PlaybackServiceException catch (error) {
       if (mounted) setState(() => _playbackError = error.message);
+    } on Object catch (error) {
+      if (mounted) setState(() => _playbackError = '$error');
     } finally {
       if (mounted) setState(() => _planningPlayback = false);
     }
@@ -112,7 +128,8 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   bool get _playable =>
       _item.kind == MediaItemKind.movie ||
       _item.kind == MediaItemKind.episode ||
-      _item.kind == MediaItemKind.video;
+      _item.kind == MediaItemKind.video ||
+      _item.kind == MediaItemKind.audio;
 
   bool get _canMarkPlayed =>
       _playable ||
@@ -120,13 +137,15 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
       _item.kind == MediaItemKind.season;
 
   Future<void> _toggleFavorite() async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
     if (_updatingFavorite) return;
     final target = !_item.favorite;
     setState(() => _updatingFavorite = true);
     try {
       await ref
           .read(mediaLibraryProvider)
-          .setFavorite(widget.account, _item.id, favorite: target);
+          .setFavorite(account, _item.id, favorite: target);
       if (!mounted) return;
       setState(() => _item = _item.copyWith(favorite: target));
       ScaffoldMessenger.of(
@@ -143,13 +162,15 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   }
 
   Future<void> _togglePlayed() async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
     if (_updatingPlayed) return;
     final target = !_item.played;
     setState(() => _updatingPlayed = true);
     try {
       await ref
           .read(mediaLibraryProvider)
-          .setPlayed(widget.account, _item.id, played: target);
+          .setPlayed(account, _item.id, played: target);
       if (!mounted) return;
       setState(
         () => _item = _item.copyWith(
@@ -180,10 +201,12 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   }
 
   Future<void> _openPerson(MediaPerson person) async {
+    final account = widget.account;
+    if (account == null) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (context) => PersonWorksPage(
-          account: widget.account,
+          account: account,
           person: person,
           onOpen: _openPersonWork,
         ),
@@ -232,6 +255,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                 updatingFavorite: _updatingFavorite,
                 updatingPlayed: _updatingPlayed,
                 canMarkPlayed: _canMarkPlayed,
+                showUserStateActions: !_item.isLocal,
                 onPlay: () => _play(),
                 onPlayFromBeginning: () => _play(fromBeginning: true),
                 onToggleFavorite: _toggleFavorite,
@@ -306,6 +330,7 @@ class _DetailHero extends StatelessWidget {
     required this.updatingFavorite,
     required this.updatingPlayed,
     required this.canMarkPlayed,
+    required this.showUserStateActions,
     required this.onPlay,
     required this.onPlayFromBeginning,
     required this.onToggleFavorite,
@@ -319,6 +344,7 @@ class _DetailHero extends StatelessWidget {
   final bool updatingFavorite;
   final bool updatingPlayed;
   final bool canMarkPlayed;
+  final bool showUserStateActions;
   final VoidCallback onPlay;
   final VoidCallback onPlayFromBeginning;
   final VoidCallback onToggleFavorite;
@@ -359,6 +385,7 @@ class _DetailHero extends StatelessWidget {
                   updatingFavorite: updatingFavorite,
                   updatingPlayed: updatingPlayed,
                   canMarkPlayed: canMarkPlayed,
+                  showUserStateActions: showUserStateActions,
                   onPlay: onPlay,
                   onPlayFromBeginning: onPlayFromBeginning,
                   onToggleFavorite: onToggleFavorite,
@@ -462,6 +489,7 @@ class _DetailCopy extends StatelessWidget {
     required this.updatingFavorite,
     required this.updatingPlayed,
     required this.canMarkPlayed,
+    required this.showUserStateActions,
     required this.onPlay,
     required this.onPlayFromBeginning,
     required this.onToggleFavorite,
@@ -475,6 +503,7 @@ class _DetailCopy extends StatelessWidget {
   final bool updatingFavorite;
   final bool updatingPlayed;
   final bool canMarkPlayed;
+  final bool showUserStateActions;
   final VoidCallback onPlay;
   final VoidCallback onPlayFromBeginning;
   final VoidCallback onToggleFavorite;
@@ -527,17 +556,19 @@ class _DetailCopy extends StatelessWidget {
             onPlayFromBeginning: onPlayFromBeginning,
           ),
         ],
-        const SizedBox(height: 12),
-        _UserStateActions(
-          compact: compact,
-          favorite: item.favorite,
-          played: item.played,
-          canMarkPlayed: canMarkPlayed,
-          updatingFavorite: updatingFavorite,
-          updatingPlayed: updatingPlayed,
-          onToggleFavorite: onToggleFavorite,
-          onTogglePlayed: onTogglePlayed,
-        ),
+        if (showUserStateActions) ...[
+          const SizedBox(height: 12),
+          _UserStateActions(
+            compact: compact,
+            favorite: item.favorite,
+            played: item.played,
+            canMarkPlayed: canMarkPlayed,
+            updatingFavorite: updatingFavorite,
+            updatingPlayed: updatingPlayed,
+            onToggleFavorite: onToggleFavorite,
+            onTogglePlayed: onTogglePlayed,
+          ),
+        ],
       ],
     );
   }
@@ -551,6 +582,8 @@ class _DetailCopy extends StatelessWidget {
       if (item.communityRating != null)
         '★ ${item.communityRating!.toStringAsFixed(1)}',
       ...item.genres.take(3),
+      if (item.isLocal && item.fileSize != null) _fileSize(item.fileSize!),
+      if (item.isLocal) '本地文件',
     ];
   }
 
@@ -558,6 +591,16 @@ class _DetailCopy extends StatelessWidget {
     final hours = value.inHours;
     final minutes = value.inMinutes.remainder(60);
     return hours > 0 ? '$hours 小时 $minutes 分' : '$minutes 分钟';
+  }
+
+  String _fileSize(int bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} MB';
+    }
+    return '${(bytes / 1024).toStringAsFixed(0)} KB';
   }
 }
 

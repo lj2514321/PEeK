@@ -2,7 +2,7 @@
 
 ## 目标
 
-构建一个 Windows 优先、可扩展到 macOS/Linux 的 Jellyfin 与 Emby 客户端。客户端应优先使用服务器提供的原始媒体流，在能力或网络条件不满足时由服务器直传或转码，并完整同步播放会话。
+构建一个 Windows 优先、可扩展到 macOS/Linux 的本地媒体与 Jellyfin / Emby 客户端。远程播放优先使用服务器提供的原始媒体流，在能力或网络条件不满足时由服务器直传或转码；本地文件与本地 STRM 不经过服务器。
 
 ## 分层
 
@@ -19,6 +19,7 @@ Infrastructure
   ├── JellyfinGateway / EmbyGateway
   ├── Dio 网络客户端
   ├── JSON 文件缓存与偏好存储
+  ├── 本地媒体目录与原生文件夹选择器
   ├── 系统安全凭据存储
   └── PlaybackRuntime / media_kit / libmpv
 ```
@@ -31,16 +32,18 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
 
 媒体库的排序、类型/观看状态/年份筛选必须作为 Jellyfin/Emby `Items` 查询参数发送到服务器，分页只合并同一组查询条件下的结果，避免对已加载局部数据进行错误排序。视图密度只改变本地网格列数，不触发网络请求；筛选为空时必须保留一键清除入口。
 
+本地媒体库目录单独持久化到 `%LOCALAPPDATA%\PEeK\local_libraries_v1.json`。浏览目录时只枚举当前层级，不在 UI 线程执行全库同步扫描；只展示受支持的音视频与 STRM 文件，目录始终保留以允许继续下钻。所有浏览和播放路径必须重新校验其位于用户已添加的根目录内，移除媒体库不得删除原始文件。本地封面优先读取同名图片，再读取目录内的 `poster/folder/cover`；本地状态不伪装成服务器收藏或观看记录。
+
 收藏和已观看状态统一读取 `UserData.IsFavorite` 与 `UserData.Played`，写入使用 Jellyfin/Emby 共通的 `Users/{UserId}/FavoriteItems/{ItemId}` 和 `PlayedItems` 端点。收藏页通过不带 `ParentId` 的递归 `Users/{UserId}/Items?Filters=IsFavorite` 查询跨媒体库聚合当前用户收藏，并独立分页；进入详情返回后强制刷新，卡片取消收藏后立即从列表移除并提供撤销。批量写入以最多四个并发请求分组，完成后清理媒体 JSON 缓存；缓存清理失败不得反向报告服务器写入失败。详情页写入后做局部状态更新，媒体库批量写入提供可撤销反馈并在状态筛选生效时重新查询。
 
 ## 播放流程
 
-1. 适配器向服务器请求 PlaybackInfo 与 MediaSources。
-2. 播放策略根据客户端能力、用户码率、音轨和字幕生成 `PlaybackPlan`。
+1. 远程项目由适配器向服务器请求 PlaybackInfo 与 MediaSources；本地项目直接验证文件或解析 STRM 首个有效地址。
+2. 播放策略根据来源、客户端能力、用户码率、音轨和字幕生成统一 `PlaybackPlan`。
 3. 播放准备阶段并行读取本地解码偏好；自动模式向 libmpv 传递 `auto-safe`，不支持的格式由底层回退到软件解码，兼容模式传递 `no`。
 4. 可替换的 `PlaybackRuntime` 将流地址、认证请求头和起始位置交给 media_kit/libmpv；页面测试使用假运行时验证生命周期，播放中切换画质时先准备新计划，打开失败则恢复原播放源。
-5. 会话协调器发送 Started，并每约十秒及状态变化时发送 Progress。
-6. 播放完成、切换条目或关闭窗口时发送 Stopped。
+5. 仅远程播放由会话协调器发送 Started，并每约十秒及状态变化时发送 Progress。
+6. 远程播放完成、切换条目或关闭窗口时发送 Stopped；本地播放不产生服务器请求。
 7. 诊断面板仅在打开时每三秒读取一次 libmpv 安全属性；关闭面板立即停止采样。
 8. Windows Runner 通过 `ISystemMediaTransportControlsInterop` 为顶层窗口创建单一 SMTC 会话；Dart 侧同步标题、剧集、海报、播放状态、时间轴和队列能力，系统按钮事件再回到现有播放用例。
 
@@ -61,7 +64,7 @@ Windows 音量联动只操作当前 PEeK 进程的 WASAPI 音频会话：播放�
 
 ## 本地数据
 
-- JSON 文件：媒体缓存、搜索历史和播放设置；写入失败不得阻断核心浏览与播放。
+- JSON 文件：媒体缓存、搜索历史、播放设置和本地媒体库目录；写入失败不得阻断核心浏览与播放。
 - 系统安全存储：服务器账户目录不包含密码或 token；每个 ServerId/UserId 的访问 token 使用独立键保存，当前账户只记录资料 ID。
 - 文件缓存：海报、背景图与临时字幕；媒体图片按服务器完整 URL 和图片 Tag 隔离，保留 30 天且最多 600 个对象。
 - 每日推荐缓存按服务器、用户和本地自然日隔离；当天直接复用，跨日只更新推荐分区，网络失败时保留上一批内容。

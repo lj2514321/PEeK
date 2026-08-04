@@ -41,7 +41,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
     this.runtime,
   });
 
-  final AuthenticatedServer account;
+  final AuthenticatedServer? account;
   final MediaItem item;
   final PlaybackPlan plan;
   final PlaybackQueue? queue;
@@ -113,6 +113,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   static const _autoNextSeconds = 8;
 
   bool get _controlsVisible => _interactions.controlsVisible;
+
+  bool get _remotePlayback => widget.account != null && !_item.isLocal;
 
   Duration get _effectiveDuration {
     if (_duration > Duration.zero) return _duration;
@@ -372,7 +374,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       await _openMedia(_plan, play: true);
       _writeDiagnosticLog('playback_opened');
       await _safeReportStarted();
-      _startProgressTimer();
+      if (_remotePlayback) _startProgressTimer();
       _syncSystemMetadata();
       _syncSystemPlayback();
       _scheduleSystemTimelineSync(immediate: true);
@@ -625,8 +627,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         readProperty: _readMpvProperty,
         plan: _plan,
         requestedDecodingMode: widget.hardwareDecodingMode,
-        serverKind: widget.account.server.kind.name,
-        serverVersion: widget.account.server.version,
+        serverKind: widget.account?.server.kind.name ?? 'local',
+        serverVersion: widget.account?.server.version ?? 'device',
         position: _position,
         bufferedUntil: _buffer,
         buffering: _buffering,
@@ -711,14 +713,17 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _diagnosticLog.write(
         event,
         fields: {
-          'serverKind': widget.account.server.kind.name,
-          'serverVersion': widget.account.server.version,
+          'serverKind': widget.account?.server.kind.name ?? 'local',
+          'serverVersion': widget.account?.server.version ?? 'device',
           'playbackMethod': _plan.method.name,
           'sourceProtocol': _plan.streamUri.scheme,
           'hardwarePreference': widget.hardwareDecodingMode.name,
           ...fields,
         },
-        secrets: [widget.account.accessToken, ..._plan.httpHeaders.values],
+        secrets: [
+          if (widget.account != null) widget.account!.accessToken,
+          ..._plan.httpHeaders.values,
+        ],
       ),
     );
   }
@@ -733,7 +738,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _showQualityOptions() async {
-    if (_changingSource || _closing) return;
+    if (!_remotePlayback || _changingSource || _closing) return;
     _interactions.cancelControlsHide();
     _showControls();
     final selected = await showModalBottomSheet<PlaybackBitrate>(
@@ -751,6 +756,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _switchQuality(PlaybackBitrate bitrate) async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
     final switched = await _replaceCurrentPlan(
       statusLabel: '正在切换至${bitrate.label}',
       actionLabel: '切换画质',
@@ -759,7 +766,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       createPlan: (position) => ref
           .read(playbackServiceProvider)
           .createPlan(
-            widget.account,
+            account,
             _item,
             startPosition: position,
             audioStreamIndex: _selectedAudioStreamIndex,
@@ -998,6 +1005,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     required int? audioStreamIndex,
     required int? subtitleStreamIndex,
   }) async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
     await _replaceCurrentPlan(
       statusLabel: '正在切换媒体轨道',
       actionLabel: '切换轨道',
@@ -1006,7 +1015,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       createPlan: (position) => ref
           .read(playbackServiceProvider)
           .createPlan(
-            widget.account,
+            account,
             _item,
             startPosition: position,
             audioStreamIndex: audioStreamIndex,
@@ -1100,11 +1109,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       }
       final nextPlan = transition.value!;
 
-      if (shouldReportOldStopped) {
+      final account = widget.account;
+      if (shouldReportOldStopped && account != null) {
         try {
           await ref
               .read(playbackServiceProvider)
-              .reportStopped(widget.account, oldSnapshot);
+              .reportStopped(account, oldSnapshot);
         } on Object {
           // The newly opened source remains usable if the old check-in fails.
         }
@@ -1351,10 +1361,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _safeReportStarted() async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
     try {
       await ref
           .read(playbackServiceProvider)
-          .reportStarted(widget.account, _snapshot());
+          .reportStarted(account, _snapshot());
       _reportedStarted = true;
     } catch (_) {
       // Playback remains available if presence reporting is unavailable.
@@ -1363,10 +1375,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Future<void> _safeReportProgress(String eventName) async {
     if (!_reportedStarted || _reportedStopped) return;
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
     try {
       await ref
           .read(playbackServiceProvider)
-          .reportProgress(widget.account, _snapshot(), eventName: eventName);
+          .reportProgress(account, _snapshot(), eventName: eventName);
     } catch (_) {
       // A later periodic update can recover from a transient failure.
     }
@@ -1374,21 +1388,23 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Future<void> _safeReportStopped() async {
     if (_reportedStopped || !_reportedStarted) return;
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
     _reportedStopped = true;
     try {
       await ref
           .read(playbackServiceProvider)
-          .reportStopped(widget.account, _snapshot());
+          .reportStopped(account, _snapshot());
     } catch (_) {
       // Closing or rebuilding playback must not be blocked by reporting.
     }
   }
 
   Future<void> _safeMarkPlayed() async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
     try {
-      await ref
-          .read(playbackServiceProvider)
-          .markPlayed(widget.account, _item.id);
+      await ref.read(playbackServiceProvider).markPlayed(account, _item.id);
     } catch (_) {
       // The completed check-in can still mark the item on the server.
     }
@@ -1465,8 +1481,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _playQueueIndex(int index, {bool automatic = false}) async {
+    final account = widget.account;
     final queue = _queue;
-    if (queue == null ||
+    if (account == null ||
+        queue == null ||
         index < 0 ||
         index >= queue.items.length ||
         index == queue.currentIndex ||
@@ -1493,7 +1511,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       final nextPlan = await ref
           .read(playbackServiceProvider)
           .createPlan(
-            widget.account,
+            account,
             target,
             startPosition: automatic ? Duration.zero : null,
             maxStreamingBitrate: _maxStreamingBitrate,
@@ -1811,7 +1829,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                             },
                             onEpisodes: () => unawaited(_showEpisodes()),
                             onDiagnostics: _toggleDiagnostics,
-                            onQuality: () => unawaited(_showQualityOptions()),
+                            onQuality: _remotePlayback
+                                ? () => unawaited(_showQualityOptions())
+                                : null,
                             onFullScreen: () => unawaited(_toggleFullScreen()),
                           ),
                         );

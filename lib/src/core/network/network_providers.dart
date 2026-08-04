@@ -4,6 +4,8 @@ import 'package:embyplayer/src/core/storage/media_cache_store.dart';
 import 'package:embyplayer/src/core/storage/search_history_store.dart';
 import 'package:embyplayer/src/core/storage/secure_token_store.dart';
 import 'package:embyplayer/src/features/home/data/home_feed_service.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_store.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostic_log.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_preparation_service.dart';
@@ -46,6 +48,14 @@ final searchHistoryStoreProvider = Provider<SearchHistoryStore>((ref) {
   return JsonSearchHistoryStore();
 });
 
+final localMediaLibraryStoreProvider = Provider<LocalMediaLibraryStore>((ref) {
+  return JsonLocalMediaLibraryStore();
+});
+
+final localMediaLibraryProvider = Provider<LocalMediaLibraryService>((ref) {
+  return LocalMediaLibraryService(ref.watch(localMediaLibraryStoreProvider));
+});
+
 final mediaLibraryProvider = Provider<MediaLibraryService>((ref) {
   return MediaLibraryService(
     ref.watch(dioProvider),
@@ -77,6 +87,7 @@ final playbackPreparationProvider = Provider<PlaybackPreparationService>((ref) {
     ref.watch(playbackServiceProvider),
     ref.watch(mediaLibraryProvider),
     ref.watch(playbackSettingsStoreProvider),
+    ref.watch(localMediaLibraryProvider),
   );
 });
 

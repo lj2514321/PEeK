@@ -11,6 +11,8 @@ import 'package:embyplayer/src/features/favorites/presentation/favorites_page.da
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
 import 'package:embyplayer/src/features/home/presentation/authenticated_home_page.dart';
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
+import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
+import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -19,6 +21,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_selector/file_selector.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
@@ -38,11 +41,14 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   DiscoveredServer? _discoveredServer;
   AuthenticatedServer? _authenticatedServer;
   ServerAccountState _accountState = const ServerAccountState();
+  List<LocalMediaLibrary> _localLibraries = const [];
   PlaybackSettings _playbackSettings = const PlaybackSettings();
   bool _playbackSettingsLoading = true;
   bool _playbackSettingsSaving = false;
   String? _playbackSettingsError;
   String? _busyProfileId;
+  String? _busyLocalLibraryId;
+  bool _addingLocalLibrary = false;
   bool _clearingExpiredSession = false;
   late final StreamSubscription<SessionExpiryEvent> _sessionExpirySubscription;
 
@@ -70,6 +76,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         .events
         .listen((event) => unawaited(_handleSessionExpired(event)));
     Future<void>.microtask(_restoreSession);
+    Future<void>.microtask(_restoreLocalLibraries);
     Future<void>.microtask(_restorePlaybackSettings);
   }
 
@@ -108,6 +115,78 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         _playbackSettingsLoading = false;
         _playbackSettingsError = '无法读取播放设置，已使用原画优先。';
       });
+    }
+  }
+
+  Future<void> _restoreLocalLibraries() async {
+    final libraries = await ref.read(localMediaLibraryProvider).getLibraries();
+    if (!mounted) return;
+    setState(() => _localLibraries = libraries);
+  }
+
+  Future<void> _addLocalLibrary() async {
+    if (_addingLocalLibrary) return;
+    setState(() => _addingLocalLibrary = true);
+    try {
+      final path = await getDirectoryPath(
+        confirmButtonText: '添加媒体库',
+        canCreateDirectories: false,
+      );
+      if (path == null || !mounted) return;
+      final existingPaths = _localLibraries
+          .map((library) => library.path.toLowerCase())
+          .toSet();
+      final library = await ref
+          .read(localMediaLibraryProvider)
+          .addDirectory(path);
+      final libraries = await ref
+          .read(localMediaLibraryProvider)
+          .getLibraries();
+      if (!mounted) return;
+      setState(() => _localLibraries = libraries);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            existingPaths.contains(library.path.toLowerCase())
+                ? '${library.name} 已经在本地媒体库中'
+                : '已添加本地媒体库：${library.name}',
+          ),
+          action: SnackBarAction(
+            label: '打开',
+            onPressed: () => _selectDestination(1),
+          ),
+        ),
+      );
+    } on LocalMediaLibraryException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _addingLocalLibrary = false);
+    }
+  }
+
+  Future<void> _removeLocalLibrary(LocalMediaLibrary library) async {
+    if (_busyLocalLibraryId != null) return;
+    setState(() => _busyLocalLibraryId = library.id);
+    try {
+      await ref.read(localMediaLibraryProvider).removeLibrary(library.id);
+      final libraries = await ref
+          .read(localMediaLibraryProvider)
+          .getLibraries();
+      if (!mounted) return;
+      setState(() => _localLibraries = libraries);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已移除本地媒体库：${library.name}（文件未被删除）')),
+      );
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法移除本地媒体库，请稍后重试。')));
+    } finally {
+      if (mounted) setState(() => _busyLocalLibraryId = null);
     }
   }
 
@@ -473,6 +552,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                           ? MediaLibraryPage(
                                               key: _libraryPageKey,
                                               account: _authenticatedServer,
+                                              localLibraries: _localLibraries,
+                                              onAddLocalLibrary:
+                                                  _addLocalLibrary,
                                               onGoHome: () =>
                                                   _selectDestination(0),
                                               onSessionExpired:
@@ -518,6 +600,15 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                               state: _accountState,
                                               busyProfileId: _busyProfileId,
                                               onAddServer: _showAddServerDialog,
+                                              localLibraries: _localLibraries,
+                                              addingLocalLibrary:
+                                                  _addingLocalLibrary,
+                                              busyLocalLibraryId:
+                                                  _busyLocalLibraryId,
+                                              onAddLocalLibrary:
+                                                  _addLocalLibrary,
+                                              onRemoveLocalLibrary:
+                                                  _removeLocalLibrary,
                                               onSwitch: _switchAccount,
                                               onLogin: _loginAccount,
                                               onLogout: _logoutAccount,

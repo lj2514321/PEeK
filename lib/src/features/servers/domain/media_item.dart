@@ -9,6 +9,8 @@ enum MediaItemKind {
   folder,
 }
 
+enum MediaItemSource { remote, local }
+
 class MediaItem {
   const MediaItem({
     required this.id,
@@ -33,6 +35,10 @@ class MediaItem {
     this.parentId,
     this.seriesId,
     this.collectionType,
+    this.source = MediaItemSource.remote,
+    this.sourcePath,
+    this.fileSize,
+    this.dateModified,
     this.played = false,
     this.favorite = false,
     this.resumePosition = Duration.zero,
@@ -60,9 +66,15 @@ class MediaItem {
   final String? parentId;
   final String? seriesId;
   final String? collectionType;
+  final MediaItemSource source;
+  final String? sourcePath;
+  final int? fileSize;
+  final DateTime? dateModified;
   final bool played;
   final bool favorite;
   final Duration resumePosition;
+
+  bool get isLocal => source == MediaItemSource.local;
 
   MediaItem copyWith({bool? played, bool? favorite, Duration? resumePosition}) {
     return MediaItem(
@@ -88,6 +100,10 @@ class MediaItem {
       parentId: parentId,
       seriesId: seriesId,
       collectionType: collectionType,
+      source: source,
+      sourcePath: sourcePath,
+      fileSize: fileSize,
+      dateModified: dateModified,
       played: played ?? this.played,
       favorite: favorite ?? this.favorite,
       resumePosition: resumePosition ?? this.resumePosition,
