@@ -155,6 +155,72 @@ void main() {
     expect(find.text('演员 1'), findsOneWidget);
   });
 
+  testWidgets('switches the actor list to the selected library', (
+    tester,
+  ) async {
+    final service = _FakeActorsService(total: 6);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: ActorsPage(account: account, onOpenLibrary: () {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('全部'), findsOneWidget);
+    expect(find.text('电影库'), findsOneWidget);
+    expect(find.text('剧集库'), findsOneWidget);
+    expect(service.requestedParentIds, [null]);
+
+    await tester.tap(find.text('电影库'));
+    await tester.pumpAndSettle();
+
+    expect(service.requestedParentIds, [null, 'movies-lib']);
+    expect(find.text('演员 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keeps loading full pages until a short page ends the list', (
+    tester,
+  ) async {
+    final service = _FakeActorsService(total: 65);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: ActorsPage(account: account, onOpenLibrary: () {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const PageStorageKey('actors-scroll-view')),
+      const Offset(0, -10000),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.requestedStartIndexes, [0, 60]);
+    expect(find.text('演员 61'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const PageStorageKey('actors-scroll-view')),
+      const Offset(0, -10000),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.requestedStartIndexes, [0, 60]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('opens the person works page from an actor card', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -187,11 +253,34 @@ class _FakeActorsService extends MediaLibraryService {
   final int total;
   final bool failFirstLoad;
   final requestedStartIndexes = <int>[];
+  final requestedParentIds = <String?>[];
   int loadAttempts = 0;
+
+  @override
+  Future<List<MediaItem>> getLibraries(
+    AuthenticatedServer account, {
+    bool forceRefresh = false,
+  }) async {
+    return const [
+      MediaItem(
+        id: 'movies-lib',
+        name: '电影库',
+        kind: MediaItemKind.folder,
+        collectionType: 'movies',
+      ),
+      MediaItem(
+        id: 'tv-lib',
+        name: '剧集库',
+        kind: MediaItemKind.folder,
+        collectionType: 'tvshows',
+      ),
+    ];
+  }
 
   @override
   Future<MediaPage> getActors(
     AuthenticatedServer account, {
+    String? parentId,
     int startIndex = 0,
     int limit = 60,
     bool forceRefresh = false,
@@ -201,7 +290,10 @@ class _FakeActorsService extends MediaLibraryService {
       throw const MediaLibraryException('服务器暂时不可用。');
     }
     requestedStartIndexes.add(startIndex);
+    requestedParentIds.add(parentId);
     final end = (startIndex + limit).clamp(0, total);
+    // Mimic Jellyfin's /Persons endpoint: TotalRecordCount equals the page
+    // size, so the page must keep paging while pages come back full.
     return MediaPage(
       items: startIndex >= total
           ? const []
@@ -213,7 +305,7 @@ class _FakeActorsService extends MediaLibraryService {
                 kind: MediaItemKind.person,
               ),
             ),
-      totalRecordCount: total,
+      totalRecordCount: end,
       nextStartIndex: end,
     );
   }

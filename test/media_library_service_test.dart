@@ -55,6 +55,7 @@ void main() {
 
     expect(request?.uri.path, '/Persons');
     expect(request?.uri.queryParameters['PersonTypes'], 'Actor');
+    expect(request?.uri.queryParameters.containsKey('ParentId'), isFalse);
     expect(request?.uri.queryParameters['SortBy'], 'SortName');
     expect(request?.uri.queryParameters['SortOrder'], 'Ascending');
     expect(request?.uri.queryParameters['ImageTypeLimit'], '1');
@@ -99,6 +100,32 @@ void main() {
     expect(request?.uri.queryParameters['StartIndex'], '60');
     expect(request?.uri.queryParameters['Limit'], '40');
     expect(page.hasMore, isFalse);
+  });
+
+  test('scopes the actors query to a selected library', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {'TotalRecordCount': 3, 'Items': []},
+              ),
+            );
+          },
+        ),
+      );
+
+    final page = await MediaLibraryService(
+      dio,
+    ).getActors(account, parentId: 'movies-lib');
+
+    expect(request?.uri.queryParameters['ParentId'], 'movies-lib');
+    expect(page.items, isEmpty);
   });
 
   test('serves cached actors and refreshes them in the background', () async {

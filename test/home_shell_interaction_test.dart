@@ -382,6 +382,7 @@ class _ShellLibraryService extends MediaLibraryService {
   @override
   Future<MediaPage> getActors(
     AuthenticatedServer account, {
+    String? parentId,
     int startIndex = 0,
     int limit = 60,
     bool forceRefresh = false,

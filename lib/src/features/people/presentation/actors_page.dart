@@ -33,15 +33,20 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
 
   final _scrollController = ScrollController();
   List<MediaItem> _items = const [];
-  int _totalItemCount = 0;
+  List<MediaItem> _libraries = const [];
   int _nextStartIndex = 0;
   int _requestGeneration = 0;
   bool _loading = false;
   bool _loadingMore = false;
+  bool _lastPageShort = false;
   String? _error;
   String? _paginationError;
+  String? _librariesError;
+  String? _selectedLibraryId;
 
-  bool get _hasMore => _items.isNotEmpty && _nextStartIndex < _totalItemCount;
+  // Jellyfin's /Persons endpoint reports TotalRecordCount as the page size,
+  // so pagination relies on "keep paging while pages come back full".
+  bool get _hasMore => _items.isNotEmpty && !_lastPageShort;
 
   @override
   void initState() {
@@ -49,6 +54,7 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     _scrollController.addListener(_loadMoreNearEnd);
     if (widget.account != null) {
       Future<void>.microtask(_loadActors);
+      Future<void>.microtask(_loadLibraries);
     }
   }
 
@@ -63,14 +69,47 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         _requestGeneration++;
         setState(() {
           _items = const [];
-          _totalItemCount = 0;
+          _libraries = const [];
           _nextStartIndex = 0;
           _error = null;
           _paginationError = null;
+          _librariesError = null;
+          _selectedLibraryId = null;
+          _lastPageShort = false;
         });
       } else {
         _loadActors();
+        _loadLibraries();
       }
+    }
+  }
+
+  void _selectLibrary(String? libraryId) {
+    if (libraryId == _selectedLibraryId) return;
+    setState(() {
+      _selectedLibraryId = libraryId;
+      _items = const [];
+      _nextStartIndex = 0;
+      _paginationError = null;
+      _lastPageShort = false;
+    });
+    _loadActors();
+  }
+
+  Future<void> _loadLibraries() async {
+    final account = widget.account;
+    if (account == null) return;
+    setState(() => _librariesError = null);
+    try {
+      final libraries = await ref
+          .read(mediaLibraryProvider)
+          .getLibraries(account);
+      if (!mounted) return;
+      setState(() => _libraries = libraries);
+    } on MediaLibraryException catch (error) {
+      if (!mounted) return;
+      if (error.authenticationExpired) widget.onSessionExpired?.call();
+      setState(() => _librariesError = error.message);
     }
   }
 
@@ -107,12 +146,17 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     try {
       final page = await ref
           .read(mediaLibraryProvider)
-          .getActors(account, limit: _pageSize, forceRefresh: forceRefresh);
+          .getActors(
+            account,
+            parentId: _selectedLibraryId,
+            limit: _pageSize,
+            forceRefresh: forceRefresh,
+          );
       if (!mounted || generation != _requestGeneration) return;
       setState(() {
         _items = page.items;
-        _totalItemCount = page.totalRecordCount;
         _nextStartIndex = page.nextStartIndex;
+        _lastPageShort = page.items.length < _pageSize;
       });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
@@ -140,10 +184,7 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
 
   Future<void> _loadMore() async {
     final account = widget.account;
-    if (account == null ||
-        _loading ||
-        _loadingMore ||
-        _nextStartIndex >= _totalItemCount) {
+    if (account == null || _loading || _loadingMore || _lastPageShort) {
       return;
     }
     final generation = _requestGeneration;
@@ -154,7 +195,12 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     try {
       final page = await ref
           .read(mediaLibraryProvider)
-          .getActors(account, startIndex: _nextStartIndex, limit: _pageSize);
+          .getActors(
+            account,
+            parentId: _selectedLibraryId,
+            startIndex: _nextStartIndex,
+            limit: _pageSize,
+          );
       if (!mounted || generation != _requestGeneration) return;
       final knownIds = _items.map((item) => item.id).toSet();
       setState(() {
@@ -162,8 +208,8 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
           ..._items,
           ...page.items.where((item) => knownIds.add(item.id)),
         ];
-        _totalItemCount = page.totalRecordCount;
         _nextStartIndex = page.nextStartIndex;
+        _lastPageShort = page.items.length < _pageSize;
       });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
@@ -228,6 +274,16 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
                   const SizedBox(width: AppChrome.windowControlsWidth),
               ],
             ),
+            if (widget.account != null)
+              SliverToBoxAdapter(
+                child: _LibraryFilterBar(
+                  libraries: _libraries,
+                  error: _librariesError,
+                  selectedLibraryId: _selectedLibraryId,
+                  onSelected: _selectLibrary,
+                  onRetry: _loadLibraries,
+                ),
+              ),
             if (widget.account == null)
               SliverFillRemaining(
                 hasScrollBody: false,
@@ -322,6 +378,116 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LibraryFilterBar extends StatelessWidget {
+  const _LibraryFilterBar({
+    required this.libraries,
+    required this.error,
+    required this.selectedLibraryId,
+    required this.onSelected,
+    required this.onRetry,
+  });
+
+  final List<MediaItem> libraries;
+  final String? error;
+  final String? selectedLibraryId;
+  final ValueChanged<String?> onSelected;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (error != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 10, 24, 2),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.cloud_off_rounded,
+              size: 16,
+              color: AppColors.textTertiary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '无法读取媒体库：$error',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            TextButton(onPressed: onRetry, child: const Text('重试')),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 2),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _LibraryChip(
+              label: '全部',
+              selected: selectedLibraryId == null,
+              onTap: () => onSelected(null),
+            ),
+            for (final library in libraries)
+              _LibraryChip(
+                label: library.name,
+                selected: library.id == selectedLibraryId,
+                onTap: () => onSelected(library.id),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LibraryChip extends StatelessWidget {
+  const _LibraryChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(99),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(99),
+          child: AnimatedContainer(
+            duration: AppMotion.fast,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: AppGlass.decoration(radius: 99, selected: selected),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: selected
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ),
         ),
       ),
     );
