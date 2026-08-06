@@ -121,6 +121,39 @@ class MediaLibraryService {
     );
   }
 
+  Future<MediaPage> getActors(
+    AuthenticatedServer account, {
+    int startIndex = 0,
+    int limit = 60,
+    bool forceRefresh = false,
+  }) async {
+    final uri =
+        _appendPath(
+          account.server.apiBaseUri,
+          'Users/${account.userId}/Items',
+        ).replace(
+          queryParameters: {
+            'Recursive': 'true',
+            'IncludeItemTypes': 'Person',
+            'PersonTypes': 'Actor',
+            'SortBy': 'SortName',
+            'SortOrder': 'Ascending',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary',
+            'StartIndex': '$startIndex',
+            'Limit': '$limit',
+            'EnableTotalRecordCount': 'true',
+          },
+        );
+    return _requestPage(
+      uri,
+      account,
+      startIndex: startIndex,
+      cacheAge: _itemPageCacheAge,
+      forceRefresh: forceRefresh,
+    );
+  }
+
   Future<MediaPage> search(
     AuthenticatedServer account, {
     required String query,

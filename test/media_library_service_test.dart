@@ -23,6 +23,129 @@ void main() {
     accessToken: 'secret-token',
   );
 
+  test('loads actors across libraries with person type filtering', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {
+                  'TotalRecordCount': 12,
+                  'Items': [
+                    {
+                      'Id': 'person-1',
+                      'Name': '演员甲',
+                      'Type': 'Person',
+                      'ImageTags': {'Primary': 'avatar-tag'},
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+
+    final page = await MediaLibraryService(dio).getActors(account);
+
+    expect(request?.uri.path, '/Users/user-id/Items');
+    expect(request?.uri.queryParameters['Recursive'], 'true');
+    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Person');
+    expect(request?.uri.queryParameters['PersonTypes'], 'Actor');
+    expect(request?.uri.queryParameters['SortBy'], 'SortName');
+    expect(request?.uri.queryParameters['SortOrder'], 'Ascending');
+    expect(request?.uri.queryParameters['ImageTypeLimit'], '1');
+    expect(request?.uri.queryParameters['EnableImageTypes'], 'Primary');
+    expect(request?.uri.queryParameters['StartIndex'], '0');
+    expect(request?.uri.queryParameters['Limit'], '60');
+    expect(request?.headers['X-Emby-Token'], 'secret-token');
+    expect(page.totalRecordCount, 12);
+    expect(page.nextStartIndex, 1);
+    expect(page.hasMore, isTrue);
+    expect(page.items.single.kind, MediaItemKind.person);
+    expect(page.items.single.name, '演员甲');
+    expect(page.items.single.imageUri?.path, '/Items/person-1/Images/Primary');
+    expect(page.items.single.imageUri?.queryParameters['tag'], 'avatar-tag');
+    expect(page.items.single.imageHeaders['X-Emby-Token'], 'secret-token');
+  });
+
+  test('passes start index and limit through the actors query', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {'TotalRecordCount': 0, 'Items': []},
+              ),
+            );
+          },
+        ),
+      );
+
+    final page = await MediaLibraryService(
+      dio,
+    ).getActors(account, startIndex: 60, limit: 40);
+
+    expect(request?.uri.queryParameters['StartIndex'], '60');
+    expect(request?.uri.queryParameters['Limit'], '40');
+    expect(page.hasMore, isFalse);
+  });
+
+  test('serves cached actors and refreshes them in the background', () async {
+    var requestCount = 0;
+    final releaseRefresh = Completer<void>();
+    final refreshStarted = Completer<void>();
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) async {
+            requestCount++;
+            if (requestCount > 1) {
+              if (!refreshStarted.isCompleted) refreshStarted.complete();
+              await releaseRefresh.future;
+            }
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'TotalRecordCount': 1,
+                  'Items': [
+                    {
+                      'Id': 'person-cache',
+                      'Name': requestCount == 1 ? '缓存演员' : '刷新演员',
+                      'Type': 'Person',
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+    final service = MediaLibraryService(dio, MemoryMediaCacheStore());
+
+    expect((await service.getActors(account)).items.single.name, '缓存演员');
+    final cached = await service
+        .getActors(account)
+        .timeout(const Duration(milliseconds: 100));
+
+    expect(cached.items.single.name, '缓存演员');
+    await refreshStarted.future.timeout(const Duration(seconds: 1));
+    expect(requestCount, 2);
+    releaseRefresh.complete();
+  });
+
   test('loads libraries with authentication and artwork metadata', () async {
     RequestOptions? request;
     final dio = Dio()
