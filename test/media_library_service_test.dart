@@ -53,9 +53,7 @@ void main() {
 
     final page = await MediaLibraryService(dio).getActors(account);
 
-    expect(request?.uri.path, '/Users/user-id/Items');
-    expect(request?.uri.queryParameters['Recursive'], 'true');
-    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Person');
+    expect(request?.uri.path, '/Persons');
     expect(request?.uri.queryParameters['PersonTypes'], 'Actor');
     expect(request?.uri.queryParameters['SortBy'], 'SortName');
     expect(request?.uri.queryParameters['SortOrder'], 'Ascending');
@@ -97,6 +95,7 @@ void main() {
       dio,
     ).getActors(account, startIndex: 60, limit: 40);
 
+    expect(request?.uri.path, '/Persons');
     expect(request?.uri.queryParameters['StartIndex'], '60');
     expect(request?.uri.queryParameters['Limit'], '40');
     expect(page.hasMore, isFalse);
