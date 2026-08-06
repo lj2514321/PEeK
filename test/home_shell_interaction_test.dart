@@ -9,6 +9,7 @@ import 'package:embyplayer/src/features/servers/data/server_authentication_servi
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -177,6 +178,125 @@ void main() {
     expect(library.searchRequests, 1);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('opens the actors destination and keeps its state', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final account = _account();
+    final library = _ShellLibraryService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          serverAuthenticationProvider.overrideWithValue(
+            _ShellAuthenticationService(account),
+          ),
+          mediaLibraryProvider.overrideWithValue(library),
+          searchHistoryStoreProvider.overrideWithValue(
+            MemorySearchHistoryStore(),
+          ),
+          playbackSettingsStoreProvider.overrideWithValue(
+            MemoryPlaybackSettingsStore(),
+          ),
+        ],
+        child: const EmbyPlayerApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('演员'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('演员列表'), findsOneWidget);
+    expect(find.text('演员甲'), findsOneWidget);
+    expect(library.actorRequests, 1);
+
+    await tester.tap(find.text('设置').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('演员'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('演员甲'), findsOneWidget);
+    expect(library.actorRequests, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('switches to actors with Ctrl+6', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final account = _account();
+    final library = _ShellLibraryService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          serverAuthenticationProvider.overrideWithValue(
+            _ShellAuthenticationService(account),
+          ),
+          mediaLibraryProvider.overrideWithValue(library),
+          searchHistoryStoreProvider.overrideWithValue(
+            MemorySearchHistoryStore(),
+          ),
+          playbackSettingsStoreProvider.overrideWithValue(
+            MemoryPlaybackSettingsStore(),
+          ),
+        ],
+        child: const EmbyPlayerApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.digit6);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(find.text('演员列表'), findsOneWidget);
+    expect(library.actorRequests, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('renders six destinations in the compact bottom navigation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final account = _account();
+    final library = _ShellLibraryService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          serverAuthenticationProvider.overrideWithValue(
+            _ShellAuthenticationService(account),
+          ),
+          mediaLibraryProvider.overrideWithValue(library),
+          searchHistoryStoreProvider.overrideWithValue(
+            MemorySearchHistoryStore(),
+          ),
+          playbackSettingsStoreProvider.overrideWithValue(
+            MemoryPlaybackSettingsStore(),
+          ),
+        ],
+        child: const EmbyPlayerApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('演员'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('演员列表'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _ShellAuthenticationService extends ServerAuthenticationService {
@@ -204,6 +324,7 @@ class _ShellLibraryService extends MediaLibraryService {
   int libraryRequests = 0;
   int searchRequests = 0;
   int favoriteRequests = 0;
+  int actorRequests = 0;
 
   @override
   Future<List<MediaItem>> getLibraries(
@@ -255,6 +376,24 @@ class _ShellLibraryService extends MediaLibraryService {
       ],
       totalRecordCount: 1,
       nextStartIndex: 1,
+    );
+  }
+
+  @override
+  Future<MediaPage> getActors(
+    AuthenticatedServer account, {
+    int startIndex = 0,
+    int limit = 60,
+    bool forceRefresh = false,
+  }) async {
+    actorRequests += 1;
+    return const MediaPage(
+      items: [
+        MediaItem(id: 'actor-a', name: '演员甲', kind: MediaItemKind.person),
+        MediaItem(id: 'actor-b', name: '演员乙', kind: MediaItemKind.person),
+      ],
+      totalRecordCount: 2,
+      nextStartIndex: 2,
     );
   }
 

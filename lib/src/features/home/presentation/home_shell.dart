@@ -13,6 +13,7 @@ import 'package:embyplayer/src/features/home/presentation/authenticated_home_pag
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
+import 'package:embyplayer/src/features/people/presentation/actors_page.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -35,6 +36,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   final _libraryPageKey = GlobalKey<MediaLibraryPageState>();
   final _favoritesPageKey = GlobalKey<FavoritesPageState>();
   final _searchPageKey = GlobalKey<MediaSearchPageState>();
+  final _actorsPageKey = GlobalKey<ActorsPageState>();
   final _visitedDestinations = <int>{0};
   int _selectedIndex = 0;
   bool _sidebarCollapsed = false;
@@ -66,6 +68,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     ),
     _AppDestination('搜索', Icons.search_rounded, Icons.search_rounded),
     _AppDestination('设置', Icons.tune_outlined, Icons.tune_rounded),
+    _AppDestination('演员', Icons.people_outline_rounded, Icons.people_rounded),
   ];
 
   @override
@@ -384,6 +387,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         case 2:
           _favoritesPageKey.currentState?.scrollToTop();
           return;
+        case 5:
+          _actorsPageKey.currentState?.scrollToTop();
+          return;
         default:
           return;
       }
@@ -472,6 +478,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         },
         const SingleActivator(LogicalKeyboardKey.digit5, control: true): () {
           _selectDestination(4);
+        },
+        const SingleActivator(LogicalKeyboardKey.digit6, control: true): () {
+          _selectDestination(5);
         },
       },
       child: Focus(
@@ -635,6 +644,19 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                                       mode,
                                                     ),
                                                   ),
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                    _KeepAliveDestination(
+                                      active: _selectedIndex == 5,
+                                      child: _visitedDestinations.contains(5)
+                                          ? ActorsPage(
+                                              key: _actorsPageKey,
+                                              account: _authenticatedServer,
+                                              onOpenLibrary: () =>
+                                                  _selectDestination(1),
+                                              onSessionExpired:
+                                                  _handleSessionExpired,
                                             )
                                           : const SizedBox.shrink(),
                                     ),
