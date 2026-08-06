@@ -63,6 +63,7 @@ void main() {
     expect(request?.uri.queryParameters['EnableImageTypes'], 'Primary');
     expect(request?.uri.queryParameters['StartIndex'], '0');
     expect(request?.uri.queryParameters['Limit'], '60');
+    expect(request?.uri.queryParameters['EnableTotalRecordCount'], 'true');
     expect(request?.headers['X-Emby-Token'], 'secret-token');
     expect(page.totalRecordCount, 12);
     expect(page.nextStartIndex, 1);
