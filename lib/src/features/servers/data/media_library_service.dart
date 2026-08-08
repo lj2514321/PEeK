@@ -129,8 +129,7 @@ class MediaLibraryService {
     bool forceRefresh = false,
   }) async {
     final query = {
-      'Recursive': 'true',
-      'IncludeItemTypes': 'Person',
+      'UserId': account.userId,
       'SortBy': 'SortName',
       'SortOrder': 'Ascending',
       'ImageTypeLimit': '1',
@@ -138,45 +137,18 @@ class MediaLibraryService {
       'StartIndex': '$startIndex',
       'Limit': '$limit',
       'EnableTotalRecordCount': 'true',
-      if (parentId != null && parentId.isNotEmpty) 'ParentId': parentId,
+      if (parentId != null && parentId.isNotEmpty) ...{
+        'AncestorIds': parentId,
+        'ParentId': parentId,
+      },
     };
     final uri = _appendPath(
       account.server.apiBaseUri,
-      'Users/${account.userId}/Items',
+      'Persons',
     ).replace(queryParameters: query);
 
-    try {
-      final page = await _requestPage(
-        uri,
-        account,
-        startIndex: startIndex,
-        cacheAge: _itemPageCacheAge,
-        forceRefresh: forceRefresh,
-      );
-      if (page.items.isNotEmpty || (parentId != null && parentId.isNotEmpty)) {
-        return page;
-      }
-    } catch (_) {
-      // Fallback to /Persons if Users/{userId}/Items fails for persons
-    }
-
-    final fallbackUri = _appendPath(
-      account.server.apiBaseUri,
-      'Persons',
-    ).replace(
-      queryParameters: {
-        'UserId': account.userId,
-        'SortBy': 'SortName',
-        'SortOrder': 'Ascending',
-        'ImageTypeLimit': '1',
-        'EnableImageTypes': 'Primary',
-        'StartIndex': '$startIndex',
-        'Limit': '$limit',
-        'EnableTotalRecordCount': 'true',
-      },
-    );
     return _requestPage(
-      fallbackUri,
+      uri,
       account,
       startIndex: startIndex,
       cacheAge: _itemPageCacheAge,

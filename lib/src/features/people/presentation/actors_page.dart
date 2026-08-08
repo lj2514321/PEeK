@@ -154,9 +154,14 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
             forceRefresh: forceRefresh,
           );
       if (!mounted || generation != _requestGeneration) return;
+      final isShortPage = (page.rawItemCount ?? page.items.length) < _pageSize;
       setState(() {
         _items = page.items;
-        _totalItemCount = page.totalRecordCount;
+        _totalItemCount = isShortPage
+            ? page.items.length
+            : (page.totalRecordCount > page.items.length
+                ? page.totalRecordCount
+                : page.items.length + _pageSize);
         _nextStartIndex = page.nextStartIndex;
       });
     } on MediaLibraryException catch (error) {
@@ -215,11 +220,14 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         setState(() => _totalItemCount = _items.length);
         return;
       }
+      final isShortPage = (page.rawItemCount ?? page.items.length) < _pageSize;
       setState(() {
         _items = [..._items, ...newItems];
-        _totalItemCount = page.totalRecordCount > _items.length
-            ? page.totalRecordCount
-            : _items.length;
+        _totalItemCount = isShortPage
+            ? _items.length
+            : (page.totalRecordCount > _items.length
+                ? page.totalRecordCount
+                : _items.length + _pageSize);
         _nextStartIndex = page.nextStartIndex;
       });
     } on MediaLibraryException catch (error) {
