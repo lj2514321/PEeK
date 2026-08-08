@@ -109,6 +109,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   int _systemVolumeBindAttempts = 0;
   late PlaybackBitrate _maxStreamingBitrate = widget.maxStreamingBitrate;
   late SubtitlePreferences _subtitlePreferences = widget.subtitlePreferences;
+  late final FocusNode _pageFocusNode = FocusNode(
+    debugLabel: 'PlaybackPageFocus',
+  );
 
   static const _autoNextSeconds = 8;
 
@@ -121,9 +124,17 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     return _plan.duration ?? Duration.zero;
   }
 
+  void _ensureFocused() {
+    if (!mounted || _closing) return;
+    if (!_pageFocusNode.hasFocus) {
+      _pageFocusNode.requestFocus();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _pageFocusNode.requestFocus();
     _diagnosticLog = ref.read(playbackDiagnosticLogProvider);
     _systemMediaSession = ref.read(windowsMediaSessionProvider)();
     AppChrome.enterImmersive();
@@ -149,7 +160,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       isActive: () => mounted && !_closing && !_playerDisposed,
       onControlsShown: () => _publishTimeline(force: true),
       onControlsVisibilityChanged: () {
-        if (mounted) setState(() {});
+        if (mounted) {
+          setState(() {});
+          _ensureFocused();
+        }
       },
     );
     _listenToPlayer();
@@ -752,7 +766,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (selected != null && selected != _maxStreamingBitrate && mounted) {
       await _switchQuality(selected);
     }
-    if (mounted) _scheduleControlsHide();
+    if (mounted) {
+      _ensureFocused();
+      _scheduleControlsHide();
+    }
   }
 
   Future<void> _switchQuality(PlaybackBitrate bitrate) async {
@@ -798,7 +815,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         onPreferencesChanged: _updateSubtitlePreferences,
       ),
     ).whenComplete(() {
-      if (mounted) _scheduleControlsHide();
+      if (mounted) {
+        _ensureFocused();
+        _scheduleControlsHide();
+      }
     });
   }
 
@@ -822,7 +842,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         emptyMessage: emptyMessage,
       ),
     );
-    if (mounted) _scheduleControlsHide();
+    if (mounted) {
+      _ensureFocused();
+      _scheduleControlsHide();
+    }
   }
 
   List<_TrackMenuOption> _audioOptions() {
@@ -1425,7 +1448,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (index != null && mounted) {
       await _playQueueIndex(index);
     }
-    if (mounted) _scheduleControlsHide();
+    if (mounted) {
+      _ensureFocused();
+      _scheduleControlsHide();
+    }
   }
 
   Future<void> _showChapters() async {
@@ -1441,7 +1467,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           _ChapterSheet(chapters: _plan.chapters, position: _position),
     );
     if (target != null && mounted) await _seek(target);
-    if (mounted) _scheduleControlsHide();
+    if (mounted) {
+      _ensureFocused();
+      _scheduleControlsHide();
+    }
   }
 
   void _startNextEpisodeCountdown() {
@@ -1659,6 +1688,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (!_systemMediaDisposed) unawaited(_disposeSystemMedia());
     if (!_playerDisposed) unawaited(_disposePlayer());
     _timelineNotifier.dispose();
+    _pageFocusNode.dispose();
     super.dispose();
   }
 
@@ -1722,21 +1752,36 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
             },
           },
           child: Focus(
+            focusNode: _pageFocusNode,
             autofocus: true,
+            canRequestFocus: true,
+            onFocusChange: (focused) {
+              if (!focused && mounted && !_closing) {
+                Future.microtask(_ensureFocused);
+              }
+            },
             child: MouseRegion(
               cursor: _controlsVisible || _diagnosticsVisible
                   ? SystemMouseCursors.basic
                   : SystemMouseCursors.none,
               onEnter: (_) {
+                _ensureFocused();
                 if (!_diagnosticsVisible) _showControls();
               },
               onHover: (_) {
+                _ensureFocused();
                 if (!_diagnosticsVisible) _showControls();
               },
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: _toggleControlsVisibility,
-                onDoubleTap: () => unawaited(_toggleFullScreen()),
+                onTap: () {
+                  _ensureFocused();
+                  _toggleControlsVisibility();
+                },
+                onDoubleTap: () {
+                  _ensureFocused();
+                  unawaited(_toggleFullScreen());
+                },
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
