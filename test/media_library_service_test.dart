@@ -38,10 +38,17 @@ void main() {
                   'TotalRecordCount': 12,
                   'Items': [
                     {
-                      'Id': 'person-1',
-                      'Name': '演员甲',
-                      'Type': 'Person',
-                      'ImageTags': {'Primary': 'avatar-tag'},
+                      'Id': 'item-1',
+                      'Name': '电影一',
+                      'Type': 'Movie',
+                      'People': [
+                        {
+                          'Id': 'person-1',
+                          'Name': '演员甲',
+                          'Type': 'Actor',
+                          'PrimaryImageTag': 'avatar-tag',
+                        },
+                      ],
                     },
                   ],
                 },
@@ -53,15 +60,11 @@ void main() {
 
     final page = await MediaLibraryService(dio).getActors(account);
 
-    expect(request?.uri.path, '/Persons');
-    expect(request?.uri.queryParameters['UserId'], 'user-id');
-    expect(request?.uri.queryParameters.containsKey('PersonTypes'), isFalse);
+    expect(request?.uri.path, '/Users/user-id/Items');
+    expect(request?.uri.queryParameters['Recursive'], 'true');
+    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Movie,Series,Episode,Video');
+    expect(request?.uri.queryParameters['Fields'], 'People');
     expect(request?.uri.queryParameters.containsKey('ParentId'), isFalse);
-    expect(request?.uri.queryParameters.containsKey('AncestorIds'), isFalse);
-    expect(request?.uri.queryParameters['SortBy'], 'SortName');
-    expect(request?.uri.queryParameters['SortOrder'], 'Ascending');
-    expect(request?.uri.queryParameters['ImageTypeLimit'], '1');
-    expect(request?.uri.queryParameters['EnableImageTypes'], 'Primary');
     expect(request?.uri.queryParameters['StartIndex'], '0');
     expect(request?.uri.queryParameters['Limit'], '60');
     expect(request?.uri.queryParameters['EnableTotalRecordCount'], 'true');
@@ -98,7 +101,7 @@ void main() {
       dio,
     ).getActors(account, startIndex: 60, limit: 40);
 
-    expect(request?.uri.path, '/Persons');
+    expect(request?.uri.path, '/Users/user-id/Items');
     expect(request?.uri.queryParameters['StartIndex'], '60');
     expect(request?.uri.queryParameters['Limit'], '40');
     expect(page.hasMore, isFalse);
@@ -153,9 +156,16 @@ void main() {
                   'TotalRecordCount': 1,
                   'Items': [
                     {
-                      'Id': 'person-cache',
-                      'Name': requestCount == 1 ? '缓存演员' : '刷新演员',
-                      'Type': 'Person',
+                      'Id': 'item-cache',
+                      'Name': '电影缓存',
+                      'Type': 'Movie',
+                      'People': [
+                        {
+                          'Id': 'person-cache',
+                          'Name': requestCount == 1 ? '缓存演员' : '刷新演员',
+                          'Type': 'Actor',
+                        },
+                      ],
                     },
                   ],
                 },
