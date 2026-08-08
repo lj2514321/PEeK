@@ -125,13 +125,14 @@ class MediaLibraryService {
     AuthenticatedServer account, {
     String? parentId,
     int startIndex = 0,
-    int limit = 60,
+    int limit = 100,
     bool forceRefresh = false,
   }) async {
     final uri = _appendPath(account.server.apiBaseUri, 'Persons').replace(
       queryParameters: {
         'UserId': account.userId,
-        'PersonTypes': 'Actor',
+        'Recursive': 'true',
+        'PersonTypes': 'Actor,GuestStar,Voice',
         'SortBy': 'SortName',
         'SortOrder': 'Ascending',
         'ImageTypeLimit': '1',

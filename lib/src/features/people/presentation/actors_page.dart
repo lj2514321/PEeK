@@ -29,7 +29,7 @@ class ActorsPage extends ConsumerStatefulWidget {
 }
 
 class ActorsPageState extends ConsumerState<ActorsPage> {
-  static const _pageSize = 60;
+  static const _pageSize = 100;
 
   final _scrollController = ScrollController();
   List<MediaItem> _items = const [];
@@ -159,6 +159,9 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         _nextStartIndex = page.nextStartIndex;
         _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize;
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadMoreNearEnd();
+      });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
@@ -211,6 +214,9 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         ];
         _nextStartIndex = page.nextStartIndex;
         _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadMoreNearEnd();
       });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;

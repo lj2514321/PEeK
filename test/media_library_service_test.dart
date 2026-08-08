@@ -55,14 +55,15 @@ void main() {
 
     expect(request?.uri.path, '/Persons');
     expect(request?.uri.queryParameters['UserId'], 'user-id');
-    expect(request?.uri.queryParameters['PersonTypes'], 'Actor');
+    expect(request?.uri.queryParameters['Recursive'], 'true');
+    expect(request?.uri.queryParameters['PersonTypes'], 'Actor,GuestStar,Voice');
     expect(request?.uri.queryParameters.containsKey('ParentId'), isFalse);
     expect(request?.uri.queryParameters['SortBy'], 'SortName');
     expect(request?.uri.queryParameters['SortOrder'], 'Ascending');
     expect(request?.uri.queryParameters['ImageTypeLimit'], '1');
     expect(request?.uri.queryParameters['EnableImageTypes'], 'Primary');
     expect(request?.uri.queryParameters['StartIndex'], '0');
-    expect(request?.uri.queryParameters['Limit'], '60');
+    expect(request?.uri.queryParameters['Limit'], '100');
     expect(request?.uri.queryParameters['EnableTotalRecordCount'], 'true');
     expect(request?.headers['X-Emby-Token'], 'secret-token');
     expect(page.totalRecordCount, 12);

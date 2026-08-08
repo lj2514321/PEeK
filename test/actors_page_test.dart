@@ -59,7 +59,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final service = _FakeActorsService(total: 80);
+    final service = _FakeActorsService(total: 120);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -80,8 +80,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(service.requestedStartIndexes, contains(60));
-    expect(find.text('演员 61'), findsOneWidget);
+    expect(service.requestedStartIndexes, contains(100));
+    expect(find.text('演员 101'), findsOneWidget);
   });
 
   testWidgets('guides an unauthenticated user to the media library', (
@@ -188,7 +188,7 @@ void main() {
   testWidgets('keeps loading full pages until a short page ends the list', (
     tester,
   ) async {
-    final service = _FakeActorsService(total: 65);
+    final service = _FakeActorsService(total: 110);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [mediaLibraryProvider.overrideWithValue(service)],
@@ -208,8 +208,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(service.requestedStartIndexes, [0, 60]);
-    expect(find.text('演员 61'), findsOneWidget);
+    expect(service.requestedStartIndexes, [0, 100]);
+    expect(find.text('演员 101'), findsOneWidget);
 
     await tester.drag(
       find.byKey(const PageStorageKey('actors-scroll-view')),
@@ -217,7 +217,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(service.requestedStartIndexes, [0, 60]);
+    expect(service.requestedStartIndexes, [0, 100]);
     expect(tester.takeException(), isNull);
   });
 
@@ -282,7 +282,7 @@ class _FakeActorsService extends MediaLibraryService {
     AuthenticatedServer account, {
     String? parentId,
     int startIndex = 0,
-    int limit = 60,
+    int limit = 100,
     bool forceRefresh = false,
   }) async {
     loadAttempts++;
