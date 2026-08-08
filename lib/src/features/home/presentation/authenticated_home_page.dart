@@ -655,43 +655,66 @@ class _CarouselControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.52),
         borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            key: const ValueKey('hero-previous'),
-            tooltip: '上一条推荐',
-            visualDensity: VisualDensity.compact,
-            onPressed: onPrevious,
-            icon: const Icon(Icons.chevron_left_rounded, size: 20),
-          ),
-          Semantics(
-            liveRegion: true,
-            label: '第 ${currentIndex + 1} 条，共 $itemCount 条每日推荐',
-            child: Text(
-              '${(currentIndex + 1).toString().padLeft(2, '0')} / '
-              '${itemCount.toString().padLeft(2, '0')}',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontFamily: 'Cascadia Mono',
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+      child: Material(
+        color: Colors.transparent,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              key: const ValueKey('hero-previous'),
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(99),
+              ),
+              onTap: onPrevious,
+              child: const Padding(
+                padding: EdgeInsets.fromLTRB(12, 8, 8, 8),
+                child: Icon(
+                  Icons.chevron_left_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
               ),
             ),
-          ),
-          IconButton(
-            key: const ValueKey('hero-next'),
-            tooltip: '下一条推荐',
-            visualDensity: VisualDensity.compact,
-            onPressed: onNext,
-            icon: const Icon(Icons.chevron_right_rounded, size: 20),
-          ),
-        ],
+            Semantics(
+              liveRegion: true,
+              label: '第 ${currentIndex + 1} 条，共 $itemCount 条每日推荐',
+              child: Text(
+                '${(currentIndex + 1).toString().padLeft(2, '0')} / '
+                '${itemCount.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontFamily: 'Cascadia Mono',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            InkWell(
+              key: const ValueKey('hero-next'),
+              borderRadius: const BorderRadius.horizontal(
+                right: Radius.circular(99),
+              ),
+              onTap: onNext,
+              child: const Padding(
+                padding: EdgeInsets.fromLTRB(8, 8, 12, 8),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
