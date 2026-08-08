@@ -54,36 +54,6 @@ void main() {
     });
   }
 
-  testWidgets('loads another page near the end', (tester) async {
-    tester.view.physicalSize = const Size(800, 650);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final service = _FakeActorsService(total: 120);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [mediaLibraryProvider.overrideWithValue(service)],
-        child: MaterialApp(
-          theme: AppTheme.dark(),
-          home: Scaffold(
-            body: ActorsPage(account: account, onOpenLibrary: () {}),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.drag(
-      find.byKey(const PageStorageKey('actors-scroll-view')),
-      const Offset(0, -10000),
-    );
-    await tester.pumpAndSettle();
-
-    expect(service.requestedStartIndexes, contains(100));
-    expect(find.text('演员 101'), findsOneWidget);
-  });
-
   testWidgets('guides an unauthenticated user to the media library', (
     tester,
   ) async {
@@ -182,42 +152,6 @@ void main() {
 
     expect(service.requestedParentIds, [null, 'movies-lib']);
     expect(find.text('演员 1'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('keeps loading full pages until a short page ends the list', (
-    tester,
-  ) async {
-    final service = _FakeActorsService(total: 110);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [mediaLibraryProvider.overrideWithValue(service)],
-        child: MaterialApp(
-          theme: AppTheme.dark(),
-          home: Scaffold(
-            body: ActorsPage(account: account, onOpenLibrary: () {}),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.drag(
-      find.byKey(const PageStorageKey('actors-scroll-view')),
-      const Offset(0, -10000),
-    );
-    await tester.pumpAndSettle();
-
-    expect(service.requestedStartIndexes, [0, 100]);
-    expect(find.text('演员 101'), findsOneWidget);
-
-    await tester.drag(
-      find.byKey(const PageStorageKey('actors-scroll-view')),
-      const Offset(0, -10000),
-    );
-    await tester.pumpAndSettle();
-
-    expect(service.requestedStartIndexes, [0, 100]);
     expect(tester.takeException(), isNull);
   });
 

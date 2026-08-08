@@ -29,29 +29,23 @@ class ActorsPage extends ConsumerStatefulWidget {
 }
 
 class ActorsPageState extends ConsumerState<ActorsPage> {
-  static const _pageSize = 100;
+  // Jellyfin's /Persons endpoint has unreliable StartIndex pagination on
+  // many server versions, so we load all persons in a single large request.
+  // Each person record is tiny (name + id + image tag), so this is fine.
+  static const _maxActors = 10000;
 
   final _scrollController = ScrollController();
   List<MediaItem> _items = const [];
   List<MediaItem> _libraries = const [];
-  int _nextStartIndex = 0;
   int _requestGeneration = 0;
   bool _loading = false;
-  bool _loadingMore = false;
-  bool _lastPageShort = false;
   String? _error;
-  String? _paginationError;
   String? _librariesError;
   String? _selectedLibraryId;
-
-  // Jellyfin's /Persons endpoint reports TotalRecordCount as the page size,
-  // so pagination relies on "keep paging while pages come back full".
-  bool get _hasMore => _items.isNotEmpty && !_lastPageShort;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_loadMoreNearEnd);
     if (widget.account != null) {
       Future<void>.microtask(_loadActors);
       Future<void>.microtask(_loadLibraries);
@@ -70,12 +64,9 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         setState(() {
           _items = const [];
           _libraries = const [];
-          _nextStartIndex = 0;
           _error = null;
-          _paginationError = null;
           _librariesError = null;
           _selectedLibraryId = null;
-          _lastPageShort = false;
         });
       } else {
         _loadActors();
@@ -89,9 +80,6 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     setState(() {
       _selectedLibraryId = libraryId;
       _items = const [];
-      _nextStartIndex = 0;
-      _paginationError = null;
-      _lastPageShort = false;
     });
     scrollToTop();
     _loadActors();
@@ -140,9 +128,7 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     final generation = ++_requestGeneration;
     setState(() {
       _loading = true;
-      _loadingMore = false;
       _error = null;
-      _paginationError = null;
     });
     try {
       final page = await ref
@@ -150,15 +136,11 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
           .getActors(
             account,
             parentId: _selectedLibraryId,
-            limit: _pageSize,
+            limit: _maxActors,
             forceRefresh: forceRefresh,
           );
       if (!mounted || generation != _requestGeneration) return;
-      setState(() {
-        _items = page.items;
-        _nextStartIndex = page.nextStartIndex;
-        _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize;
-      });
+      setState(() => _items = page.items);
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
@@ -172,56 +154,6 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     } finally {
       if (mounted && generation == _requestGeneration) {
         setState(() => _loading = false);
-      }
-    }
-  }
-
-  void _loadMoreNearEnd() {
-    if (_scrollController.hasClients &&
-        _scrollController.position.extentAfter < 700) {
-      _loadMore();
-    }
-  }
-
-  Future<void> _loadMore() async {
-    final account = widget.account;
-    if (account == null || _loading || _loadingMore || _lastPageShort) {
-      return;
-    }
-    final generation = _requestGeneration;
-    setState(() {
-      _loadingMore = true;
-      _paginationError = null;
-    });
-    try {
-      final page = await ref
-          .read(mediaLibraryProvider)
-          .getActors(
-            account,
-            parentId: _selectedLibraryId,
-            startIndex: _nextStartIndex,
-            limit: _pageSize,
-          );
-      if (!mounted || generation != _requestGeneration) return;
-      final previousLength = _items.length;
-      final knownIds = _items.map((item) => item.id).toSet();
-      final newItems = page.items.where((item) => knownIds.add(item.id))
-          .toList(growable: false);
-      setState(() {
-        _items = [..._items, ...newItems];
-        _nextStartIndex = page.nextStartIndex;
-        // Stop if the raw page was short OR if no new unique items were added
-        // (the server may return duplicate data for different StartIndex values).
-        _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize
-            || _items.length == previousLength;
-      });
-    } on MediaLibraryException catch (error) {
-      if (!mounted || generation != _requestGeneration) return;
-      if (error.authenticationExpired) widget.onSessionExpired?.call();
-      setState(() => _paginationError = error.message);
-    } finally {
-      if (mounted && generation == _requestGeneration) {
-        setState(() => _loadingMore = false);
       }
     }
   }
@@ -355,31 +287,6 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
                     ),
                   );
                 },
-              ),
-            if (_items.isNotEmpty &&
-                (_loadingMore || _paginationError != null || _hasMore))
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
-                  child: Center(
-                    child: _loadingMore
-                        ? const SizedBox.square(
-                            dimension: 28,
-                            child: CircularProgressIndicator(strokeWidth: 2.4),
-                          )
-                        : TextButton.icon(
-                            onPressed: _loadMore,
-                            icon: Icon(
-                              _paginationError == null
-                                  ? Icons.expand_more_rounded
-                                  : Icons.refresh_rounded,
-                            ),
-                            label: Text(
-                              _paginationError == null ? '加载更多' : '加载失败，点击重试',
-                            ),
-                          ),
-                  ),
-                ),
               ),
           ],
         ),
