@@ -54,6 +54,7 @@ void main() {
     final page = await MediaLibraryService(dio).getActors(account);
 
     expect(request?.uri.path, '/Persons');
+    expect(request?.uri.queryParameters['UserId'], 'user-id');
     expect(request?.uri.queryParameters['PersonTypes'], 'Actor');
     expect(request?.uri.queryParameters.containsKey('ParentId'), isFalse);
     expect(request?.uri.queryParameters['SortBy'], 'SortName');

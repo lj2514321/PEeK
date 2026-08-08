@@ -93,6 +93,7 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
       _paginationError = null;
       _lastPageShort = false;
     });
+    scrollToTop();
     _loadActors();
   }
 
@@ -156,7 +157,7 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
       setState(() {
         _items = page.items;
         _nextStartIndex = page.nextStartIndex;
-        _lastPageShort = page.items.length < _pageSize;
+        _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize;
       });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
@@ -209,7 +210,7 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
           ...page.items.where((item) => knownIds.add(item.id)),
         ];
         _nextStartIndex = page.nextStartIndex;
-        _lastPageShort = page.items.length < _pageSize;
+        _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize;
       });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;

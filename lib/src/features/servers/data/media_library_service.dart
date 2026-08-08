@@ -130,6 +130,7 @@ class MediaLibraryService {
   }) async {
     final uri = _appendPath(account.server.apiBaseUri, 'Persons').replace(
       queryParameters: {
+        'UserId': account.userId,
         'PersonTypes': 'Actor',
         'SortBy': 'SortName',
         'SortOrder': 'Ascending',
@@ -624,6 +625,7 @@ class MediaLibraryService {
         totalRecordCount:
             _readInt(data['TotalRecordCount']) ?? startIndex + rawItems.length,
         nextStartIndex: startIndex + rawItems.length,
+        rawItemCount: rawItems.length,
       );
     } on MediaLibraryException {
       rethrow;
@@ -1086,11 +1088,13 @@ class MediaPage {
     required this.items,
     required this.totalRecordCount,
     required this.nextStartIndex,
+    this.rawItemCount,
   });
 
   final List<MediaItem> items;
   final int totalRecordCount;
   final int nextStartIndex;
+  final int? rawItemCount;
 
   bool get hasMore => nextStartIndex < totalRecordCount;
 }
