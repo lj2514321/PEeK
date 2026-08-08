@@ -155,6 +155,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('loads next page near the end', (tester) async {
+    tester.view.physicalSize = const Size(800, 650);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakeActorsService(total: 120);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: ActorsPage(account: account, onOpenLibrary: () {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const PageStorageKey('actors-scroll-view')),
+      const Offset(0, -10000),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.requestedStartIndexes, contains(60));
+    expect(find.text('演员 61'), findsOneWidget);
+  });
+
   testWidgets('opens the person works page from an actor card', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -216,7 +246,7 @@ class _FakeActorsService extends MediaLibraryService {
     AuthenticatedServer account, {
     String? parentId,
     int startIndex = 0,
-    int limit = 100,
+    int limit = 60,
     bool forceRefresh = false,
   }) async {
     loadAttempts++;
@@ -226,8 +256,6 @@ class _FakeActorsService extends MediaLibraryService {
     requestedStartIndexes.add(startIndex);
     requestedParentIds.add(parentId);
     final end = (startIndex + limit).clamp(0, total);
-    // Mimic Jellyfin's /Persons endpoint: TotalRecordCount equals the page
-    // size, so the page must keep paging while pages come back full.
     return MediaPage(
       items: startIndex >= total
           ? const []
@@ -239,7 +267,7 @@ class _FakeActorsService extends MediaLibraryService {
                 kind: MediaItemKind.person,
               ),
             ),
-      totalRecordCount: end,
+      totalRecordCount: total,
       nextStartIndex: end,
     );
   }

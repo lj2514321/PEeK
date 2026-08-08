@@ -29,23 +29,27 @@ class ActorsPage extends ConsumerStatefulWidget {
 }
 
 class ActorsPageState extends ConsumerState<ActorsPage> {
-  // Jellyfin's /Persons endpoint has unreliable StartIndex pagination on
-  // many server versions, so we load all persons in a single large request.
-  // Each person record is tiny (name + id + image tag), so this is fine.
-  static const _maxActors = 10000;
+  static const _pageSize = 60;
 
   final _scrollController = ScrollController();
   List<MediaItem> _items = const [];
   List<MediaItem> _libraries = const [];
+  int _totalItemCount = 0;
+  int _nextStartIndex = 0;
   int _requestGeneration = 0;
   bool _loading = false;
+  bool _loadingMore = false;
   String? _error;
+  String? _paginationError;
   String? _librariesError;
   String? _selectedLibraryId;
+
+  bool get _hasMore => _items.isNotEmpty && _nextStartIndex < _totalItemCount;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_loadMoreNearEnd);
     if (widget.account != null) {
       Future<void>.microtask(_loadActors);
       Future<void>.microtask(_loadLibraries);
@@ -64,7 +68,10 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         setState(() {
           _items = const [];
           _libraries = const [];
+          _totalItemCount = 0;
+          _nextStartIndex = 0;
           _error = null;
+          _paginationError = null;
           _librariesError = null;
           _selectedLibraryId = null;
         });
@@ -80,6 +87,9 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     setState(() {
       _selectedLibraryId = libraryId;
       _items = const [];
+      _totalItemCount = 0;
+      _nextStartIndex = 0;
+      _paginationError = null;
     });
     scrollToTop();
     _loadActors();
@@ -104,7 +114,9 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _scrollController
+      ..removeListener(_loadMoreNearEnd)
+      ..dispose();
     super.dispose();
   }
 
@@ -128,7 +140,9 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     final generation = ++_requestGeneration;
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
+      _paginationError = null;
     });
     try {
       final page = await ref
@@ -136,11 +150,15 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
           .getActors(
             account,
             parentId: _selectedLibraryId,
-            limit: _maxActors,
+            limit: _pageSize,
             forceRefresh: forceRefresh,
           );
       if (!mounted || generation != _requestGeneration) return;
-      setState(() => _items = page.items);
+      setState(() {
+        _items = page.items;
+        _totalItemCount = page.totalRecordCount;
+        _nextStartIndex = page.nextStartIndex;
+      });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
@@ -154,6 +172,63 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     } finally {
       if (mounted && generation == _requestGeneration) {
         setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _loadMoreNearEnd() {
+    if (_scrollController.hasClients &&
+        _scrollController.position.extentAfter < 700) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    final account = widget.account;
+    if (account == null || _loading || _loadingMore || !_hasMore) {
+      return;
+    }
+    final generation = _requestGeneration;
+    setState(() {
+      _loadingMore = true;
+      _paginationError = null;
+    });
+    try {
+      final page = await ref
+          .read(mediaLibraryProvider)
+          .getActors(
+            account,
+            parentId: _selectedLibraryId,
+            startIndex: _nextStartIndex,
+            limit: _pageSize,
+          );
+      if (!mounted || generation != _requestGeneration) return;
+      if (page.items.isEmpty) {
+        setState(() => _totalItemCount = _items.length);
+        return;
+      }
+      final knownIds = _items.map((item) => item.id).toSet();
+      final newItems = page.items
+          .where((item) => knownIds.add(item.id))
+          .toList(growable: false);
+      if (newItems.isEmpty) {
+        setState(() => _totalItemCount = _items.length);
+        return;
+      }
+      setState(() {
+        _items = [..._items, ...newItems];
+        _totalItemCount = page.totalRecordCount > _items.length
+            ? page.totalRecordCount
+            : _items.length;
+        _nextStartIndex = page.nextStartIndex;
+      });
+    } on MediaLibraryException catch (error) {
+      if (!mounted || generation != _requestGeneration) return;
+      if (error.authenticationExpired) widget.onSessionExpired?.call();
+      setState(() => _paginationError = error.message);
+    } finally {
+      if (mounted && generation == _requestGeneration) {
+        setState(() => _loadingMore = false);
       }
     }
   }
@@ -287,6 +362,31 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
                     ),
                   );
                 },
+              ),
+            if (_items.isNotEmpty &&
+                (_loadingMore || _paginationError != null || _hasMore))
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                  child: Center(
+                    child: _loadingMore
+                        ? const SizedBox.square(
+                            dimension: 28,
+                            child: CircularProgressIndicator(strokeWidth: 2.4),
+                          )
+                        : TextButton.icon(
+                            onPressed: _loadMore,
+                            icon: Icon(
+                              _paginationError == null
+                                  ? Icons.expand_more_rounded
+                                  : Icons.refresh_rounded,
+                            ),
+                            label: Text(
+                              _paginationError == null ? '加载更多' : '加载失败，点击重试',
+                            ),
+                          ),
+                  ),
+                ),
               ),
           ],
         ),

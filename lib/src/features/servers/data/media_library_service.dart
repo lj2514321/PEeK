@@ -125,10 +125,45 @@ class MediaLibraryService {
     AuthenticatedServer account, {
     String? parentId,
     int startIndex = 0,
-    int limit = 100,
+    int limit = 60,
     bool forceRefresh = false,
   }) async {
-    final uri = _appendPath(account.server.apiBaseUri, 'Persons').replace(
+    final query = {
+      'Recursive': 'true',
+      'IncludeItemTypes': 'Person',
+      'SortBy': 'SortName',
+      'SortOrder': 'Ascending',
+      'ImageTypeLimit': '1',
+      'EnableImageTypes': 'Primary',
+      'StartIndex': '$startIndex',
+      'Limit': '$limit',
+      'EnableTotalRecordCount': 'true',
+      if (parentId != null && parentId.isNotEmpty) 'ParentId': parentId,
+    };
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Users/${account.userId}/Items',
+    ).replace(queryParameters: query);
+
+    try {
+      final page = await _requestPage(
+        uri,
+        account,
+        startIndex: startIndex,
+        cacheAge: _itemPageCacheAge,
+        forceRefresh: forceRefresh,
+      );
+      if (page.items.isNotEmpty || (parentId != null && parentId.isNotEmpty)) {
+        return page;
+      }
+    } catch (_) {
+      // Fallback to /Persons if Users/{userId}/Items fails for persons
+    }
+
+    final fallbackUri = _appendPath(
+      account.server.apiBaseUri,
+      'Persons',
+    ).replace(
       queryParameters: {
         'UserId': account.userId,
         'SortBy': 'SortName',
@@ -138,11 +173,10 @@ class MediaLibraryService {
         'StartIndex': '$startIndex',
         'Limit': '$limit',
         'EnableTotalRecordCount': 'true',
-        if (parentId != null && parentId.isNotEmpty) 'ParentId': parentId,
       },
     );
     return _requestPage(
-      uri,
+      fallbackUri,
       account,
       startIndex: startIndex,
       cacheAge: _itemPageCacheAge,
