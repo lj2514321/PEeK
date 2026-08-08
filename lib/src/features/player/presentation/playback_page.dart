@@ -1911,6 +1911,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
               },
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onPanStart: (_) {
+                  _ensureFocused();
+                  if (!_fullScreen && Platform.isWindows) {
+                    unawaited(windowManager.startDragging());
+                  }
+                },
                 onTap: () {
                   _ensureFocused();
                   _toggleControlsVisibility();

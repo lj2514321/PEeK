@@ -4,6 +4,7 @@ import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 class PlaybackControls extends StatelessWidget {
   const PlaybackControls({
@@ -203,7 +204,8 @@ class _PlaybackTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.topCenter,
-      child: DecoratedBox(
+      child: DragToMoveArea(
+        child: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -276,6 +278,7 @@ class _PlaybackTopBar extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
