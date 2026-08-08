@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/core/storage/media_cache_store.dart';
+import 'package:embyplayer/src/core/utils/pinyin_matcher.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 
@@ -50,6 +51,8 @@ class MediaLibraryService {
     MediaLibrarySort sort = MediaLibrarySort.nameAscending,
     MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
     MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    MediaResolutionFilter resolution = MediaResolutionFilter.all,
+    double? minCommunityRating,
     int? productionYear,
     bool forceRefresh = false,
   }) async {
@@ -69,6 +72,11 @@ class MediaLibraryService {
       'EnableTotalRecordCount': 'true',
       if (kind.apiTypes != null) 'IncludeItemTypes': kind.apiTypes!,
       if (status.apiFilter != null) 'Filters': status.apiFilter!,
+      if (minCommunityRating != null)
+        'MinCommunityRating': '$minCommunityRating',
+      if (resolution == MediaResolutionFilter.res4k) 'MinWidth': '3840',
+      if (resolution == MediaResolutionFilter.res1080p) 'MinWidth': '1920',
+      if (resolution == MediaResolutionFilter.res720p) 'MinWidth': '1280',
       if (productionYear != null) 'Years': '$productionYear',
     };
     final uri = _appendPath(
@@ -214,21 +222,69 @@ class MediaLibraryService {
       if (rawHints is! List) {
         throw const MediaLibraryException('服务器返回了无法识别的搜索结果。');
       }
-      final items = rawHints
+      var items = rawHints
           .whereType<Map<String, dynamic>>()
           .map((hint) => _parseSearchHint(hint, account))
           .where((item) => item.id.isNotEmpty && item.name.isNotEmpty)
-          .toList(growable: false);
+          .toList(growable: true);
+
+      // Pinyin shorthand fallback (e.g., query 'zxc' -> matches '周星驰' if server Search/Hints returned 0)
+      if (items.isEmpty && RegExp(r'^[a-zA-Z]{1,12}$').hasMatch(normalizedQuery)) {
+        final candidates = await _getPinyinSearchCandidates(account, scope: scope);
+        final pinyinMatched = candidates
+            .where((item) => PinyinMatcher.matches(item.name, normalizedQuery))
+            .toList();
+        if (pinyinMatched.isNotEmpty) {
+          items = pinyinMatched;
+        }
+      }
+
       return MediaPage(
         items: items,
         totalRecordCount:
-            _readInt(data['TotalRecordCount']) ?? startIndex + rawHints.length,
-        nextStartIndex: startIndex + rawHints.length,
+            _readInt(data['TotalRecordCount']) ?? startIndex + items.length,
+        nextStartIndex: startIndex + items.length,
       );
     } on MediaLibraryException {
       rethrow;
     } on DioException catch (error) {
       throw _mapDioException(error);
+    }
+  }
+
+  Future<List<MediaItem>> _getPinyinSearchCandidates(
+    AuthenticatedServer account, {
+    MediaSearchScope scope = MediaSearchScope.all,
+  }) async {
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Users/${account.userId}/Items',
+    ).replace(
+      queryParameters: {
+        'Recursive': 'true',
+        'Fields': 'Overview,ProductionYear,UserData',
+        'IncludeItemTypes': scope == MediaSearchScope.people
+            ? 'Person'
+            : (scope.apiTypes),
+        'Limit': '200',
+      },
+    );
+    try {
+      final data = await _requestJson(
+        uri,
+        account,
+        cacheAge: _searchCacheAge,
+        forceRefresh: false,
+      );
+      final items = data['Items'];
+      if (items is! List) return const [];
+      return items
+          .whereType<Map<String, dynamic>>()
+          .map((item) => _parseItem(item, account))
+          .where((item) => item.id.isNotEmpty && item.name.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -1070,6 +1126,17 @@ extension MediaLibraryKindFilterApi on MediaLibraryKindFilter {
     MediaLibraryKindFilter.movies => 'Movie',
     MediaLibraryKindFilter.series => 'Series',
     MediaLibraryKindFilter.episodes => 'Episode',
+  };
+}
+
+enum MediaResolutionFilter { all, res4k, res1080p, res720p }
+
+extension MediaResolutionFilterApi on MediaResolutionFilter {
+  String get label => switch (this) {
+    MediaResolutionFilter.all => '全部画质',
+    MediaResolutionFilter.res4k => '4K 超清',
+    MediaResolutionFilter.res1080p => '1080P 高清',
+    MediaResolutionFilter.res720p => '720P',
   };
 }
 

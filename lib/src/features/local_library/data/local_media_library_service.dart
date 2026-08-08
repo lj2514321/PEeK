@@ -97,6 +97,8 @@ class LocalMediaLibraryService {
     MediaLibrarySort sort = MediaLibrarySort.nameAscending,
     MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
     MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    MediaResolutionFilter resolution = MediaResolutionFilter.all,
+    double? minCommunityRating,
     int? productionYear,
   }) async {
     final path = parent.sourcePath;

@@ -296,6 +296,8 @@ class _FakeLocalLibraryService extends LocalMediaLibraryService {
     MediaLibrarySort sort = MediaLibrarySort.nameAscending,
     MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
     MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    MediaResolutionFilter resolution = MediaResolutionFilter.all,
+    double? minCommunityRating,
     int? productionYear,
   }) async {
     return const MediaPage(
@@ -352,6 +354,8 @@ class _FakeLibraryService extends MediaLibraryService {
     MediaLibrarySort sort = MediaLibrarySort.nameAscending,
     MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
     MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    MediaResolutionFilter resolution = MediaResolutionFilter.all,
+    double? minCommunityRating,
     int? productionYear,
     bool forceRefresh = false,
   }) async {

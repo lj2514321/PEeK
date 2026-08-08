@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
@@ -54,6 +55,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   MediaLibrarySort _sort = MediaLibrarySort.nameAscending;
   MediaLibraryKindFilter _kindFilter = MediaLibraryKindFilter.all;
   MediaLibraryStatusFilter _statusFilter = MediaLibraryStatusFilter.all;
+  MediaResolutionFilter _resolutionFilter = MediaResolutionFilter.all;
+  double? _minCommunityRating;
   int? _productionYear;
   MediaGridDensity _density = MediaGridDensity.standard;
   Set<String> _selectedIds = {};
@@ -219,6 +222,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         _totalItemCount = page.totalRecordCount;
         _nextStartIndex = page.nextStartIndex;
       });
+      _precacheUpcomingPosters(page.items);
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
@@ -229,6 +233,24 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     } finally {
       if (mounted && generation == _requestGeneration) {
         setState(() => _loadingItems = false);
+      }
+    }
+  }
+
+  void _precacheUpcomingPosters(List<MediaItem> items) {
+    if (!mounted) return;
+    for (final item in items.take(24)) {
+      final uri = item.imageUri;
+      if (uri != null && uri.scheme != 'file') {
+        precacheImage(
+          CachedNetworkImageProvider(
+            uri.toString(),
+            headers: item.imageHeaders,
+            cacheManager: PeekMediaImageCache.instance,
+            cacheKey: PeekMediaImageCache.keyFor(uri),
+          ),
+          context,
+        ).catchError((_) {});
       }
     }
   }
@@ -285,6 +307,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         _totalItemCount = page.totalRecordCount;
         _nextStartIndex = page.nextStartIndex;
       });
+      _precacheUpcomingPosters(page.items);
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
@@ -332,6 +355,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
           sort: _sort,
           kind: _kindFilter,
           status: _statusFilter,
+          resolution: _resolutionFilter,
+          minCommunityRating: _minCommunityRating,
           productionYear: _productionYear,
           forceRefresh: forceRefresh,
         );
@@ -543,6 +568,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         initialValue: _LibraryFilters(
           kind: _kindFilter,
           status: _statusFilter,
+          resolution: _resolutionFilter,
+          minCommunityRating: _minCommunityRating,
           productionYear: _productionYear,
         ),
       ),
@@ -550,12 +577,16 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     if (result == null || !mounted) return;
     if (result.kind == _kindFilter &&
         result.status == _statusFilter &&
+        result.resolution == _resolutionFilter &&
+        result.minCommunityRating == _minCommunityRating &&
         result.productionYear == _productionYear) {
       return;
     }
     setState(() {
       _kindFilter = result.kind;
       _statusFilter = result.status;
+      _resolutionFilter = result.resolution;
+      _minCommunityRating = result.minCommunityRating;
       _productionYear = result.productionYear;
     });
     await _reloadCurrentNode();
@@ -700,6 +731,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   int get _activeFilterCount =>
       (_kindFilter == MediaLibraryKindFilter.all ? 0 : 1) +
       (_statusFilter == MediaLibraryStatusFilter.all ? 0 : 1) +
+      (_resolutionFilter == MediaResolutionFilter.all ? 0 : 1) +
+      (_minCommunityRating == null ? 0 : 1) +
       (_productionYear == null ? 0 : 1);
 
   bool _isBrowsable(MediaItem item) {
@@ -1103,11 +1136,15 @@ class _LibraryFilters {
   const _LibraryFilters({
     required this.kind,
     required this.status,
+    this.resolution = MediaResolutionFilter.all,
+    this.minCommunityRating,
     required this.productionYear,
   });
 
   final MediaLibraryKindFilter kind;
   final MediaLibraryStatusFilter status;
+  final MediaResolutionFilter resolution;
+  final double? minCommunityRating;
   final int? productionYear;
 }
 
@@ -1123,6 +1160,8 @@ class _LibraryFilterDialog extends StatefulWidget {
 class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
   late MediaLibraryKindFilter _kind = widget.initialValue.kind;
   late MediaLibraryStatusFilter _status = widget.initialValue.status;
+  late MediaResolutionFilter _resolution = widget.initialValue.resolution;
+  late double? _minCommunityRating = widget.initialValue.minCommunityRating;
   late final TextEditingController _yearController = TextEditingController(
     text: widget.initialValue.productionYear?.toString() ?? '',
   );
@@ -1142,9 +1181,15 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
       setState(() => _yearError = '请输入 1888–$maxYear 之间的年份');
       return;
     }
-    Navigator.of(
-      context,
-    ).pop(_LibraryFilters(kind: _kind, status: _status, productionYear: year));
+    Navigator.of(context).pop(
+      _LibraryFilters(
+        kind: _kind,
+        status: _status,
+        resolution: _resolution,
+        minCommunityRating: _minCommunityRating,
+        productionYear: year,
+      ),
+    );
   }
 
   @override
@@ -1188,6 +1233,41 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
                 ],
               ),
               const SizedBox(height: 22),
+              const Text('画质规格', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final option in MediaResolutionFilter.values)
+                    FilterChip(
+                      label: Text(option.label),
+                      selected: _resolution == option,
+                      onSelected: (_) => setState(() => _resolution = option),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              const Text('最低评分', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final rating in [null, 6.0, 7.0, 8.0])
+                    FilterChip(
+                      label: Text(
+                        rating == null
+                            ? '全部评分'
+                            : '${rating.toStringAsFixed(1)}+ 分',
+                      ),
+                      selected: _minCommunityRating == rating,
+                      onSelected:
+                          (_) => setState(() => _minCommunityRating = rating),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 22),
               TextField(
                 key: const ValueKey('library-year-filter'),
                 controller: _yearController,
@@ -1212,6 +1292,8 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
             setState(() {
               _kind = MediaLibraryKindFilter.all;
               _status = MediaLibraryStatusFilter.all;
+              _resolution = MediaResolutionFilter.all;
+              _minCommunityRating = null;
               _yearController.clear();
               _yearError = null;
             });

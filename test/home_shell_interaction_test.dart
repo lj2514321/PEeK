@@ -351,6 +351,8 @@ class _ShellLibraryService extends MediaLibraryService {
     MediaLibrarySort sort = MediaLibrarySort.nameAscending,
     MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
     MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    MediaResolutionFilter resolution = MediaResolutionFilter.all,
+    double? minCommunityRating,
     int? productionYear,
     bool forceRefresh = false,
   }) async {
