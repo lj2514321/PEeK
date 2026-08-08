@@ -67,7 +67,6 @@ class MediaLibraryService {
       'Limit': '$limit',
       'EnableTotalRecordCount': 'true',
       if (kind.apiTypes != null) 'IncludeItemTypes': kind.apiTypes!,
-      if (status.isPlayed != null) 'IsPlayed': '${status.isPlayed}',
       if (status.apiFilter != null) 'Filters': status.apiFilter!,
       if (productionYear != null) 'Years': '$productionYear',
     };
@@ -1084,16 +1083,12 @@ extension MediaLibraryStatusFilterApi on MediaLibraryStatusFilter {
     MediaLibraryStatusFilter.favorites => '已收藏',
   };
 
-  bool? get isPlayed => switch (this) {
-    MediaLibraryStatusFilter.unplayed => false,
-    MediaLibraryStatusFilter.played => true,
-    _ => null,
-  };
-
   String? get apiFilter => switch (this) {
+    MediaLibraryStatusFilter.unplayed => 'IsUnplayed',
     MediaLibraryStatusFilter.inProgress => 'IsResumable',
+    MediaLibraryStatusFilter.played => 'IsPlayed',
     MediaLibraryStatusFilter.favorites => 'IsFavorite',
-    _ => null,
+    MediaLibraryStatusFilter.all => null,
   };
 }
 
