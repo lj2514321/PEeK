@@ -67,10 +67,10 @@
 
 ## M8：桌面高级特性与扩展 (Desktop & Ecosystem)
 
-- [ ] 桌面画中画 (Picture-in-Picture) 置顶小窗模式
+- [x] 桌面画中画 (Picture-in-Picture) 置顶小窗模式
 - [ ] 弹幕系统接入与播放同步（支持 DandanPlay / 弹弹Play API）
 - [ ] 个人观影统计与时长分析仪表盘
-- [ ] Jellyfin Quick Connect 扫码快速登录
+- [x] Jellyfin Quick Connect 扫码快速登录
 
 ## 持续体验优化
 
