@@ -980,6 +980,73 @@ void main() {
     );
     expect(items.single.id, 'random-id');
   });
+
+  test('searchRemoteSubtitles sends correct Jellyfin API request and parses results', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<List<dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: [
+                  {
+                    'Id': 'sub-123',
+                    'Name': '正片中英双语字幕',
+                    'ProviderName': 'OpenSubtitles',
+                    'Format': 'srt',
+                    'Comment': '4K 蓝光',
+                  },
+                ],
+              ),
+            );
+          },
+        ),
+      );
+
+    final subs = await MediaLibraryService(dio).searchRemoteSubtitles(
+      account,
+      itemId: 'item-100',
+      language: 'chi',
+    );
+
+    expect(request?.uri.path, '/Items/item-100/RemoteSearch/Subtitles/chi');
+    expect(subs, hasLength(1));
+    expect(subs.first.id, 'sub-123');
+    expect(subs.first.name, '正片中英双语字幕');
+    expect(subs.first.providerName, 'OpenSubtitles');
+  });
+
+  test('downloadRemoteSubtitle sends POST request to Jellyfin server', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<void>(
+                requestOptions: options,
+                statusCode: 200,
+              ),
+            );
+          },
+        ),
+      );
+
+    final success = await MediaLibraryService(dio).downloadRemoteSubtitle(
+      account,
+      itemId: 'item-100',
+      subtitleId: 'sub-123',
+    );
+
+    expect(request?.method, 'POST');
+    expect(request?.uri.path, '/Items/item-100/RemoteSearch/Subtitles/sub-123');
+    expect(success, isTrue);
+  });
 }
 
 class _TrackingCacheStore implements MediaCacheStore {

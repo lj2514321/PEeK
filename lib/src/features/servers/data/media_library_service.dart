@@ -288,6 +288,55 @@ class MediaLibraryService {
     }
   }
 
+  Future<List<RemoteSubtitleInfo>> searchRemoteSubtitles(
+    AuthenticatedServer account, {
+    required String itemId,
+    String language = 'chi',
+  }) async {
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Items/$itemId/RemoteSearch/Subtitles/$language',
+    );
+    try {
+      final data = await _requestJson(
+        uri,
+        account,
+        cacheAge: Duration.zero,
+        forceRefresh: true,
+        allowListResponse: true,
+      );
+      final items = data['Items'];
+      if (items is! List) return const [];
+      return items
+          .whereType<Map<String, dynamic>>()
+          .map((json) => RemoteSubtitleInfo.fromJson(json))
+          .where((sub) => sub.id.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<bool> downloadRemoteSubtitle(
+    AuthenticatedServer account, {
+    required String itemId,
+    required String subtitleId,
+  }) async {
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Items/$itemId/RemoteSearch/Subtitles/$subtitleId',
+    );
+    try {
+      await _dio.post(
+        uri.toString(),
+        options: Options(headers: {'X-Emby-Token': account.accessToken}),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<MediaPage> getItemsForPerson(
     AuthenticatedServer account, {
     required String personId,
@@ -1204,4 +1253,30 @@ class MediaLibraryException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class RemoteSubtitleInfo {
+  const RemoteSubtitleInfo({
+    required this.id,
+    required this.name,
+    required this.providerName,
+    required this.format,
+    this.comment,
+  });
+
+  factory RemoteSubtitleInfo.fromJson(Map<String, dynamic> json) {
+    return RemoteSubtitleInfo(
+      id: json['Id']?.toString() ?? '',
+      name: json['Name']?.toString() ?? json['SubtitleId']?.toString() ?? '未知字幕',
+      providerName: json['ProviderName']?.toString() ?? 'RemoteProvider',
+      format: json['Format']?.toString() ?? 'srt',
+      comment: json['Comment']?.toString(),
+    );
+  }
+
+  final String id;
+  final String name;
+  final String providerName;
+  final String format;
+  final String? comment;
 }

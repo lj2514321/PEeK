@@ -19,8 +19,12 @@ import 'package:embyplayer/src/features/player/presentation/playback_diagnostics
 import 'package:embyplayer/src/features/player/presentation/playback_interaction_coordinator.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_quality_sheet.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
+import 'package:embyplayer/src/features/player/presentation/online_subtitle_dialog.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_drop_target.dart';
+import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -398,7 +402,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         'playback_open_failed',
         fields: {'message': error.toString()},
       );
-      if (mounted) setState(() => _error = '无法打开媒体：$error');
+      if (mounted && _remotePlayback) {
+        unawaited(_handlePlaybackNetworkError(error));
+      } else if (mounted) {
+        setState(() => _error = '无法打开媒体：$error');
+      }
     }
   }
 
@@ -813,6 +821,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         preferences: _subtitlePreferences,
         options: _subtitleOptions(),
         onPreferencesChanged: _updateSubtitlePreferences,
+        onPickLocalSubtitle: _pickLocalSubtitleFile,
+        onOpenOnlineSubtitles:
+            _remotePlayback ? _openOnlineSubtitleDialog : null,
       ),
     ).whenComplete(() {
       if (mounted) {
@@ -820,6 +831,117 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         _scheduleControlsHide();
       }
     });
+  }
+
+  bool _reconnecting = false;
+
+  Future<void> _loadLocalSubtitleFile(File file) async {
+    if (!await file.exists()) return;
+    final uri = file.uri;
+    final track = SubtitleTrack.uri(
+      uri.toString(),
+      title: uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '外部字幕',
+    );
+    await _runtime.setSubtitleTrack(track);
+    if (mounted) {
+      setState(() {
+        _subtitlesDisabled = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已成功挂载外部字幕：${uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '字幕文件'}',
+          ),
+        ),
+      );
+      _ensureFocused();
+    }
+  }
+
+  Future<void> _pickLocalSubtitleFile() async {
+    const typeGroup = XTypeGroup(
+      label: '字幕文件',
+      extensions: <String>['srt', 'ass', 'vtt', 'sub', 'lrc'],
+    );
+    final file = await openFile(
+      acceptedTypeGroups: <XTypeGroup>[typeGroup],
+    );
+    if (file != null) {
+      await _loadLocalSubtitleFile(File(file.path));
+    }
+  }
+
+  Future<void> _openOnlineSubtitleDialog() async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
+    _interactions.cancelControlsHide();
+    _showControls();
+    final result = await showDialog<RemoteSubtitleInfo>(
+      context: context,
+      builder: (context) => OnlineSubtitleDialog(
+        account: account,
+        itemId: _item.id,
+        service: ref.read(mediaLibraryProvider),
+      ),
+    );
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('字幕“${result.name}”挂载成功')),
+      );
+    }
+    if (mounted) {
+      _ensureFocused();
+      _scheduleControlsHide();
+    }
+  }
+
+  Future<void> _handlePlaybackNetworkError(Object error) async {
+    if (_reconnecting || _closing || _playerDisposed || !mounted) return;
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
+
+    setState(() {
+      _reconnecting = true;
+      _error = null;
+    });
+
+    _writeDiagnosticLog('auto_reconnect_start', fields: {'error': error.toString()});
+    final currentPos = _position;
+
+    try {
+      if (error is MediaLibraryException && error.authenticationExpired) {
+        final sessionStore = ref.read(secureTokenStoreProvider);
+        await sessionStore.readSession();
+      }
+
+      final newPlan = await ref.read(playbackServiceProvider).createPlan(
+        account,
+        _item,
+        startPosition: currentPos,
+        audioStreamIndex: _selectedAudioStreamIndex,
+        subtitleStreamIndex: _subtitlesDisabled
+            ? -1
+            : _selectedSubtitleStreamIndex,
+        maxStreamingBitrate: _maxStreamingBitrate,
+      );
+
+      if (!mounted || _closing) return;
+      _plan = newPlan;
+      await _openMedia(newPlan, play: true, startPosition: currentPos);
+      if (mounted) {
+        setState(() => _reconnecting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('网络连接已恢复，正在自动断点续播')),
+        );
+      }
+    } catch (retryError) {
+      if (mounted) {
+        setState(() {
+          _reconnecting = false;
+          _error = '网络连接中断，恢复失败：$retryError';
+        });
+      }
+    }
   }
 
   Future<void> _showTrackSheet({
@@ -1760,7 +1882,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                 Future.microtask(_ensureFocused);
               }
             },
-            child: MouseRegion(
+            child: PlaybackDropTarget(
+              onSubtitleDropped: _loadLocalSubtitleFile,
+              child: MouseRegion(
               cursor: _controlsVisible || _diagnosticsVisible
                   ? SystemMouseCursors.basic
                   : SystemMouseCursors.none,
@@ -1972,6 +2096,43 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                         },
                         onCancel: _cancelNextEpisodeCountdown,
                       ),
+                    if (_reconnecting)
+                      Positioned(
+                        top: 24,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                            decoration: AppGlass.decoration(radius: 99),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.spotlight,
+                                  ),
+                                ),
+                                SizedBox(width: 10),
+                                Text(
+                                  '网络连接恢复中，正在无缝断点续播...',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     if (_error != null)
                       Center(
                         child: _PlaybackError(
@@ -1990,8 +2151,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _PlaybackTimeline {
@@ -2230,11 +2392,15 @@ class _SubtitleSheet extends StatefulWidget {
     required this.preferences,
     required this.options,
     required this.onPreferencesChanged,
+    this.onPickLocalSubtitle,
+    this.onOpenOnlineSubtitles,
   });
 
   final SubtitlePreferences preferences;
   final List<_TrackMenuOption> options;
   final ValueChanged<SubtitlePreferences> onPreferencesChanged;
+  final VoidCallback? onPickLocalSubtitle;
+  final VoidCallback? onOpenOnlineSubtitles;
 
   @override
   State<_SubtitleSheet> createState() => _SubtitleSheetState();
@@ -2316,6 +2482,49 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
                       ],
                     ),
                   ),
+                  if (widget.onPickLocalSubtitle != null ||
+                      widget.onOpenOnlineSubtitles != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        children: [
+                          if (widget.onPickLocalSubtitle != null)
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  widget.onPickLocalSubtitle!();
+                                },
+                                icon: const Icon(
+                                  Icons.folder_open_rounded,
+                                  size: 17,
+                                ),
+                                label: const Text('加载本地字幕'),
+                              ),
+                            ),
+                          if (widget.onPickLocalSubtitle != null &&
+                              widget.onOpenOnlineSubtitles != null)
+                            const SizedBox(width: 10),
+                          if (widget.onOpenOnlineSubtitles != null)
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  widget.onOpenOnlineSubtitles!();
+                                },
+                                icon: const Icon(
+                                  Icons.cloud_download_rounded,
+                                  size: 17,
+                                ),
+                                label: const Text('在线搜索字幕'),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   Flexible(
                     child: ListView(
                       shrinkWrap: true,
