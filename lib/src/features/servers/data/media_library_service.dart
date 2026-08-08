@@ -131,7 +131,6 @@ class MediaLibraryService {
     final uri = _appendPath(account.server.apiBaseUri, 'Persons').replace(
       queryParameters: {
         'UserId': account.userId,
-        'PersonTypes': 'Actor,GuestStar,Voice',
         'SortBy': 'SortName',
         'SortOrder': 'Ascending',
         'ImageTypeLimit': '1',
