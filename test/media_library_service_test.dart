@@ -55,7 +55,6 @@ void main() {
 
     expect(request?.uri.path, '/Persons');
     expect(request?.uri.queryParameters['UserId'], 'user-id');
-    expect(request?.uri.queryParameters['Recursive'], 'true');
     expect(request?.uri.queryParameters['PersonTypes'], 'Actor,GuestStar,Voice');
     expect(request?.uri.queryParameters.containsKey('ParentId'), isFalse);
     expect(request?.uri.queryParameters['SortBy'], 'SortName');

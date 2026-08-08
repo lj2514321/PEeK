@@ -159,9 +159,6 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         _nextStartIndex = page.nextStartIndex;
         _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _loadMoreNearEnd();
-      });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
       if (error.authenticationExpired) widget.onSessionExpired?.call();
@@ -206,17 +203,17 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
             limit: _pageSize,
           );
       if (!mounted || generation != _requestGeneration) return;
+      final previousLength = _items.length;
       final knownIds = _items.map((item) => item.id).toSet();
+      final newItems = page.items.where((item) => knownIds.add(item.id))
+          .toList(growable: false);
       setState(() {
-        _items = [
-          ..._items,
-          ...page.items.where((item) => knownIds.add(item.id)),
-        ];
+        _items = [..._items, ...newItems];
         _nextStartIndex = page.nextStartIndex;
-        _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize;
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _loadMoreNearEnd();
+        // Stop if the raw page was short OR if no new unique items were added
+        // (the server may return duplicate data for different StartIndex values).
+        _lastPageShort = (page.rawItemCount ?? page.items.length) < _pageSize
+            || _items.length == previousLength;
       });
     } on MediaLibraryException catch (error) {
       if (!mounted || generation != _requestGeneration) return;
