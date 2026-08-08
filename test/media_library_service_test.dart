@@ -317,6 +317,7 @@ void main() {
 
     expect(request?.uri.path, '/Users/user-id/Items');
     expect(request?.uri.queryParameters['ParentId'], 'tv-id');
+    expect(request?.uri.queryParameters['Recursive'], 'true');
     expect(request?.uri.queryParameters['SortBy'], 'SortName');
     expect(request?.uri.queryParameters['StartIndex'], '60');
     expect(request?.uri.queryParameters['Limit'], '60');

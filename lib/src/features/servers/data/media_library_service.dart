@@ -55,6 +55,7 @@ class MediaLibraryService {
   }) async {
     final query = <String, String>{
       'ParentId': parentId,
+      'Recursive': 'true',
       'SortBy': sort.apiSortBy,
       'SortOrder': sort.apiSortOrder,
       'Fields':
