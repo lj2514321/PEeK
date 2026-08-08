@@ -46,6 +46,8 @@ class PlaybackControls extends StatelessWidget {
     required this.onDiagnostics,
     required this.onQuality,
     required this.onFullScreen,
+    this.isPip = false,
+    this.onPip,
   });
 
   final String title;
@@ -62,6 +64,7 @@ class PlaybackControls extends StatelessWidget {
   final double volume;
   final double rate;
   final bool fullScreen;
+  final bool isPip;
   final String audioLabel;
   final String subtitleLabel;
   final List<MediaChapter> chapters;
@@ -86,6 +89,7 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onDiagnostics;
   final VoidCallback? onQuality;
   final VoidCallback onFullScreen;
+  final VoidCallback? onPip;
 
   @override
   Widget build(BuildContext context) {
@@ -162,6 +166,8 @@ class PlaybackControls extends StatelessWidget {
                   onNext: onNext,
                   onEpisodes: onEpisodes,
                   onFullScreen: onFullScreen,
+                  isPip: isPip,
+                  onPip: onPip,
                 ),
               ),
             ),
@@ -328,6 +334,8 @@ class _PlaybackBottomBar extends StatelessWidget {
     required this.onNext,
     required this.onEpisodes,
     required this.onFullScreen,
+    this.isPip = false,
+    this.onPip,
   });
 
   final bool playing;
@@ -337,6 +345,7 @@ class _PlaybackBottomBar extends StatelessWidget {
   final double volume;
   final double rate;
   final bool fullScreen;
+  final bool isPip;
   final String audioLabel;
   final String subtitleLabel;
   final List<MediaChapter> chapters;
@@ -358,6 +367,7 @@ class _PlaybackBottomBar extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onEpisodes;
   final VoidCallback onFullScreen;
+  final VoidCallback? onPip;
 
   @override
   Widget build(BuildContext context) {
@@ -494,6 +504,15 @@ class _PlaybackBottomBar extends StatelessWidget {
                     ),
                     if (!veryCompact)
                       _RateButton(rate: rate, onChanged: onRateChanged),
+                    if (onPip != null)
+                      _ControlIconButton(
+                        key: const ValueKey('player-pip'),
+                        tooltip: isPip ? '退出置顶小窗' : '画中画置顶小窗',
+                        icon: isPip
+                            ? Icons.picture_in_picture_alt_rounded
+                            : Icons.picture_in_picture_rounded,
+                        onPressed: onPip,
+                      ),
                     _ControlIconButton(
                       key: const ValueKey('player-fullscreen'),
                       tooltip: fullScreen ? '退出全屏（F）' : '全屏（F）',

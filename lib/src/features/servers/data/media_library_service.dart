@@ -337,6 +337,38 @@ class MediaLibraryService {
     }
   }
 
+  Future<QuickConnectInitResult?> initiateQuickConnect(Uri serverUri) async {
+    final uri = _appendPath(serverUri, 'QuickConnect/Initiate');
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(uri.toString());
+      if (response.data is Map<String, dynamic>) {
+        return QuickConnectInitResult.fromJson(response.data!);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<QuickConnectStateResult?> checkQuickConnectState(
+    Uri serverUri,
+    String secret,
+  ) async {
+    final uri = _appendPath(serverUri, 'QuickConnect/Connect');
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        uri.toString(),
+        queryParameters: {'secret': secret},
+      );
+      if (response.data is Map<String, dynamic>) {
+        return QuickConnectStateResult.fromJson(response.data!);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<MediaPage> getItemsForPerson(
     AuthenticatedServer account, {
     required String personId,
@@ -1279,4 +1311,47 @@ class RemoteSubtitleInfo {
   final String providerName;
   final String format;
   final String? comment;
+}
+
+class QuickConnectInitResult {
+  const QuickConnectInitResult({
+    required this.code,
+    required this.secret,
+  });
+
+  factory QuickConnectInitResult.fromJson(Map<String, dynamic> json) {
+    return QuickConnectInitResult(
+      code: json['Code']?.toString() ?? '',
+      secret: json['Secret']?.toString() ?? '',
+    );
+  }
+
+  final String code;
+  final String secret;
+}
+
+class QuickConnectStateResult {
+  const QuickConnectStateResult({
+    required this.authenticated,
+    this.accessToken,
+    this.userId,
+    this.userName,
+  });
+
+  factory QuickConnectStateResult.fromJson(Map<String, dynamic> json) {
+    final auth = json['Authenticated'] == true;
+    final result = json['AuthenticationResult'];
+    final user = result is Map ? result['User'] : null;
+    return QuickConnectStateResult(
+      authenticated: auth,
+      accessToken: result is Map ? result['AccessToken']?.toString() : null,
+      userId: user is Map ? user['Id']?.toString() : null,
+      userName: user is Map ? user['Name']?.toString() : null,
+    );
+  }
+
+  final bool authenticated;
+  final String? accessToken;
+  final String? userId;
+  final String? userName;
 }

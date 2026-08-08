@@ -21,6 +21,7 @@ import 'package:embyplayer/src/features/player/presentation/playback_quality_she
 import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
 import 'package:embyplayer/src/features/player/presentation/online_subtitle_dialog.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_drop_target.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_pip_controller.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -694,6 +695,18 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       const Duration(milliseconds: 350),
       () => unawaited(_persistPlaybackPreferences()),
     );
+  }
+
+  bool _isPip = false;
+
+  Future<void> _togglePip() async {
+    final success = await WindowPipController.instance.togglePip();
+    if (success && mounted) {
+      setState(() {
+        _isPip = WindowPipController.instance.isPip;
+      });
+      _ensureFocused();
+    }
   }
 
   Future<void> _persistPlaybackPreferences() async {
@@ -2002,6 +2015,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                                 ? () => unawaited(_showQualityOptions())
                                 : null,
                             onFullScreen: () => unawaited(_toggleFullScreen()),
+                            isPip: _isPip,
+                            onPip: Platform.isWindows
+                                ? () => unawaited(_togglePip())
+                                : null,
                           ),
                         );
                       },

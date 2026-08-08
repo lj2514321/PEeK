@@ -1,5 +1,7 @@
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/features/auth/presentation/quick_connect_dialog.dart';
+import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/data/server_authentication_service.dart';
 import 'package:embyplayer/src/features/servers/data/server_discovery_service.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -173,6 +175,33 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
     }
   }
 
+  Future<void> _openQuickConnect() async {
+    final result = await showDialog<QuickConnectStateResult>(
+      context: context,
+      builder: (context) => QuickConnectDialog(
+        serverUri: widget.server.apiBaseUri,
+        service: ref.read(mediaLibraryProvider),
+      ),
+    );
+
+    if (result != null &&
+        result.authenticated &&
+        result.accessToken != null &&
+        result.userId != null) {
+      final account = AuthenticatedServer(
+        server: widget.server,
+        userId: result.userId!,
+        userName: result.userName ?? 'QuickConnectUser',
+        deviceId: 'device-quickconnect',
+        accessToken: result.accessToken!,
+      );
+      await ref.read(secureTokenStoreProvider).writeSession(account);
+      if (mounted) {
+        Navigator.of(context).pop(account);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -261,6 +290,11 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
         ),
       ),
       actions: [
+        OutlinedButton.icon(
+          onPressed: _loading ? null : _openQuickConnect,
+          icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+          label: const Text('Quick Connect 扫码登录'),
+        ),
         TextButton(
           onPressed: _loading ? null : () => Navigator.of(context).pop(),
           child: const Text('返回'),
