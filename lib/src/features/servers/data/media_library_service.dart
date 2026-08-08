@@ -128,27 +128,79 @@ class MediaLibraryService {
     int limit = 60,
     bool forceRefresh = false,
   }) async {
-    final query = {
-      'UserId': account.userId,
-      'SortBy': 'SortName',
-      'SortOrder': 'Ascending',
-      'ImageTypeLimit': '1',
-      'EnableImageTypes': 'Primary',
-      'StartIndex': '$startIndex',
-      'Limit': '$limit',
-      'EnableTotalRecordCount': 'true',
-      if (parentId != null && parentId.isNotEmpty) ...{
-        'AncestorIds': parentId,
-        'ParentId': parentId,
-      },
-    };
-    final uri = _appendPath(
+    // 1. If a specific library is selected, query items in that library with Fields=People
+    if (parentId != null && parentId.isNotEmpty) {
+      final itemsUri = _appendPath(
+        account.server.apiBaseUri,
+        'Users/${account.userId}/Items',
+      ).replace(
+        queryParameters: {
+          'ParentId': parentId,
+          'Recursive': 'true',
+          'IncludeItemTypes': 'Movie,Series,Episode,Video',
+          'Fields': 'People',
+          'StartIndex': '$startIndex',
+          'Limit': '$limit',
+          'EnableTotalRecordCount': 'true',
+        },
+      );
+
+      final page = await _requestPage(
+        itemsUri,
+        account,
+        startIndex: startIndex,
+        cacheAge: _itemPageCacheAge,
+        forceRefresh: forceRefresh,
+      );
+
+      final Map<String, MediaItem> collectedActors = {};
+      for (final item in page.items) {
+        for (final person in item.people) {
+          final key = person.id.isNotEmpty ? person.id : person.name;
+          if (key.isNotEmpty && !collectedActors.containsKey(key)) {
+            collectedActors[key] = MediaItem(
+              id: person.id,
+              name: person.name,
+              kind: MediaItemKind.person,
+              imageUri: person.imageUri,
+              imageHeaders: person.imageHeaders,
+            );
+          }
+        }
+      }
+
+      final itemsList = collectedActors.values.toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+
+      return MediaPage(
+        items: itemsList,
+        totalRecordCount: page.totalRecordCount > itemsList.length
+            ? page.totalRecordCount
+            : itemsList.length,
+        nextStartIndex: page.nextStartIndex,
+        rawItemCount: page.rawItemCount,
+      );
+    }
+
+    // 2. All libraries (parentId is null/empty): Query global /Persons
+    final personsUri = _appendPath(
       account.server.apiBaseUri,
       'Persons',
-    ).replace(queryParameters: query);
+    ).replace(
+      queryParameters: {
+        'UserId': account.userId,
+        'SortBy': 'SortName',
+        'SortOrder': 'Ascending',
+        'ImageTypeLimit': '1',
+        'EnableImageTypes': 'Primary',
+        'StartIndex': '$startIndex',
+        'Limit': '$limit',
+        'EnableTotalRecordCount': 'true',
+      },
+    );
 
     return _requestPage(
-      uri,
+      personsUri,
       account,
       startIndex: startIndex,
       cacheAge: _itemPageCacheAge,

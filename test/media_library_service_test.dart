@@ -115,7 +115,7 @@ void main() {
               Response<Map<String, dynamic>>(
                 requestOptions: options,
                 statusCode: 200,
-                data: const {'TotalRecordCount': 3, 'Items': []},
+                data: const {'TotalRecordCount': 0, 'Items': []},
               ),
             );
           },
@@ -126,7 +126,9 @@ void main() {
       dio,
     ).getActors(account, parentId: 'movies-lib');
 
+    expect(request?.uri.path, '/Users/user-id/Items');
     expect(request?.uri.queryParameters['ParentId'], 'movies-lib');
+    expect(request?.uri.queryParameters['Fields'], 'People');
     expect(page.items, isEmpty);
   });
 
