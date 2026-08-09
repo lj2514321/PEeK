@@ -288,6 +288,12 @@ class _FakePlaybackRuntime implements PlaybackRuntime {
   Future<void> setSubtitleDelay(Duration delay) async {}
 
   @override
+  Future<void> setAudioFilter(String af) async {}
+
+  @override
+  Future<void> setToneMapping(String algorithm) async {}
+
+  @override
   Future<void> dispose() async {
     disposeCount++;
   }

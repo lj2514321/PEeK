@@ -49,6 +49,7 @@ class PlaybackControls extends StatelessWidget {
     required this.onFullScreen,
     this.isPip = false,
     this.onPip,
+    this.onAudioEnhancement,
   });
 
   final String title;
@@ -91,6 +92,7 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback? onQuality;
   final VoidCallback onFullScreen;
   final VoidCallback? onPip;
+  final VoidCallback? onAudioEnhancement;
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +119,7 @@ class PlaybackControls extends StatelessWidget {
               onBack: onBack,
               onDiagnostics: onDiagnostics,
               onQuality: onQuality,
+              onAudioEnhancement: onAudioEnhancement,
             ),
           ),
         ),
@@ -189,6 +192,7 @@ class _PlaybackTopBar extends StatelessWidget {
     required this.onBack,
     required this.onDiagnostics,
     required this.onQuality,
+    this.onAudioEnhancement,
   });
 
   final String title;
@@ -199,6 +203,7 @@ class _PlaybackTopBar extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onDiagnostics;
   final VoidCallback? onQuality;
+  final VoidCallback? onAudioEnhancement;
 
   @override
   Widget build(BuildContext context) {
@@ -259,6 +264,15 @@ class _PlaybackTopBar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
+                if (onAudioEnhancement != null) ...[
+                  _ControlIconButton(
+                    key: const ValueKey('player-audio-enhancement'),
+                    tooltip: '音画增强与夜间模式',
+                    icon: Icons.graphic_eq_rounded,
+                    onPressed: onAudioEnhancement!,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 _ControlIconButton(
                   key: const ValueKey('player-diagnostics'),
                   tooltip: '播放诊断（Ctrl+D）',

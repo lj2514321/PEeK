@@ -46,6 +46,8 @@ abstract interface class PlaybackRuntime {
   Future<void> setSubtitleTrack(SubtitleTrack track);
   Future<String?> readNativeProperty(String property);
   Future<void> setSubtitleDelay(Duration delay);
+  Future<void> setAudioFilter(String af);
+  Future<void> setToneMapping(String algorithm);
   Future<void> dispose();
 }
 
@@ -178,6 +180,20 @@ class MediaKitPlaybackRuntime implements PlaybackRuntime {
     if (platform is! NativePlayer) return;
     final seconds = delay.inMilliseconds / 1000;
     await platform.setProperty('sub-delay', seconds.toStringAsFixed(3));
+  }
+
+  @override
+  Future<void> setAudioFilter(String af) async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    await platform.setProperty('af', af);
+  }
+
+  @override
+  Future<void> setToneMapping(String algorithm) async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    await platform.setProperty('tone-mapping', algorithm);
   }
 
   @override

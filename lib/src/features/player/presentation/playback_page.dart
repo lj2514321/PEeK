@@ -21,6 +21,8 @@ import 'package:embyplayer/src/features/player/presentation/playback_quality_she
 import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
 import 'package:embyplayer/src/features/player/presentation/online_subtitle_dialog.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_drop_target.dart';
+import 'package:embyplayer/src/features/player/domain/audio_enhancement_settings.dart';
+import 'package:embyplayer/src/features/player/presentation/audio_enhancement_sheet.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_pip_controller.dart';
 import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
 import 'package:embyplayer/src/features/danmaku/data/dandanplay_service.dart';
@@ -702,9 +704,32 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   bool _isPip = false;
+  final bool _danmakuEnabled = true;
   final _dandanService = DandanPlayService();
   List<DanmakuItem> _danmakuItems = const [];
-  final bool _danmakuEnabled = true;
+  AudioEnhancementMode _audioEnhancementMode = AudioEnhancementMode.off;
+  ToneMappingAlgorithm _toneMappingAlgorithm = ToneMappingAlgorithm.auto;
+
+  Future<void> _showAudioEnhancementSheet() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: AudioEnhancementSheet(
+          currentAudioMode: _audioEnhancementMode,
+          currentToneMapping: _toneMappingAlgorithm,
+          onAudioModeChanged: (mode) {
+            setState(() => _audioEnhancementMode = mode);
+            unawaited(_runtime.setAudioFilter(mode.mpvFilter));
+          },
+          onToneMappingChanged: (algorithm) {
+            setState(() => _toneMappingAlgorithm = algorithm);
+            unawaited(_runtime.setToneMapping(algorithm.mpvValue));
+          },
+        ),
+      ),
+    );
+  }
 
   Future<void> _fetchDanmaku() async {
     final epId = await _dandanService.searchEpisodeId(widget.item.name);
@@ -2058,6 +2083,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                             onPip: Platform.isWindows
                                 ? () => unawaited(_togglePip())
                                 : null,
+                            onAudioEnhancement:
+                                () => unawaited(_showAudioEnhancementSheet()),
                           ),
                         );
                       },
