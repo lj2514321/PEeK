@@ -7,6 +7,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/network/session_expiry_coordinator.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/features/analytics/presentation/analytics_dashboard_page.dart';
 import 'package:embyplayer/src/features/favorites/presentation/favorites_page.dart';
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
 import 'package:embyplayer/src/features/home/presentation/authenticated_home_page.dart';
@@ -69,6 +70,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     _AppDestination('搜索', Icons.search_rounded, Icons.search_rounded),
     _AppDestination('设置', Icons.tune_outlined, Icons.tune_rounded),
     _AppDestination('演员', Icons.people_outline_rounded, Icons.people_rounded),
+    _AppDestination('仪表盘', Icons.analytics_outlined, Icons.analytics_rounded),
   ];
 
   @override
@@ -658,6 +660,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                               onSessionExpired:
                                                   _handleSessionExpired,
                                             )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                    _KeepAliveDestination(
+                                      active: _selectedIndex == 6,
+                                      child: _visitedDestinations.contains(6)
+                                          ? const AnalyticsDashboardPage()
                                           : const SizedBox.shrink(),
                                     ),
                                   ],

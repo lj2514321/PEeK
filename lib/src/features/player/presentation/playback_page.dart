@@ -22,6 +22,9 @@ import 'package:embyplayer/src/features/player/presentation/playback_runtime.dar
 import 'package:embyplayer/src/features/player/presentation/online_subtitle_dialog.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_drop_target.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_pip_controller.dart';
+import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
+import 'package:embyplayer/src/features/danmaku/data/dandanplay_service.dart';
+import 'package:embyplayer/src/features/danmaku/presentation/danmaku_overlay.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -143,6 +146,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _diagnosticLog = ref.read(playbackDiagnosticLogProvider);
     _systemMediaSession = ref.read(windowsMediaSessionProvider)();
     AppChrome.enterImmersive();
+    unawaited(_fetchDanmaku());
     _duration = widget.plan.duration ?? Duration.zero;
     _position = widget.plan.startPosition;
     _timelineNotifier = ValueNotifier(
@@ -698,6 +702,21 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   bool _isPip = false;
+  final _dandanService = DandanPlayService();
+  List<DanmakuItem> _danmakuItems = const [];
+  final bool _danmakuEnabled = true;
+
+  Future<void> _fetchDanmaku() async {
+    final epId = await _dandanService.searchEpisodeId(widget.item.name);
+    if (epId != null) {
+      final items = await _dandanService.fetchComments(epId);
+      if (mounted) {
+        setState(() {
+          _danmakuItems = items;
+        });
+      }
+    }
+  }
 
   Future<void> _togglePip() async {
     final success = await WindowPipController.instance.togglePip();
@@ -1772,6 +1791,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _interactions.cancelPendingSeek();
     await _persistPlaybackPreferences();
     _writeDiagnosticLog('playback_closed');
+    final watchMinutes = (_position.inSeconds / 60).round();
+    if (watchMinutes > 0) {
+      unawaited(
+        ViewingHistoryStore().recordViewing(
+          minutes: watchMinutes,
+          kind: widget.item.kind.name,
+        ),
+      );
+    }
     await _safeReportStopped();
     await _disposeSystemMedia();
     if (_fullScreen && Platform.isWindows) {
@@ -1953,6 +1981,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                           ),
                         ),
                       ),
+                    ),
+                    DanmakuOverlay(
+                      items: _danmakuItems,
+                      position: _position,
+                      enabled: _danmakuEnabled,
                     ),
                     ValueListenableBuilder<_PlaybackTimeline>(
                       valueListenable: _timelineNotifier,
