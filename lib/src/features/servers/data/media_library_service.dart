@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/core/storage/media_cache_store.dart';
 import 'package:embyplayer/src/core/utils/pinyin_matcher.dart';
+import 'package:embyplayer/src/features/servers/data/emby_media_item_parser.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 
@@ -916,155 +917,14 @@ class MediaLibraryService {
   }
 
   MediaItem _parseItem(Map<String, dynamic> data, AuthenticatedServer account) {
-    final id = _readString(data, 'Id');
-    final imageTags = data['ImageTags'];
-    final imageTag = imageTags is Map ? imageTags['Primary'] : null;
-    final backdropTags = data['BackdropImageTags'];
-    final backdropTag = backdropTags is List && backdropTags.isNotEmpty
-        ? backdropTags.first
-        : null;
-    final primaryImageItemId = _readString(
-      data,
-      'PrimaryImageItemId',
-      fallback: id,
-    );
-    final userData = data['UserData'];
-    final runTimeTicks = _readInt(data['RunTimeTicks']);
-    final resumeTicks = userData is Map
-        ? _readInt(userData['PlaybackPositionTicks'])
-        : null;
-    final played = userData is Map && userData['Played'] == true;
-    final favorite = userData is Map && userData['IsFavorite'] == true;
-
-    return MediaItem(
-      id: id,
-      name: _readString(data, 'Name'),
-      kind: _readKind(_readString(data, 'Type')),
-      overview: _readNullableString(data, 'Overview'),
-      productionYear: _readInt(data['ProductionYear']),
-      runTime: runTimeTicks == null
-          ? null
-          : Duration(microseconds: runTimeTicks ~/ 10),
-      imageTag: imageTag is String ? imageTag : null,
-      imageUri: imageTag is String && primaryImageItemId.isNotEmpty
-          ? _imageUri(account.server.apiBaseUri, primaryImageItemId, imageTag)
-          : null,
-      backdropUri: backdropTag is String
-          ? _imageUri(
-              account.server.apiBaseUri,
-              id,
-              backdropTag,
-              type: 'Backdrop',
-              index: 0,
-              maxWidth: 1600,
-            )
-          : null,
-      imageHeaders: _authHeaders(account.accessToken),
-      chapters: _readChapters(data['Chapters']),
-      people: _readPeople(data['People'], account),
-      genres: _readStringList(data['Genres']),
-      communityRating: _readDouble(data['CommunityRating']),
-      officialRating: _readNullableString(data, 'OfficialRating'),
-      tagline:
-          _readNullableString(data, 'Tagline') ??
-          _readFirstString(data['Taglines']),
-      seriesName: _readNullableString(data, 'SeriesName'),
-      indexNumber: _readInt(data['IndexNumber']),
-      parentIndexNumber: _readInt(data['ParentIndexNumber']),
-      parentId: _readNullableString(data, 'ParentId'),
-      seriesId: _readNullableString(data, 'SeriesId'),
-      collectionType: _readNullableString(data, 'CollectionType'),
-      played: played,
-      favorite: favorite,
-      resumePosition: resumeTicks == null
-          ? Duration.zero
-          : Duration(microseconds: resumeTicks ~/ 10),
-    );
-  }
-
-  List<MediaChapter> _readChapters(Object? value) {
-    if (value is! List) return const [];
-    final chapters =
-        value
-            .whereType<Map>()
-            .map((chapter) {
-              final ticks = _readInt(chapter['StartPositionTicks']);
-              if (ticks == null || ticks < 0) return null;
-              final rawName = chapter['Name'];
-              final name = rawName is String ? rawName.trim() : '';
-              return MediaChapter(
-                name: name.isEmpty ? '章节' : name,
-                startPosition: Duration(microseconds: ticks ~/ 10),
-              );
-            })
-            .whereType<MediaChapter>()
-            .toList(growable: true)
-          ..sort((a, b) => a.startPosition.compareTo(b.startPosition));
-    return List.unmodifiable(chapters);
+    return EmbyMediaItemParser.parseItem(data, account);
   }
 
   MediaItem _parseSearchHint(
     Map<String, dynamic> data,
     AuthenticatedServer account,
   ) {
-    final id = _readString(data, 'Id', fallback: _readString(data, 'ItemId'));
-    final primaryTag = _readNullableString(data, 'PrimaryImageTag');
-    final thumbTag = _readNullableString(data, 'ThumbImageTag');
-    final imageTag = primaryTag ?? thumbTag;
-    final imageItemId = primaryTag != null
-        ? _readString(data, 'PrimaryImageItemId', fallback: id)
-        : _readString(data, 'ThumbImageItemId', fallback: id);
-    final backdropTag = _readNullableString(data, 'BackdropImageTag');
-    final backdropItemId = _readString(
-      data,
-      'BackdropImageItemId',
-      fallback: id,
-    );
-    final runTimeTicks = _readInt(data['RunTimeTicks']);
-    return MediaItem(
-      id: id,
-      name: _readString(data, 'Name'),
-      kind: _readKind(_readString(data, 'Type')),
-      productionYear: _readInt(data['ProductionYear']),
-      runTime: runTimeTicks == null
-          ? null
-          : Duration(microseconds: runTimeTicks ~/ 10),
-      imageTag: imageTag,
-      imageUri: imageTag == null || imageItemId.isEmpty
-          ? null
-          : _imageUri(account.server.apiBaseUri, imageItemId, imageTag),
-      backdropUri: backdropTag == null || backdropItemId.isEmpty
-          ? null
-          : _imageUri(
-              account.server.apiBaseUri,
-              backdropItemId,
-              backdropTag,
-              type: 'Backdrop',
-              index: 0,
-              maxWidth: 1600,
-            ),
-      imageHeaders: _authHeaders(account.accessToken),
-      seriesName: _readNullableString(data, 'Series'),
-      indexNumber: _readInt(data['IndexNumber']),
-      parentIndexNumber: _readInt(data['ParentIndexNumber']),
-      seriesId: _readNullableString(data, 'SeriesId'),
-    );
-  }
-
-  Uri _imageUri(
-    Uri base,
-    String itemId,
-    String tag, {
-    String type = 'Primary',
-    int? index,
-    int maxWidth = 480,
-  }) {
-    final path = index == null
-        ? 'Items/$itemId/Images/$type'
-        : 'Items/$itemId/Images/$type/$index';
-    return _appendPath(base, path).replace(
-      queryParameters: {'tag': tag, 'maxWidth': '$maxWidth', 'quality': '90'},
-    );
+    return EmbyMediaItemParser.parseSearchHint(data, account);
   }
 
   MediaLibraryException _mapDioException(DioException error) {
@@ -1092,75 +952,8 @@ class MediaLibraryService {
     );
   }
 
-  MediaItemKind _readKind(String value) {
-    return switch (value.toLowerCase()) {
-      'movie' => MediaItemKind.movie,
-      'series' => MediaItemKind.series,
-      'season' => MediaItemKind.season,
-      'episode' => MediaItemKind.episode,
-      'video' => MediaItemKind.video,
-      'audio' || 'musicalbum' || 'musicartist' => MediaItemKind.audio,
-      'person' => MediaItemKind.person,
-      _ => MediaItemKind.folder,
-    };
-  }
-
-  String _readString(
-    Map<String, dynamic> data,
-    String key, {
-    String fallback = '',
-  }) {
-    final value = data[key];
-    return value is String && value.isNotEmpty ? value : fallback;
-  }
-
-  String? _readNullableString(Map<String, dynamic> data, String key) {
-    final value = data[key];
-    return value is String && value.isNotEmpty ? value : null;
-  }
-
   int? _readInt(Object? value) {
     return value is num ? value.toInt() : null;
-  }
-
-  double? _readDouble(Object? value) {
-    return value is num ? value.toDouble() : null;
-  }
-
-  List<String> _readStringList(Object? value) {
-    return value is List
-        ? value.whereType<String>().where((item) => item.isNotEmpty).toList()
-        : const [];
-  }
-
-  List<MediaPerson> _readPeople(Object? value, AuthenticatedServer account) {
-    if (value is! List) return const [];
-    return value
-        .whereType<Map<String, dynamic>>()
-        .map((person) {
-          final id = _readString(person, 'Id');
-          final imageTag = _readNullableString(person, 'PrimaryImageTag');
-          return MediaPerson(
-            id: id,
-            name: _readString(person, 'Name'),
-            type: _readString(person, 'Type'),
-            role: _readNullableString(person, 'Role'),
-            imageUri: id.isNotEmpty && imageTag != null
-                ? _imageUri(account.server.apiBaseUri, id, imageTag)
-                : null,
-            imageHeaders: _authHeaders(account.accessToken),
-          );
-        })
-        .where((person) => person.name.isNotEmpty)
-        .toList(growable: false);
-  }
-
-  String? _readFirstString(Object? value) {
-    if (value is! List) return null;
-    for (final item in value.whereType<String>()) {
-      if (item.isNotEmpty) return item;
-    }
-    return null;
   }
 }
 
