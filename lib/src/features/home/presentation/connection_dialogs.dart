@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/features/auth/presentation/quick_connect_dialog.dart';
@@ -176,8 +177,11 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
   }
 
   Future<void> _openQuickConnect() async {
-    final result = await showDialog<QuickConnectStateResult>(
+    final result = await showModal<QuickConnectStateResult>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        barrierColor: Color(0x94000000),
+      ),
       builder: (context) => QuickConnectDialog(
         serverUri: widget.server.apiBaseUri,
         service: ref.read(mediaLibraryProvider),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:animations/animations.dart';
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
@@ -711,8 +712,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   ToneMappingAlgorithm _toneMappingAlgorithm = ToneMappingAlgorithm.auto;
 
   Future<void> _showAudioEnhancementSheet() async {
-    await showDialog<void>(
+    await showModal<void>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        barrierColor: Color(0x94000000),
+      ),
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         child: AudioEnhancementSheet(
@@ -933,8 +937,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (account == null || _item.isLocal) return;
     _interactions.cancelControlsHide();
     _showControls();
-    final result = await showDialog<RemoteSubtitleInfo>(
+    final result = await showModal<RemoteSubtitleInfo>(
       context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        barrierColor: Color(0x94000000),
+      ),
       builder: (context) => OnlineSubtitleDialog(
         account: account,
         itemId: _item.id,
