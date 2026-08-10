@@ -3,6 +3,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
@@ -298,10 +299,12 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
         final horizontalPadding = constraints.maxWidth < 720 ? 20.0 : 32.0;
         return RefreshIndicator(
           onRefresh: refresh,
-          child: CustomScrollView(
-            key: const PageStorageKey('favorites-scroll-view'),
+          child: PeekSmoothScroll(
             controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
+            child: CustomScrollView(
+              key: const PageStorageKey('favorites-scroll-view'),
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
@@ -453,6 +456,7 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
                   ),
                 ),
             ],
+          ),
           ),
         );
       },

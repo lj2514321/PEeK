@@ -6,6 +6,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
 import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -166,9 +167,11 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
 
     return Scaffold(
       body: AmbientBackdrop(
-        child: CustomScrollView(
-          key: const PageStorageKey('person-works-scroll'),
+        child: PeekSmoothScroll(
           controller: _scrollController,
+          child: CustomScrollView(
+            key: const PageStorageKey('person-works-scroll'),
+            controller: _scrollController,
           slivers: [
             SliverAppBar(
               pinned: true,
@@ -296,6 +299,7 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
                 ),
               ),
           ],
+        ),
         ),
       ),
     );

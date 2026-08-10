@@ -5,6 +5,7 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/home/domain/home_feed.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
@@ -231,9 +232,11 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 720;
           final horizontalPadding = compact ? 20.0 : 32.0;
-          return CustomScrollView(
+          return PeekSmoothScroll(
             controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
@@ -330,6 +333,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 48)),
             ],
+          ),
           );
         },
       ),

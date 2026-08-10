@@ -5,6 +5,7 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
@@ -395,15 +396,17 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             !selectedItems.every((item) => item.played);
         return RefreshIndicator(
           onRefresh: () => _loadCatalog(forceRefresh: true),
-          child: SingleChildScrollView(
+          child: PeekSmoothScroll(
             controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              horizontalPadding,
-              28,
-              horizontalPadding,
-              48,
-            ),
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                28,
+                horizontalPadding,
+                48,
+              ),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1280),
@@ -546,10 +549,11 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               ),
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Future<void> _reloadCurrentNode() async {
     if (_path.isEmpty) return _loadCatalog(forceRefresh: true);

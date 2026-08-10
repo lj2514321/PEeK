@@ -1,16 +1,18 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-/// A wrapper widget that intercepts discrete desktop mouse wheel scroll events
-/// and smoothly interpolates the scroll offset with easeOutCubic animation.
+/// Intercepts discrete mouse wheel scroll events and smoothly interpolates
+/// the target scroll position with easeOutCubic animation.
 class PeekSmoothScroll extends StatefulWidget {
   const PeekSmoothScroll({
     super.key,
     required this.child,
-    this.scrollSpeedMultiplier = 1.6,
+    this.controller,
+    this.scrollSpeedMultiplier = 1.4,
   });
 
   final Widget child;
+  final ScrollController? controller;
   final double scrollSpeedMultiplier;
 
   @override
@@ -23,10 +25,12 @@ class _PeekSmoothScrollState extends State<PeekSmoothScroll> {
   void _handlePointerSignal(PointerSignalEvent event, BuildContext context) {
     if (event is! PointerScrollEvent) return;
 
-    final primaryController = PrimaryScrollController.maybeOf(context);
-    if (primaryController == null || !primaryController.hasClients) return;
+    final controller = widget.controller ??
+        PrimaryScrollController.maybeOf(context);
 
-    final position = primaryController.position;
+    if (controller == null || !controller.hasClients) return;
+
+    final position = controller.position;
     final delta = event.scrollDelta.dy * widget.scrollSpeedMultiplier;
 
     if (delta == 0) return;
@@ -40,7 +44,7 @@ class _PeekSmoothScrollState extends State<PeekSmoothScroll> {
 
     _targetOffset = newTarget;
 
-    primaryController
+    controller
         .animateTo(
           newTarget,
           duration: const Duration(milliseconds: 240),
