@@ -34,13 +34,4 @@ class CinematicScrollBehavior extends MaterialScrollBehavior {
   ScrollPhysics getScrollPhysics(BuildContext context) {
     return const CinematicScrollPhysics(parent: AlwaysScrollableScrollPhysics());
   }
-
-  @override
-  Widget buildScrollbar(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) {
-    return super.buildScrollbar(context, child, details);
-  }
 }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// A premium 3D perspective tilt card that responds to mouse hover and cursor movement.
+/// A VisionOS-inspired 3D perspective card with dynamic specular glare reflection
+/// and ambient glow shadow.
 class Peek3DCard extends StatefulWidget {
   const Peek3DCard({
     super.key,
     required this.child,
-    this.maxTiltAngle = 0.06,
-    this.hoverScale = 1.02,
+    this.maxTiltAngle = 0.028,
+    this.hoverScale = 1.025,
     this.borderRadius = 16.0,
     this.onTap,
   });
@@ -22,17 +23,17 @@ class Peek3DCard extends StatefulWidget {
 }
 
 class _Peek3DCardState extends State<Peek3DCard> {
-  double _rotateX = 0;
-  double _rotateY = 0;
+  double _dx = 0;
+  double _dy = 0;
   bool _hovering = false;
 
   void _onHover(PointerEvent event, Size size) {
     if (size.width == 0 || size.height == 0) return;
-    final dx = (event.localPosition.dx / size.width - 0.5) * 2;
-    final dy = (event.localPosition.dy / size.height - 0.5) * 2;
+    final normX = (event.localPosition.dx / size.width - 0.5) * 2;
+    final normY = (event.localPosition.dy / size.height - 0.5) * 2;
     setState(() {
-      _rotateX = -dy * widget.maxTiltAngle;
-      _rotateY = dx * widget.maxTiltAngle;
+      _dx = normX.clamp(-1.0, 1.0);
+      _dy = normY.clamp(-1.0, 1.0);
     });
   }
 
@@ -43,17 +44,20 @@ class _Peek3DCardState extends State<Peek3DCard> {
   void _onExit() {
     setState(() {
       _hovering = false;
-      _rotateX = 0;
-      _rotateY = 0;
+      _dx = 0;
+      _dy = 0;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final rotateX = -_dy * widget.maxTiltAngle;
+    final rotateY = _dx * widget.maxTiltAngle;
+    final scale = _hovering ? widget.hoverScale : 1.0;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
-        final s = _hovering ? widget.hoverScale : 1.0;
         return MouseRegion(
           onEnter: (_) => _onEnter(),
           onExit: (_) => _onExit(),
@@ -61,22 +65,65 @@ class _Peek3DCardState extends State<Peek3DCard> {
           child: GestureDetector(
             onTap: widget.onTap,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutQuad,
               transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.001)
-                ..scaleByDouble(s, s, 1.0, 1.0)
-                ..rotateX(_rotateX)
-                ..rotateY(_rotateY),
+                ..setEntry(3, 2, 0.0005)
+                ..scaleByDouble(scale, scale, 1.0, 1.0)
+                ..rotateX(rotateX)
+                ..rotateY(rotateY),
               alignment: FractionalOffset.center,
-              child: AnimatedPhysicalModel(
-                duration: const Duration(milliseconds: 200),
-                shape: BoxShape.rectangle,
-                elevation: _hovering ? 12 : 0,
-                color: Colors.transparent,
-                shadowColor: Colors.black.withValues(alpha: 0.4),
+              decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(widget.borderRadius),
-                child: widget.child,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: _hovering ? 0.22 : 0.0),
+                  width: 1.2,
+                ),
+                boxShadow: _hovering
+                    ? [
+                        BoxShadow(
+                          color: const Color(0x334A90E2),
+                          blurRadius: 28,
+                          spreadRadius: 2,
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          blurRadius: 20,
+                          offset: const Offset(0, 12),
+                        ),
+                      ]
+                    : const [],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(widget.borderRadius),
+                child: Stack(
+                  fit: StackFit.passthrough,
+                  children: [
+                    widget.child,
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 160),
+                          opacity: _hovering ? 1.0 : 0.0,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: RadialGradient(
+                                center: Alignment(_dx * 0.7, _dy * 0.7),
+                                radius: 0.85,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.18),
+                                  Colors.white.withValues(alpha: 0.04),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0.0, 0.45, 1.0],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
