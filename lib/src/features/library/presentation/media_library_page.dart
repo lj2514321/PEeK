@@ -1582,16 +1582,17 @@ class _MediaCard extends StatelessWidget {
         item.kind == MediaItemKind.folder ||
         item.kind == MediaItemKind.series ||
         item.kind == MediaItemKind.season;
-    return Peek3DCard(
-      onTap: selectionMode ? onToggleSelection : onOpen,
-      child: Semantics(
-        label: '${item.name}，${_kindLabel(item.kind)}',
-        button: true,
-        selected: selected,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
+    return Semantics(
+      label: '${item.name}，${_kindLabel(item.kind)}',
+      button: true,
+      selected: selected,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Peek3DCard(
+              onTap: selectionMode ? onToggleSelection : onOpen,
+              borderRadius: 14,
               child: Material(
                 key: ValueKey('media-card-artwork-${item.id}'),
                 color: AppColors.surfaceLow,
@@ -1607,49 +1608,50 @@ class _MediaCard extends StatelessWidget {
                   onLongPress: selectionMode
                     ? onToggleSelection
                     : onEnterSelection,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _MediaArtwork(item: item),
-                    if (selectionMode)
-                      Positioned(
-                        top: 8,
-                        left: 8,
-                        child: _SelectionBadge(selected: selected),
-                      )
-                    else if (item.favorite)
-                      const Positioned(
-                        top: 10,
-                        left: 10,
-                        child: _FavoriteBadge(),
-                      ),
-                    if (item.played)
-                      const Positioned(
-                        top: 10,
-                        right: 10,
-                        child: _PlayedBadge(),
-                      ),
-                    if (browsable)
-                      const Positioned(
-                        left: 10,
-                        bottom: 10,
-                        child: _BrowseBadge(),
-                      ),
-                    if (progress > 0 && progress < 1)
-                      Positioned(
-                        left: 8,
-                        right: 8,
-                        bottom: 8,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(99),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 4,
-                            backgroundColor: Colors.black54,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _MediaArtwork(item: item),
+                      if (selectionMode)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: _SelectionBadge(selected: selected),
+                        )
+                      else if (item.favorite)
+                        const Positioned(
+                          top: 10,
+                          left: 10,
+                          child: _FavoriteBadge(),
+                        ),
+                      if (item.played)
+                        const Positioned(
+                          top: 10,
+                          right: 10,
+                          child: _PlayedBadge(),
+                        ),
+                      if (browsable)
+                        const Positioned(
+                          left: 10,
+                          bottom: 10,
+                          child: _BrowseBadge(),
+                        ),
+                      if (progress > 0 && progress < 1)
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          bottom: 8,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 4,
+                              backgroundColor: Colors.black54,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1670,7 +1672,6 @@ class _MediaCard extends StatelessWidget {
           ),
         ],
       ),
-    ),
     );
   }
 

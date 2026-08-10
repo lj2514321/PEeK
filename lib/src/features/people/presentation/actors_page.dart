@@ -544,17 +544,22 @@ class _ActorCard extends StatelessWidget {
   final MediaItem item;
   final VoidCallback onOpen;
 
+  String _metadata(MediaItem item) {
+    return '演员 / 影人';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Peek3DCard(
-      onTap: onOpen,
-      child: Semantics(
-        button: true,
-        label: '查看 ${item.name} 的作品',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
+    return Semantics(
+      button: true,
+      label: '查看 ${item.name} 的作品',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Peek3DCard(
+              onTap: onOpen,
+              borderRadius: 18,
               child: Material(
                 color: AppColors.surfaceLow,
                 borderRadius: BorderRadius.circular(18),
@@ -579,16 +584,24 @@ class _ActorCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
-            Text(
-              item.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _metadata(item),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+          ),
+        ],
       ),
     );
   }

@@ -1035,66 +1035,62 @@ class _HomeMediaCard extends StatelessWidget {
         ? 0.0
         : (item.resumePosition.inMilliseconds / item.runTime!.inMilliseconds)
               .clamp(0.0, 1.0);
-    return Peek3DCard(
-      onTap: onOpen,
-      child: Semantics(
-        button: true,
-        label: '${item.name}，${_kindLabel(item.kind)}',
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _CardArtwork(item: item, portrait: portrait),
-                    if (item.played)
-                      const Positioned(
-                        top: 9,
-                        right: 9,
-                        child: Icon(
-                          Icons.check_circle_rounded,
-                          color: AppColors.success,
-                          size: 20,
-                        ),
+    return Semantics(
+      button: true,
+      label: '${item.name}，${_kindLabel(item.kind)}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Peek3DCard(
+              onTap: onOpen,
+              borderRadius: 16,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _CardArtwork(item: item, portrait: portrait),
+                  if (item.played)
+                    const Positioned(
+                      top: 9,
+                      right: 9,
+                      child: Icon(
+                        Icons.check_circle_rounded,
+                        color: AppColors.success,
+                        size: 20,
                       ),
-                    if (progress > 0)
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 3,
-                          color: AppColors.spotlight,
-                          backgroundColor: Colors.white.withValues(alpha: 0.16),
-                        ),
+                    ),
+                  if (progress > 0)
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 3,
+                        color: AppColors.spotlight,
+                        backgroundColor: Colors.white.withValues(alpha: 0.16),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
-              const SizedBox(height: 9),
-              Text(
-                item.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                _itemMetadata(item),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textTertiary,
-                  fontSize: 11,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(height: 9),
+          Text(
+            item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            _itemMetadata(item),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textTertiary,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -390,15 +390,16 @@ class _PersonWorkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Peek3DCard(
-      onTap: onOpen,
-      child: Semantics(
-        button: true,
-        label: '查看 ${item.name} 详情',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
+    return Semantics(
+      button: true,
+      label: '查看 ${item.name} 详情',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Peek3DCard(
+              onTap: onOpen,
+              borderRadius: 15,
               child: Material(
                 color: AppColors.surfaceLow,
                 borderRadius: BorderRadius.circular(15),
@@ -449,22 +450,22 @@ class _PersonWorkCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
-            Text(
-              item.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _metadata(item),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _metadata(item),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+          ),
+        ],
       ),
     );
   }

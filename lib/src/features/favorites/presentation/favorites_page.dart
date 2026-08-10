@@ -548,92 +548,94 @@ class _FavoriteMediaCard extends StatelessWidget {
         ? 0.0
         : (item.resumePosition.inMilliseconds / item.runTime!.inMilliseconds)
               .clamp(0.0, 1.0);
-    return Peek3DCard(
-      onTap: onOpen,
-      child: Semantics(
-        label: '${item.name}，${_kindLabel(item.kind)}，已收藏',
-        button: true,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
+    return Semantics(
+      button: true,
+      label: '查看 ${item.name} 详情',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Peek3DCard(
+              onTap: onOpen,
+              borderRadius: 14,
               child: Material(
                 key: ValueKey('favorite-card-${item.id}'),
-              color: AppColors.surfaceLow,
-              borderRadius: BorderRadius.circular(14),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: onOpen,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    PeekMediaImage(
-                      uri: item.imageUri,
-                      headers: item.imageHeaders,
-                      kind: PeekMediaImageKind.poster,
-                      fit: BoxFit.cover,
-                      placeholderIcon: _kindIcon(item.kind),
-                    ),
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Tooltip(
-                        message: '从收藏移除',
-                        child: Material(
-                          color: AppColors.canvas.withValues(alpha: 0.82),
-                          shape: const CircleBorder(),
-                          child: IconButton(
-                            key: ValueKey('remove-favorite-${item.id}'),
-                            onPressed: updating ? null : onRemove,
-                            icon: updating
-                                ? const SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                color: AppColors.surfaceLow,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onOpen,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      PeekMediaImage(
+                        uri: item.imageUri,
+                        headers: item.imageHeaders,
+                        kind: PeekMediaImageKind.poster,
+                        fit: BoxFit.cover,
+                        placeholderIcon: _kindIcon(item.kind),
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Tooltip(
+                          message: '从收藏移除',
+                          child: Material(
+                            color: AppColors.canvas.withValues(alpha: 0.82),
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              key: ValueKey('remove-favorite-${item.id}'),
+                              onPressed: updating ? null : onRemove,
+                              icon: updating
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.favorite_rounded,
+                                      color: AppColors.spotlight,
+                                      size: 20,
                                     ),
-                                  )
-                                : const Icon(
-                                    Icons.favorite_rounded,
-                                    color: AppColors.spotlight,
-                                    size: 20,
-                                  ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    if (item.played)
-                      Positioned(
-                        top: 10,
-                        left: 10,
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          decoration: const BoxDecoration(
-                            color: AppColors.success,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check_rounded,
-                            color: AppColors.canvas,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    if (progress > 0 && progress < 1)
-                      Positioned(
-                        left: 8,
-                        right: 8,
-                        bottom: 8,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(99),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 4,
-                            backgroundColor: Colors.black54,
+                      if (item.played)
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: const BoxDecoration(
+                              color: AppColors.success,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              color: AppColors.canvas,
+                              size: 18,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                      if (progress > 0 && progress < 1)
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          bottom: 8,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 4,
+                              backgroundColor: Colors.black54,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -654,7 +656,6 @@ class _FavoriteMediaCard extends StatelessWidget {
           ),
         ],
       ),
-    ),
     );
   }
 }

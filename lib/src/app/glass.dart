@@ -41,6 +41,44 @@ abstract final class AppGlass {
       ],
     );
   }
+
+  static BoxDecoration visionOSDecoration({
+    double radius = radiusLarge,
+    Color? tint,
+    bool elevated = true,
+  }) {
+    final base = tint ?? Colors.black.withValues(alpha: 0.65);
+    return BoxDecoration(
+      color: base,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withValues(alpha: 0.12),
+          Colors.white.withValues(alpha: 0.03),
+          Colors.black.withValues(alpha: 0.4),
+        ],
+        stops: const [0.0, 0.4, 1.0],
+      ),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: Colors.white.withValues(alpha: 0.18),
+        width: 1.2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0x384A90E2),
+          blurRadius: 36,
+          spreadRadius: 2,
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: elevated ? 0.55 : 0.3),
+          blurRadius: elevated ? 42 : 24,
+          offset: Offset(0, elevated ? 20 : 10),
+        ),
+      ],
+    );
+  }
 }
 
 class GlassSurface extends StatelessWidget {

@@ -76,20 +76,20 @@ class _Peek3DCardState extends State<Peek3DCard> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(widget.borderRadius),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: _hovering ? 0.22 : 0.0),
+                  color: Colors.white.withValues(alpha: _hovering ? 0.24 : 0.0),
                   width: 1.2,
                 ),
                 boxShadow: _hovering
                     ? [
                         BoxShadow(
-                          color: const Color(0x334A90E2),
-                          blurRadius: 28,
-                          spreadRadius: 2,
+                          color: const Color(0x384A90E2),
+                          blurRadius: 24,
+                          spreadRadius: 1,
                         ),
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.65),
-                          blurRadius: 20,
-                          offset: const Offset(0, 12),
+                          color: Colors.black.withValues(alpha: 0.55),
+                          blurRadius: 18,
+                          offset: const Offset(0, 10),
                         ),
                       ]
                     : const [],
