@@ -3,6 +3,9 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
+import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
+import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
+import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -320,6 +323,60 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
                   ),
                 ),
               ),
+              if (ref.watch(actorFavoritesProvider).value?.isNotEmpty ?? false)
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1280),
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          horizontalPadding,
+                          0,
+                          horizontalPadding,
+                          24,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '收藏的演员 (${(ref.watch(actorFavoritesProvider).value ?? []).length})',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: 110,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount:
+                                    (ref.watch(actorFavoritesProvider).value ?? []).length,
+                                separatorBuilder: (context, index) =>
+                                    const SizedBox(width: 14),
+                                itemBuilder: (context, index) {
+                                  final actor =
+                                      (ref.watch(actorFavoritesProvider).value ?? [])[index];
+                                  return _FavoriteActorChipCard(
+                                    actor: actor,
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => PersonWorksPage(
+                                            account: account,
+                                            person: actor.toMediaPerson(),
+                                            onOpen: (item) => _openItem(item),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               if (_items.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -727,4 +784,53 @@ IconData _kindIcon(MediaItemKind kind) {
     MediaItemKind.person => Icons.person_outline_rounded,
     MediaItemKind.folder => Icons.folder_outlined,
   };
+}
+
+class _FavoriteActorChipCard extends StatelessWidget {
+  const _FavoriteActorChipCard({
+    required this.actor,
+    required this.onTap,
+  });
+
+  final ActorFavorite actor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceLow,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox.square(
+                dimension: 52,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(26),
+                  child: PeekMediaImage(
+                    uri: actor.imageUri,
+                    headers: actor.imageHeaders,
+                    kind: PeekMediaImageKind.person,
+                    placeholderBackground: AppColors.surfaceHigh,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                actor.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

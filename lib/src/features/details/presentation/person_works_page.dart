@@ -5,6 +5,8 @@ import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
+import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -134,8 +136,33 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
     }
   }
 
+  Future<void> _toggleFavorite() async {
+    final favorite = ActorFavorite.fromMediaPerson(widget.person);
+    final isNowFav =
+        await ref.read(actorFavoritesProvider.notifier).toggleFavorite(favorite);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          isNowFav
+              ? '已将 ${widget.person.name} 加入演员收藏'
+              : '已从收藏中移除 ${widget.person.name}',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isFav = ref
+        .watch(actorFavoritesProvider)
+        .maybeWhen(
+          data: (_) =>
+              ref.read(actorFavoritesProvider.notifier).isFavorite(widget.person.id),
+          orElse: () => false,
+        );
+
     return Scaffold(
       body: AmbientBackdrop(
         child: CustomScrollView(
@@ -155,6 +182,15 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
                 overflow: TextOverflow.ellipsis,
               ),
               actions: [
+                IconButton(
+                  key: const ValueKey('actor-favorite-button'),
+                  tooltip: isFav ? '已收藏演员' : '收藏演员',
+                  icon: Icon(
+                    isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: isFav ? const Color(0xFFFF4081) : null,
+                  ),
+                  onPressed: _toggleFavorite,
+                ),
                 if (defaultTargetPlatform == TargetPlatform.windows)
                   const SizedBox(width: AppChrome.windowControlsWidth),
               ],
@@ -169,6 +205,8 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
                       person: widget.person,
                       total: _totalItemCount,
                       loading: _loading,
+                      isFavorite: isFav,
+                      onToggleFavorite: _toggleFavorite,
                     ),
                   ),
                 ),
@@ -268,11 +306,15 @@ class _PersonWorksHeader extends StatelessWidget {
     required this.person,
     required this.total,
     required this.loading,
+    required this.isFavorite,
+    required this.onToggleFavorite,
   });
 
   final MediaPerson person;
   final int total;
   final bool loading;
+  final bool isFavorite;
+  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -298,11 +340,28 @@ class _PersonWorksHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  person.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        person.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: onToggleFavorite,
+                      icon: Icon(
+                        isFavorite
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        size: 16,
+                        color: isFavorite ? const Color(0xFFFF4081) : null,
+                      ),
+                      label: Text(isFavorite ? '已收藏' : '收藏演员'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Text(

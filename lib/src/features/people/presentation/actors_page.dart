@@ -5,6 +5,7 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
+import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -144,6 +145,20 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
       _error = null;
       _paginationError = null;
     });
+
+    if (_selectedLibraryId == '__FAVORITES__') {
+      final favorites = ref.read(actorFavoritesProvider).value ?? [];
+      final items = favorites.map((f) => f.toMediaItem()).toList();
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() {
+        _items = items;
+        _totalItemCount = items.length;
+        _nextStartIndex = items.length;
+        _loading = false;
+      });
+      return;
+    }
+
     try {
       final page = await ref
           .read(mediaLibraryProvider)
@@ -457,6 +472,11 @@ class _LibraryFilterBar extends StatelessWidget {
               label: '全部',
               selected: selectedLibraryId == null,
               onTap: () => onSelected(null),
+            ),
+            _LibraryChip(
+              label: '我的收藏',
+              selected: selectedLibraryId == '__FAVORITES__',
+              onTap: () => onSelected('__FAVORITES__'),
             ),
             for (final library in libraries)
               _LibraryChip(
