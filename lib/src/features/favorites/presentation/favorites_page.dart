@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
@@ -543,15 +544,17 @@ class _FavoriteMediaCard extends StatelessWidget {
         ? 0.0
         : (item.resumePosition.inMilliseconds / item.runTime!.inMilliseconds)
               .clamp(0.0, 1.0);
-    return Semantics(
-      label: '${item.name}，${_kindLabel(item.kind)}，已收藏',
-      button: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Material(
-              key: ValueKey('favorite-card-${item.id}'),
+    return Peek3DCard(
+      onTap: onOpen,
+      child: Semantics(
+        label: '${item.name}，${_kindLabel(item.kind)}，已收藏',
+        button: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Material(
+                key: ValueKey('favorite-card-${item.id}'),
               color: AppColors.surfaceLow,
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
@@ -647,6 +650,7 @@ class _FavoriteMediaCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

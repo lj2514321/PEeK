@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
@@ -1577,27 +1578,29 @@ class _MediaCard extends StatelessWidget {
         item.kind == MediaItemKind.folder ||
         item.kind == MediaItemKind.series ||
         item.kind == MediaItemKind.season;
-    return Semantics(
-      label: '${item.name}，${_kindLabel(item.kind)}',
-      button: true,
-      selected: selected,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Material(
-              key: ValueKey('media-card-artwork-${item.id}'),
-              color: AppColors.surfaceLow,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: selected
-                    ? const BorderSide(color: AppColors.spotlight, width: 2)
-                    : BorderSide.none,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: selectionMode ? onToggleSelection : onOpen,
-                onLongPress: selectionMode
+    return Peek3DCard(
+      onTap: selectionMode ? onToggleSelection : onOpen,
+      child: Semantics(
+        label: '${item.name}，${_kindLabel(item.kind)}',
+        button: true,
+        selected: selected,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Material(
+                key: ValueKey('media-card-artwork-${item.id}'),
+                color: AppColors.surfaceLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: selected
+                      ? const BorderSide(color: AppColors.spotlight, width: 2)
+                      : BorderSide.none,
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: selectionMode ? onToggleSelection : onOpen,
+                  onLongPress: selectionMode
                     ? onToggleSelection
                     : onEnterSelection,
                 child: Stack(
@@ -1663,6 +1666,7 @@ class _MediaCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 

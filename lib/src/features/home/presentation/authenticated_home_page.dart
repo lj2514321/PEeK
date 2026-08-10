@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
@@ -1030,15 +1031,15 @@ class _HomeMediaCard extends StatelessWidget {
         ? 0.0
         : (item.resumePosition.inMilliseconds / item.runTime!.inMilliseconds)
               .clamp(0.0, 1.0);
-    return Semantics(
-      button: true,
-      label: '${item.name}，${_kindLabel(item.kind)}',
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onOpen,
+    return Peek3DCard(
+      onTap: onOpen,
+      child: Semantics(
+        button: true,
+        label: '${item.name}，${_kindLabel(item.kind)}',
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

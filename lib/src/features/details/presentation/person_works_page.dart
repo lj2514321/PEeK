@@ -4,6 +4,7 @@ import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
 import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
@@ -385,78 +386,81 @@ class _PersonWorkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: '查看 ${item.name} 详情',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Material(
-              color: AppColors.surfaceLow,
-              borderRadius: BorderRadius.circular(15),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                key: ValueKey('person-work-${item.id}'),
-                onTap: onOpen,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    PeekMediaImage(
-                      uri: item.imageUri,
-                      headers: item.imageHeaders,
-                      kind: PeekMediaImageKind.poster,
-                      fit: BoxFit.cover,
-                      placeholderIcon: _kindIcon(item.kind),
-                    ),
-                    if (item.played)
-                      const Positioned(
-                        top: 10,
-                        right: 10,
-                        child: _PlayedBadge(),
+    return Peek3DCard(
+      onTap: onOpen,
+      child: Semantics(
+        button: true,
+        label: '查看 ${item.name} 详情',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Material(
+                color: AppColors.surfaceLow,
+                borderRadius: BorderRadius.circular(15),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: ValueKey('person-work-${item.id}'),
+                  onTap: onOpen,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      PeekMediaImage(
+                        uri: item.imageUri,
+                        headers: item.imageHeaders,
+                        kind: PeekMediaImageKind.poster,
+                        fit: BoxFit.cover,
+                        placeholderIcon: _kindIcon(item.kind),
                       ),
-                    Positioned(
-                      left: 10,
-                      bottom: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 6,
+                      if (item.played)
+                        const Positioned(
+                          top: 10,
+                          right: 10,
+                          child: _PlayedBadge(),
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.76),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('查看详情', style: TextStyle(fontSize: 10)),
-                            SizedBox(width: 3),
-                            Icon(Icons.arrow_forward_rounded, size: 13),
-                          ],
+                      Positioned(
+                        left: 10,
+                        bottom: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.76),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('查看详情', style: TextStyle(fontSize: 10)),
+                              SizedBox(width: 3),
+                              Icon(Icons.arrow_forward_rounded, size: 13),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _metadata(item),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _metadata(item),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+            ),
+          ],
+        ),
       ),
     );
   }

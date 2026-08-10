@@ -2,6 +2,7 @@ import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
@@ -541,46 +542,49 @@ class _ActorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: '查看 ${item.name} 的作品',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: Material(
-              color: AppColors.surfaceLow,
-              borderRadius: BorderRadius.circular(18),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                key: ValueKey('actor-${item.id}'),
-                onTap: onOpen,
-                child: Center(
-                  child: SizedBox.square(
-                    dimension: 96,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(48),
-                      child: PeekMediaImage(
-                        uri: item.imageUri,
-                        headers: item.imageHeaders,
-                        kind: PeekMediaImageKind.person,
-                        placeholderBackground: AppColors.surfaceHigh,
+    return Peek3DCard(
+      onTap: onOpen,
+      child: Semantics(
+        button: true,
+        label: '查看 ${item.name} 的作品',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Material(
+                color: AppColors.surfaceLow,
+                borderRadius: BorderRadius.circular(18),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: ValueKey('actor-${item.id}'),
+                  onTap: onOpen,
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: 96,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(48),
+                        child: PeekMediaImage(
+                          uri: item.imageUri,
+                          headers: item.imageHeaders,
+                          kind: PeekMediaImageKind.person,
+                          placeholderBackground: AppColors.surfaceHigh,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ],
+        ),
       ),
     );
   }

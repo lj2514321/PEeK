@@ -1,5 +1,6 @@
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/cinematic_scroll_behavior.dart';
 import 'package:embyplayer/src/features/home/presentation/home_shell.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ class EmbyPlayerApp extends StatelessWidget {
       title: 'PEeK',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
+      scrollBehavior: const CinematicScrollBehavior(),
       builder: (context, child) {
         if (defaultTargetPlatform != TargetPlatform.windows) {
           return child ?? const SizedBox.shrink();
