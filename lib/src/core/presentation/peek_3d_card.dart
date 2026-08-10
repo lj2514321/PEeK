@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// A VisionOS-inspired 3D perspective card with dynamic specular glare reflection
-/// and ambient glow shadow.
+/// A VisionOS-inspired 3D perspective card with interactive mouse hover tilt
+/// pushing the hovered region outwards with dynamic specular glare and ambient glow shadow.
 class Peek3DCard extends StatefulWidget {
   const Peek3DCard({
     super.key,
     required this.child,
-    this.maxTiltAngle = 0.028,
-    this.hoverScale = 1.025,
+    this.maxTiltAngle = 0.075,
+    this.hoverScale = 1.04,
     this.borderRadius = 16.0,
     this.onTap,
   });
@@ -65,10 +65,10 @@ class _Peek3DCardState extends State<Peek3DCard> {
           child: GestureDetector(
             onTap: widget.onTap,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
+              duration: const Duration(milliseconds: 120),
               curve: Curves.easeOutQuad,
               transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.0005)
+                ..setEntry(3, 2, 0.001)
                 ..scaleByDouble(scale, scale, 1.0, 1.0)
                 ..rotateX(rotateX)
                 ..rotateY(rotateY),
@@ -76,20 +76,20 @@ class _Peek3DCardState extends State<Peek3DCard> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(widget.borderRadius),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: _hovering ? 0.24 : 0.0),
-                  width: 1.2,
+                  color: Colors.white.withValues(alpha: _hovering ? 0.32 : 0.0),
+                  width: 1.4,
                 ),
                 boxShadow: _hovering
                     ? [
                         BoxShadow(
-                          color: const Color(0x384A90E2),
-                          blurRadius: 24,
-                          spreadRadius: 1,
+                          color: const Color(0x4D4A90E2),
+                          blurRadius: 30,
+                          spreadRadius: 2,
                         ),
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          blurRadius: 18,
-                          offset: const Offset(0, 10),
+                          color: Colors.black.withValues(alpha: 0.65),
+                          blurRadius: 22,
+                          offset: Offset(_dx * 6, 12 + _dy * 6),
                         ),
                       ]
                     : const [],
@@ -103,19 +103,19 @@ class _Peek3DCardState extends State<Peek3DCard> {
                     Positioned.fill(
                       child: IgnorePointer(
                         child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 160),
+                          duration: const Duration(milliseconds: 140),
                           opacity: _hovering ? 1.0 : 0.0,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               gradient: RadialGradient(
-                                center: Alignment(_dx * 0.7, _dy * 0.7),
-                                radius: 0.85,
+                                center: Alignment(_dx * 0.85, _dy * 0.85),
+                                radius: 0.75,
                                 colors: [
-                                  Colors.white.withValues(alpha: 0.18),
-                                  Colors.white.withValues(alpha: 0.04),
+                                  Colors.white.withValues(alpha: 0.28),
+                                  Colors.white.withValues(alpha: 0.06),
                                   Colors.transparent,
                                 ],
-                                stops: const [0.0, 0.45, 1.0],
+                                stops: const [0.0, 0.4, 1.0],
                               ),
                             ),
                           ),
