@@ -96,11 +96,11 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer> {
         duration: duration,
         curve: curve,
         child: AnimatedScale(
-          scale: widget.active ? 1 : 0.992,
+          scale: widget.active ? 1.0 : 0.94,
           duration: duration,
           curve: curve,
           child: AnimatedOpacity(
-            opacity: widget.active ? 1 : 0,
+            opacity: widget.active ? 1.0 : 0.0,
             duration: duration,
             curve: curve,
             onEnd: () {
@@ -108,15 +108,21 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer> {
                 setState(() => _offstage = true);
               }
             },
-            child: IgnorePointer(
-              ignoring: !widget.active,
-              child: ExcludeFocus(
-                excluding: !widget.active,
-                child: ExcludeSemantics(
+            child: Transform(
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.0008)
+                ..rotateY(widget.active ? 0.0 : (widget.offset.dx < 0 ? 0.018 : -0.018)),
+              alignment: FractionalOffset.center,
+              child: IgnorePointer(
+                ignoring: !widget.active,
+                child: ExcludeFocus(
                   excluding: !widget.active,
-                  child: TickerMode(
-                    enabled: widget.active,
-                    child: RepaintBoundary(child: widget.child),
+                  child: ExcludeSemantics(
+                    excluding: !widget.active,
+                    child: TickerMode(
+                      enabled: widget.active,
+                      child: RepaintBoundary(child: widget.child),
+                    ),
                   ),
                 ),
               ),
