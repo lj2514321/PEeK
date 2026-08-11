@@ -233,9 +233,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   Future<void> _showAddServerDialog() async {
-    final result = await showDialog<DiscoveredServer>(
+    final result = await peekShow3DDialog<DiscoveredServer>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.58),
       builder: (context) => const AddServerDialog(),
     );
     if (result == null || !mounted) return;
@@ -252,9 +251,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final server = discovered ?? _discoveredServer;
     if (server == null) return null;
 
-    final result = await showDialog<AuthenticatedServer>(
+    final result = await peekShow3DDialog<AuthenticatedServer>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.58),
       builder: (context) =>
           LoginDialog(server: server, initialUsername: initialUsername),
     );

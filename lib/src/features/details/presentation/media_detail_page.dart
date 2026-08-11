@@ -2,6 +2,7 @@ import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
@@ -103,7 +104,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
           .prepare(widget.account, item, fromBeginning: fromBeginning);
       if (!mounted) return;
       await Navigator.of(context).push<void>(
-        MaterialPageRoute(
+        Peek3DPageRoute(
           builder: (context) => PlaybackPage(
             account: widget.account,
             item: prepared.item,
@@ -193,7 +194,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
 
   Future<void> _openSimilar(MediaItem item) async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      Peek3DPageRoute(
         builder: (context) =>
             MediaDetailPage(account: widget.account, initialItem: item),
       ),
@@ -204,7 +205,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     final account = widget.account;
     if (account == null) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      Peek3DPageRoute(
         builder: (context) => PersonWorksPage(
           account: account,
           person: person,
@@ -216,7 +217,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
 
   void _openPersonWork(MediaItem item) {
     Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      Peek3DPageRoute(
         builder: (context) =>
             MediaDetailPage(account: widget.account, initialItem: item),
       ),

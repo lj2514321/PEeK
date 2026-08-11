@@ -4,6 +4,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
@@ -262,7 +263,7 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     final account = widget.account;
     if (account == null) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      Peek3DPageRoute(
         builder: (context) => PersonWorksPage(
           account: account,
           person: MediaPerson(
@@ -282,7 +283,7 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
     final account = widget.account;
     if (account == null) return;
     Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      Peek3DPageRoute(
         builder: (context) =>
             MediaDetailPage(account: account, initialItem: item),
       ),

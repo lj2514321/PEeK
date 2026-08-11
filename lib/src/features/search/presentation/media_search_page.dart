@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
@@ -306,7 +307,7 @@ class MediaSearchPageState extends ConsumerState<MediaSearchPage> {
     await _rememberQuery();
     if (!mounted) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      Peek3DPageRoute(
         builder: (context) =>
             MediaDetailPage(account: account, initialItem: item),
       ),

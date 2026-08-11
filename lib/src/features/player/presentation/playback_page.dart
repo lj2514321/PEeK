@@ -6,6 +6,7 @@ import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostic_log.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostics_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
@@ -824,11 +825,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (!_remotePlayback || _changingSource || _closing) return;
     _interactions.cancelControlsHide();
     _showControls();
-    final selected = await showModalBottomSheet<PlaybackBitrate>(
+    final selected = await peekShow3DSheet<PlaybackBitrate>(
       context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.58),
-      isScrollControlled: true,
       builder: (context) =>
           PlaybackQualitySheet(selected: _maxStreamingBitrate),
     );
@@ -873,11 +871,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _showSubtitleTracks() {
     _interactions.cancelControlsHide();
     _showControls();
-    return showModalBottomSheet<void>(
+    return peekShow3DSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.58),
-      isScrollControlled: true,
       builder: (context) => _SubtitleSheet(
         preferences: _subtitlePreferences,
         options: _subtitleOptions(),
@@ -1016,11 +1011,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }) async {
     _interactions.cancelControlsHide();
     _showControls();
-    await showModalBottomSheet<void>(
+    await peekShow3DSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.58),
-      isScrollControlled: true,
       builder: (context) => _TrackSheet(
         title: title,
         icon: icon,
@@ -1624,11 +1616,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (queue == null || queue.items.isEmpty) return;
     _interactions.cancelControlsHide();
     _showControls();
-    final index = await showModalBottomSheet<int>(
+    final index = await peekShow3DSheet<int>(
       context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.58),
-      isScrollControlled: true,
       builder: (context) => _EpisodeSheet(queue: queue),
     );
     if (index != null && mounted) {
@@ -1644,11 +1633,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (_plan.chapters.isEmpty) return;
     _interactions.cancelControlsHide();
     _showControls();
-    final target = await showModalBottomSheet<Duration>(
+    final target = await peekShow3DSheet<Duration>(
       context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.58),
-      isScrollControlled: true,
       builder: (context) =>
           _ChapterSheet(chapters: _plan.chapters, position: _position),
     );
