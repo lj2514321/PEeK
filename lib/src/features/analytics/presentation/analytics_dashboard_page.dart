@@ -36,7 +36,7 @@ class _AnalyticsDashboardPageState extends State<AnalyticsDashboardPage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        backgroundColor: AppColors.canvas,
+        backgroundColor: Colors.transparent,
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -50,7 +50,7 @@ class _AnalyticsDashboardPageState extends State<AnalyticsDashboardPage> {
         : 0;
 
     return Scaffold(
-      backgroundColor: AppColors.canvas,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),

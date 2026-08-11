@@ -42,13 +42,16 @@ class PeekContextMenuRegion extends StatelessWidget {
     showMenu<String>(
       context: context,
       position: position,
-      elevation: 12,
-      color: AppColors.surfaceHigh,
+      elevation: 16,
+      color: const Color(0xEC0F111E),
       surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.black.withValues(alpha: 0.45),
+      shadowColor: const Color(0x4D4A90E2),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.18), width: 1.0),
+        side: BorderSide(
+          color: Colors.white.withValues(alpha: 0.22),
+          width: 1.2,
+        ),
       ),
       items: [
         for (final item in menuItems)

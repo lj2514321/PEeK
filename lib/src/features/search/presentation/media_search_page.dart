@@ -4,6 +4,8 @@ import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
+import 'package:embyplayer/src/core/presentation/peek_context_menu.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
@@ -891,18 +893,23 @@ class _SearchResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPerson = item.kind == MediaItemKind.person;
-    return Semantics(
-      button: true,
-      label: '${item.name}，${_kindLabel(item.kind)}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Material(
-              color: AppColors.surfaceLow,
-              borderRadius: BorderRadius.circular(15),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
+    return PeekContextMenuRegion(
+      items: (context) => [
+        PeekContextMenuItem(
+          id: 'detail',
+          label: isPerson ? '查看作品' : '查看详情',
+          icon: isPerson ? Icons.grid_view_rounded : Icons.info_outline_rounded,
+          onTap: onOpen,
+        ),
+      ],
+      child: Semantics(
+        button: true,
+        label: '${item.name}，${_kindLabel(item.kind)}',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Peek3DCard(
                 onTap: onOpen,
                 child: Stack(
                   fit: StackFit.expand,
@@ -919,6 +926,10 @@ class _SearchResultCard extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.72),
                           borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.22),
+                            width: 1.0,
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -937,22 +948,22 @@ class _SearchResultCard extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _metadata(item),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _metadata(item),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+            ),
+          ],
+        ),
       ),
     );
   }
