@@ -35,7 +35,7 @@ class PersonWorksPage extends ConsumerStatefulWidget {
 class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
   static const _pageSize = 40;
 
-  final _scrollController = ScrollController();
+  final _scrollController = SmoothScrollController();
   List<MediaItem> _items = const [];
   int _totalItemCount = 0;
   int _nextStartIndex = 0;

@@ -35,7 +35,7 @@ class FavoritesPage extends ConsumerStatefulWidget {
 class FavoritesPageState extends ConsumerState<FavoritesPage> {
   static const _pageSize = 60;
 
-  final _scrollController = ScrollController();
+  final _scrollController = SmoothScrollController();
   List<MediaItem> _items = const [];
   Set<String> _updatingIds = {};
   int _totalItemCount = 0;

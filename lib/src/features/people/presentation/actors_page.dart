@@ -34,7 +34,7 @@ class ActorsPage extends ConsumerStatefulWidget {
 class ActorsPageState extends ConsumerState<ActorsPage> {
   static const _pageSize = 60;
 
-  final _scrollController = ScrollController();
+  final _scrollController = SmoothScrollController();
   List<MediaItem> _items = const [];
   List<MediaItem> _libraries = const [];
   int _totalItemCount = 0;

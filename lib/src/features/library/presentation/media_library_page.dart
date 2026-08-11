@@ -40,7 +40,7 @@ enum MediaGridDensity { spacious, standard, compact }
 class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   static const _pageSize = 60;
 
-  final _scrollController = ScrollController();
+  final _scrollController = SmoothScrollController();
   List<MediaItem> _libraries = const [];
   List<MediaItem> _items = const [];
   List<MediaItem> _path = const [];

@@ -1,48 +1,28 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-/// Intercepts discrete mouse wheel scroll events and resolves them via
-/// GestureBinding's PointerSignalResolver to prevent native instant jumpTo,
-/// providing fluid momentum acceleration and buttery smooth easing.
-class PeekSmoothScroll extends StatefulWidget {
-  const PeekSmoothScroll({
-    super.key,
-    required this.child,
-    this.controller,
+/// A custom [ScrollPositionWithSingleContext] that overrides Flutter's default
+/// instant [pointerScroll] jumpTo behavior with momentum acceleration and fluid
+/// cubic easing.
+class SmoothScrollPosition extends ScrollPositionWithSingleContext {
+  SmoothScrollPosition({
+    required super.physics,
+    required super.context,
+    super.oldPosition,
     this.scrollSpeedMultiplier = 1.6,
   });
 
-  final Widget child;
-  final ScrollController? controller;
   final double scrollSpeedMultiplier;
-
-  @override
-  State<PeekSmoothScroll> createState() => _PeekSmoothScrollState();
-}
-
-class _PeekSmoothScrollState extends State<PeekSmoothScroll> {
   DateTime? _lastScrollTime;
   double _velocityMultiplier = 1.0;
   double? _targetOffset;
 
-  void _onPointerSignal(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent) return;
+  @override
+  void pointerScroll(double delta) {
+    if (delta == 0.0) return;
 
-    GestureBinding.instance.pointerSignalResolver.register(
-      event,
-      (resolvedEvent) => _handleResolvedScroll(resolvedEvent as PointerScrollEvent),
-    );
-  }
-
-  void _handleResolvedScroll(PointerScrollEvent event) {
-    final controller = widget.controller ??
-        PrimaryScrollController.maybeOf(context);
-
-    if (controller == null || !controller.hasClients) return;
-
-    final position = controller.position;
     final now = DateTime.now();
 
+    // Momentum Acceleration Multiplier
     if (_lastScrollTime != null) {
       final interval = now.difference(_lastScrollTime!).inMilliseconds;
       if (interval < 140) {
@@ -53,42 +33,70 @@ class _PeekSmoothScrollState extends State<PeekSmoothScroll> {
     }
     _lastScrollTime = now;
 
-    final delta = event.scrollDelta.dy *
-        widget.scrollSpeedMultiplier *
-        _velocityMultiplier;
-
-    if (delta == 0) return;
-
-    final currentTarget = _targetOffset ?? position.pixels;
-
-    final newTarget = (currentTarget + delta).clamp(
-      position.minScrollExtent,
-      position.maxScrollExtent,
+    final scaledDelta = delta * scrollSpeedMultiplier * _velocityMultiplier;
+    final currentTarget = _targetOffset ?? pixels;
+    final newTarget = (currentTarget + scaledDelta).clamp(
+      minScrollExtent,
+      maxScrollExtent,
     );
 
     _targetOffset = newTarget;
 
-    final distance = (newTarget - position.pixels).abs();
+    final distance = (newTarget - pixels).abs();
     final durationMs = (160 + (distance * 0.12)).clamp(140.0, 280.0).toInt();
 
-    controller
-        .animateTo(
-          newTarget,
-          duration: Duration(milliseconds: durationMs),
-          curve: const Cubic(0.12, 0.88, 0.22, 1.0),
-        )
-        .whenComplete(() {
+    animateTo(
+      newTarget,
+      duration: Duration(milliseconds: durationMs),
+      curve: const Cubic(0.12, 0.88, 0.22, 1.0),
+    ).whenComplete(() {
       if (_targetOffset == newTarget) {
         _targetOffset = null;
       }
     });
   }
+}
+
+/// A [ScrollController] that creates [SmoothScrollPosition] to directly disable
+/// native instant wheel jumpTo and enforce smooth momentum scrolling.
+class SmoothScrollController extends ScrollController {
+  SmoothScrollController({
+    super.initialScrollOffset,
+    super.keepScrollOffset,
+    super.debugLabel,
+    this.scrollSpeedMultiplier = 1.6,
+  });
+
+  final double scrollSpeedMultiplier;
+
+  @override
+  ScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) {
+    return SmoothScrollPosition(
+      physics: physics,
+      context: context,
+      oldPosition: oldPosition,
+      scrollSpeedMultiplier: scrollSpeedMultiplier,
+    );
+  }
+}
+
+/// Helper wrapper widget to pass children cleanly if needed.
+class PeekSmoothScroll extends StatelessWidget {
+  const PeekSmoothScroll({
+    super.key,
+    required this.child,
+    this.controller,
+  });
+
+  final Widget child;
+  final ScrollController? controller;
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerSignal: _onPointerSignal,
-      child: widget.child,
-    );
+    return child;
   }
 }

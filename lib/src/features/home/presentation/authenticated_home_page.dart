@@ -38,7 +38,7 @@ class AuthenticatedHomePage extends ConsumerStatefulWidget {
 }
 
 class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
-  final _scrollController = ScrollController();
+  final _scrollController = SmoothScrollController();
   HomeFeed? _feed;
   bool _loading = true;
   bool _refreshing = false;
