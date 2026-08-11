@@ -1,4 +1,5 @@
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -11,7 +12,7 @@ class PeekHorizontalRail extends StatefulWidget {
     required this.itemCount,
     required this.itemExtent,
     required this.itemBuilder,
-    this.spacing = 14,
+    this.spacing = 14.0,
   });
 
   final String railId;
@@ -27,7 +28,7 @@ class PeekHorizontalRail extends StatefulWidget {
 }
 
 class _PeekHorizontalRailState extends State<PeekHorizontalRail> {
-  final _controller = ScrollController();
+  final _controller = SmoothScrollController();
   bool _canMoveBackward = false;
   bool _canMoveForward = false;
 
