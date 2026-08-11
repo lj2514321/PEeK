@@ -709,11 +709,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               ),
               bottomNavigationBar: showRail
                   ? null
-                  : GlassSurface(
-                      radius: 0,
-                      blur: 24,
-                      tint: AppColors.glassStrong,
+                  : VisionGlassCapsuleIsland(
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                       child: NavigationBar(
+                        backgroundColor: Colors.transparent,
+                        elevation: 0,
                         selectedIndex: _selectedIndex,
                         onDestinationSelected: _selectDestination,
                         destinations: [

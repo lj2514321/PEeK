@@ -753,14 +753,7 @@ class _MetadataChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.34),
-        borderRadius: BorderRadius.circular(99),
-      ),
-      child: Text(label, style: const TextStyle(fontSize: 12)),
-    );
+    return VisionGlassBadge(label: label);
   }
 }
 

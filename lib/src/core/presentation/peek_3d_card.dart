@@ -76,19 +76,19 @@ class _Peek3DCardState extends State<Peek3DCard> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(widget.borderRadius),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: _hovering ? 0.32 : 0.0),
+                  color: Colors.white.withValues(alpha: _hovering ? 0.38 : 0.0),
                   width: 1.4,
                 ),
                 boxShadow: _hovering
                     ? [
-                        BoxShadow(
-                          color: const Color(0x4D4A90E2),
-                          blurRadius: 30,
+                        const BoxShadow(
+                          color: Color(0x604A90E2),
+                          blurRadius: 32,
                           spreadRadius: 2,
                         ),
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.65),
-                          blurRadius: 22,
+                          blurRadius: 24,
                           offset: Offset(_dx * 6, 12 + _dy * 6),
                         ),
                       ]
@@ -109,13 +109,13 @@ class _Peek3DCardState extends State<Peek3DCard> {
                             decoration: BoxDecoration(
                               gradient: RadialGradient(
                                 center: Alignment(_dx * 0.85, _dy * 0.85),
-                                radius: 0.75,
+                                radius: 0.8,
                                 colors: [
-                                  Colors.white.withValues(alpha: 0.28),
-                                  Colors.white.withValues(alpha: 0.06),
+                                  Colors.white.withValues(alpha: 0.35),
+                                  Colors.white.withValues(alpha: 0.08),
                                   Colors.transparent,
                                 ],
-                                stops: const [0.0, 0.4, 1.0],
+                                stops: const [0.0, 0.45, 1.0],
                               ),
                             ),
                           ),

@@ -54,20 +54,20 @@ abstract final class AppGlass {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Colors.white.withValues(alpha: 0.12),
-          Colors.white.withValues(alpha: 0.03),
-          Colors.black.withValues(alpha: 0.4),
+          Colors.white.withValues(alpha: 0.16),
+          Colors.white.withValues(alpha: 0.04),
+          Colors.black.withValues(alpha: 0.45),
         ],
-        stops: const [0.0, 0.4, 1.0],
+        stops: const [0.0, 0.45, 1.0],
       ),
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: Colors.white.withValues(alpha: 0.18),
+        color: Colors.white.withValues(alpha: 0.22),
         width: 1.2,
       ),
       boxShadow: [
-        BoxShadow(
-          color: const Color(0x384A90E2),
+        const BoxShadow(
+          color: Color(0x384A90E2),
           blurRadius: 36,
           spreadRadius: 2,
         ),
@@ -77,6 +77,92 @@ abstract final class AppGlass {
           offset: Offset(0, elevated ? 20 : 10),
         ),
       ],
+    );
+  }
+}
+
+/// VisionOS Floating Glass Capsule Island bar.
+class VisionGlassCapsuleIsland extends StatelessWidget {
+  const VisionGlassCapsuleIsland({
+    super.key,
+    required this.child,
+    this.padding,
+    this.margin,
+    this.radius = 99,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(radius);
+    return Container(
+      margin: margin ?? const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: AppGlass.visionOSDecoration(radius: radius, elevated: true),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          child: Padding(
+            padding: padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// VisionOS 3D Metallic Glass Badge for quality metrics (4K, HDR, Atmos).
+class VisionGlassBadge extends StatelessWidget {
+  const VisionGlassBadge({
+    super.key,
+    required this.label,
+    this.icon,
+  });
+
+  final String label;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.25),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.indigo.withValues(alpha: 0.15),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: AppColors.spotlight),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
