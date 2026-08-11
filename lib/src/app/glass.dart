@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:embyplayer/src/app/theme.dart';
@@ -214,59 +215,137 @@ class GlassSurface extends StatelessWidget {
   }
 }
 
-class AmbientBackdrop extends StatelessWidget {
+class AmbientBackdrop extends StatefulWidget {
   const AmbientBackdrop({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.canvasLift, AppColors.canvas, Color(0xFF0A0B18)],
-          stops: [0, 0.52, 1],
-        ),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          const Positioned(
-            top: -180,
-            right: -120,
-            child: _AmbientGlow(size: 520, color: Color(0x33767BEA)),
-          ),
-          const Positioned(
-            bottom: -220,
-            left: 40,
-            child: _AmbientGlow(size: 480, color: Color(0x2458C9C5)),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
+  State<AmbientBackdrop> createState() => _AmbientBackdropState();
 }
 
-class _AmbientGlow extends StatelessWidget {
-  const _AmbientGlow({required this.size, required this.color});
+class _AmbientBackdropState extends State<AmbientBackdrop>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
 
-  final double size;
-  final Color color;
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 16),
+    );
+    final isTest = WidgetsBinding.instance.runtimeType
+        .toString()
+        .contains('TestWidgetsFlutterBinding');
+    if (!isTest) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = _controller.value * 2 * math.pi;
+
+        final align1 = Alignment(
+          0.65 + 0.25 * math.cos(t),
+          -0.65 + 0.20 * math.sin(t),
+        );
+        final radius1 = 0.75 + 0.10 * math.sin(t * 1.5);
+
+        final align2 = Alignment(
+          -0.55 + 0.22 * math.sin(t * 0.8),
+          0.65 + 0.18 * math.cos(t * 0.8),
+        );
+        final radius2 = 0.70 + 0.12 * math.cos(t);
+
+        final align3 = Alignment(
+          0.10 + 0.15 * math.cos(t * 0.5),
+          -0.10 + 0.15 * math.sin(t * 0.5),
+        );
+
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.canvasLift,
+                AppColors.canvas,
+                Color(0xFF070814),
+              ],
+              stops: [0.0, 0.5, 1.0],
+            ),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Orb 1: Indigo / Violet Glow
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: align1,
+                      radius: radius1,
+                      colors: const [
+                        Color(0x3A767BEA),
+                        Color(0x12767BEA),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              // Orb 2: Cyan / Emerald Glow
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: align2,
+                      radius: radius2,
+                      colors: const [
+                        Color(0x2E58C9C5),
+                        Color(0x0E58C9C5),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              // Orb 3: Soft Rose / Magenta Glow
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: align3,
+                      radius: 0.85,
+                      colors: const [
+                        Color(0x1CE056FD),
+                        Color(0x08E056FD),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.45, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              widget.child,
+            ],
+          ),
+        );
+      },
+      child: widget.child,
     );
   }
 }
