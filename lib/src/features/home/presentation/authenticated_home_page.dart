@@ -576,10 +576,11 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
     } else {
       await _controller.animateToPage(
         normalized,
-        duration: AppMotion.standard,
-        curve: Curves.easeOutCubic,
+        duration: const Duration(milliseconds: 480),
+        curve: const Cubic(0.12, 0.88, 0.22, 1.0),
       );
     }
+    if (!mounted) return;
     _scheduleNext();
   }
 
@@ -615,13 +616,39 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                   onPageChanged: _pageChanged,
                   itemBuilder: (context, index) {
                     final item = widget.items[index];
-                    return _HomeHero(
-                      key: ValueKey('hero-slide-${item.id}'),
-                      item: item,
-                      dailyRecommendation: widget.dailyRecommendations,
-                      planning: widget.planningItemId == item.id,
-                      onPlay: () => widget.onPlay(item),
-                      onDetails: () => widget.onDetails(item),
+                    return AnimatedBuilder(
+                      animation: _controller,
+                      builder: (context, child) {
+                        double pageOffset = 0.0;
+                        if (_controller.position.haveDimensions) {
+                          pageOffset = (_controller.page ?? _currentIndex.toDouble()) - index;
+                        } else {
+                          pageOffset = (_currentIndex - index).toDouble();
+                        }
+                        final scale = (1.0 - (pageOffset.abs() * 0.06)).clamp(0.92, 1.0);
+                        final rotateY = (pageOffset * -0.08).clamp(-0.25, 0.25);
+                        final opacity = (1.0 - (pageOffset.abs() * 0.45)).clamp(0.4, 1.0);
+
+                        return Transform(
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, 0.0006)
+                            ..scaleByDouble(scale, scale, 1.0, 1.0)
+                            ..rotateY(rotateY),
+                          alignment: Alignment.center,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: _HomeHero(
+                        key: ValueKey('hero-slide-${item.id}'),
+                        item: item,
+                        dailyRecommendation: widget.dailyRecommendations,
+                        planning: widget.planningItemId == item.id,
+                        onPlay: () => widget.onPlay(item),
+                        onDetails: () => widget.onDetails(item),
+                      ),
                     );
                   },
                 ),
