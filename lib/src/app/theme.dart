@@ -149,7 +149,7 @@ abstract final class AppTheme {
       dividerColor: AppColors.outline,
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceLow,
+        fillColor: Colors.white.withValues(alpha: 0.06),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
@@ -160,15 +160,21 @@ abstract final class AppTheme {
         suffixIconColor: AppColors.textTertiary,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(
+            color: Colors.white.withValues(alpha: 0.14),
+            width: 1.0,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(
+            color: Colors.white.withValues(alpha: 0.14),
+            width: 1.0,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.indigo, width: 2),
+          borderSide: const BorderSide(color: AppColors.spotlight, width: 1.8),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -193,7 +199,10 @@ abstract final class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           foregroundColor: AppColors.textPrimary,
           backgroundColor: AppColors.glassSurface,
-          side: BorderSide.none,
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.18),
+            width: 1.0,
+          ),
           shape: outline,
         ),
       ),
@@ -238,24 +247,52 @@ abstract final class AppTheme {
       ),
       navigationBarTheme: const NavigationBarThemeData(
         height: 72,
-        backgroundColor: AppColors.glassStrong,
+        backgroundColor: Colors.transparent,
         indicatorColor: AppColors.glassSelected,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.glassStrong,
+        backgroundColor: const Color(0xEC0F111E),
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 24,
+        shadowColor: const Color(0x554A90E2),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.22),
+            width: 1.2,
+          ),
+        ),
         titleTextStyle: baseTextTheme.headlineSmall?.copyWith(
           color: AppColors.textPrimary,
           fontWeight: FontWeight.w600,
         ),
       ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: const Color(0xF00D0E18),
+        surfaceTintColor: Colors.transparent,
+        elevation: 24,
+        modalBarrierColor: Colors.black54,
+        shape: RoundedRectangleBorder(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.20),
+            width: 1.2,
+          ),
+        ),
+      ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.surfaceHigh,
+        backgroundColor: const Color(0xEC151828),
         contentTextStyle: const TextStyle(color: AppColors.textPrimary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 12,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.20),
+            width: 1.2,
+          ),
+        ),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.spotlight,
@@ -264,7 +301,13 @@ abstract final class AppTheme {
         color: AppColors.glassSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.12),
+            width: 1.0,
+          ),
+        ),
       ),
     );
   }
