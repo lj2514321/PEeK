@@ -331,7 +331,7 @@ class _PersonWorksHeader extends StatelessWidget {
           SizedBox.square(
             dimension: 72,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(36),
+              borderRadius: BorderRadius.circular(16),
               child: PeekMediaImage(
                 uri: person.imageUri,
                 headers: person.imageHeaders,

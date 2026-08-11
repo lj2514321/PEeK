@@ -821,7 +821,7 @@ class _FavoriteActorChipCard extends StatelessWidget {
               SizedBox.square(
                 dimension: 52,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(26),
+                  borderRadius: BorderRadius.circular(14),
                   child: PeekMediaImage(
                     uri: actor.imageUri,
                     headers: actor.imageHeaders,

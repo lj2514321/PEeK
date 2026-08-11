@@ -560,27 +560,40 @@ class _ActorCard extends StatelessWidget {
           Expanded(
             child: Peek3DCard(
               onTap: onOpen,
-              borderRadius: 18,
+              borderRadius: 16,
               child: Material(
                 color: AppColors.surfaceLow,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(16),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   key: ValueKey('actor-${item.id}'),
                   onTap: onOpen,
-                  child: Center(
-                    child: SizedBox.square(
-                      dimension: 96,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(48),
-                        child: PeekMediaImage(
-                          uri: item.imageUri,
-                          headers: item.imageHeaders,
-                          kind: PeekMediaImageKind.person,
-                          placeholderBackground: AppColors.surfaceHigh,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      PeekMediaImage(
+                        uri: item.imageUri,
+                        headers: item.imageHeaders,
+                        kind: PeekMediaImageKind.person,
+                        placeholderBackground: AppColors.surfaceHigh,
+                        placeholderIcon: Icons.person_outline_rounded,
+                        placeholderIconSize: 42,
+                      ),
+                      const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black26,
+                              Colors.black54,
+                            ],
+                            stops: [0.5, 0.8, 1.0],
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
