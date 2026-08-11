@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
@@ -842,18 +843,29 @@ class _AppRailState extends State<_AppRail>
                 alignment: Alignment.topLeft,
                 minWidth: 224,
                 maxWidth: 224,
-                child: GlassSurface(
-                  radius: 0,
-                  blur: 0,
-                  tint: AppColors.glassSurface,
-                  child: _AppRailContents(
-                    extended: widget.extended,
-                    progress: progress,
-                    destinations: widget.destinations,
-                    selectedIndex: widget.selectedIndex,
-                    onSelected: widget.onSelected,
-                    canToggle: widget.canToggle,
-                    onToggle: widget.onToggle,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    border: Border(
+                      right: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        width: 1.2,
+                      ),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                      child: _AppRailContents(
+                        extended: widget.extended,
+                        progress: progress,
+                        destinations: widget.destinations,
+                        selectedIndex: widget.selectedIndex,
+                        onSelected: widget.onSelected,
+                        canToggle: widget.canToggle,
+                        onToggle: widget.onToggle,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1241,13 +1253,22 @@ class _TopCommandBar extends StatelessWidget {
     final captionInset = defaultTargetPlatform == TargetPlatform.windows
         ? AppChrome.windowControlsWidth
         : 0.0;
-    return GlassSurface(
+    return Container(
       key: const ValueKey('top-command-bar'),
-      radius: 0,
-      blur: 22,
-      tint: AppColors.glassSurface,
-      child: SizedBox(
-        height: 76,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.white.withValues(alpha: 0.16),
+            width: 1.2,
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          child: SizedBox(
+            height: 76,
         child: Padding(
           padding: EdgeInsets.only(
             left: horizontalPadding,
@@ -1277,7 +1298,9 @@ class _TopCommandBar extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }
 
