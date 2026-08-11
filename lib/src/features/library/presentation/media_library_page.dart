@@ -3,6 +3,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
+import 'package:embyplayer/src/core/presentation/peek_context_menu.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
@@ -1583,11 +1584,27 @@ class _MediaCard extends StatelessWidget {
         item.kind == MediaItemKind.folder ||
         item.kind == MediaItemKind.series ||
         item.kind == MediaItemKind.season;
-    return Semantics(
-      label: '${item.name}，${_kindLabel(item.kind)}',
-      button: true,
-      selected: selected,
-      child: Column(
+    return PeekContextMenuRegion(
+      items: (context) => [
+        PeekContextMenuItem(
+          id: 'open',
+          label: browsable ? '打开目录' : '查看详情',
+          icon: browsable ? Icons.folder_open_rounded : Icons.info_outline_rounded,
+          onTap: onOpen,
+        ),
+        if (onEnterSelection != null)
+          PeekContextMenuItem(
+            id: 'select',
+            label: '多选管理',
+            icon: Icons.checklist_rounded,
+            onTap: onEnterSelection,
+          ),
+      ],
+      child: Semantics(
+        label: '${item.name}，${_kindLabel(item.kind)}',
+        button: true,
+        selected: selected,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
@@ -1673,8 +1690,9 @@ class _MediaCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   String _metadata(MediaItem item) {
     final parts = <String>[_kindLabel(item.kind)];

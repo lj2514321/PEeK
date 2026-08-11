@@ -20,6 +20,7 @@ import 'package:embyplayer/src/features/search/presentation/media_search_page.da
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:embyplayer/src/features/servers/presentation/server_accounts_page.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -458,6 +459,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          final nav = Navigator.maybeOf(context);
+          if (nav != null && nav.canPop()) {
+            nav.maybePop();
+          }
+        },
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): () {
           _openSearch();
         },
@@ -483,8 +490,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           _selectDestination(5);
         },
       },
-      child: Focus(
-        autofocus: true,
+      child: Listener(
+        onPointerDown: (event) {
+          if (event.buttons == kBackMouseButton) {
+            final nav = Navigator.maybeOf(context);
+            if (nav != null && nav.canPop()) {
+              nav.maybePop();
+            }
+          }
+        },
+        child: Focus(
+          autofocus: true,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final showRail = constraints.maxWidth >= 720;
@@ -714,8 +730,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           },
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _KeepAliveDestination extends StatefulWidget {

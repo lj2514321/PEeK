@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
+import 'package:embyplayer/src/core/presentation/peek_context_menu.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
@@ -1063,10 +1064,19 @@ class _HomeMediaCard extends StatelessWidget {
         ? 0.0
         : (item.resumePosition.inMilliseconds / item.runTime!.inMilliseconds)
               .clamp(0.0, 1.0);
-    return Semantics(
-      button: true,
-      label: '${item.name}，${_kindLabel(item.kind)}',
-      child: Column(
+    return PeekContextMenuRegion(
+      items: (context) => [
+        PeekContextMenuItem(
+          id: 'open',
+          label: '查看详情',
+          icon: Icons.info_outline_rounded,
+          onTap: onOpen,
+        ),
+      ],
+      child: Semantics(
+        button: true,
+        label: '${item.name}，${_kindLabel(item.kind)}',
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
@@ -1120,8 +1130,9 @@ class _HomeMediaCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _CardArtwork extends StatelessWidget {
