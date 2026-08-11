@@ -516,6 +516,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 : Curves.easeInOutCubic;
 
             return Scaffold(
+              backgroundColor: Colors.transparent,
               body: AmbientBackdrop(
                 child: SafeArea(
                   child: Stack(

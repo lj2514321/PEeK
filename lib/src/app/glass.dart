@@ -233,11 +233,17 @@ class _AmbientBackdropState extends State<AmbientBackdrop>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 16),
+      duration: const Duration(seconds: 10),
     );
-    final isTest = WidgetsBinding.instance.runtimeType
-        .toString()
-        .contains('TestWidgetsFlutterBinding');
+    bool isTest = false;
+    assert(() {
+      if (WidgetsBinding.instance.runtimeType
+          .toString()
+          .contains('TestWidgetsFlutterBinding')) {
+        isTest = true;
+      }
+      return true;
+    }());
     if (!isTest) {
       _controller.repeat();
     }
@@ -257,20 +263,20 @@ class _AmbientBackdropState extends State<AmbientBackdrop>
         final t = _controller.value * 2 * math.pi;
 
         final align1 = Alignment(
-          0.65 + 0.25 * math.cos(t),
-          -0.65 + 0.20 * math.sin(t),
+          0.65 + 0.35 * math.cos(t),
+          -0.65 + 0.30 * math.sin(t),
         );
-        final radius1 = 0.75 + 0.10 * math.sin(t * 1.5);
+        final radius1 = 0.85 + 0.15 * math.sin(t * 1.5);
 
         final align2 = Alignment(
-          -0.55 + 0.22 * math.sin(t * 0.8),
-          0.65 + 0.18 * math.cos(t * 0.8),
+          -0.60 + 0.30 * math.sin(t * 0.8),
+          0.65 + 0.25 * math.cos(t * 0.8),
         );
-        final radius2 = 0.70 + 0.12 * math.cos(t);
+        final radius2 = 0.80 + 0.15 * math.cos(t);
 
         final align3 = Alignment(
-          0.10 + 0.15 * math.cos(t * 0.5),
-          -0.10 + 0.15 * math.sin(t * 0.5),
+          0.10 + 0.20 * math.cos(t * 0.5),
+          -0.10 + 0.20 * math.sin(t * 0.5),
         );
 
         return DecoratedBox(
@@ -297,8 +303,8 @@ class _AmbientBackdropState extends State<AmbientBackdrop>
                       center: align1,
                       radius: radius1,
                       colors: const [
-                        Color(0x3A767BEA),
-                        Color(0x12767BEA),
+                        Color(0x65767BEA),
+                        Color(0x24767BEA),
                         Colors.transparent,
                       ],
                       stops: const [0.0, 0.5, 1.0],
@@ -314,8 +320,8 @@ class _AmbientBackdropState extends State<AmbientBackdrop>
                       center: align2,
                       radius: radius2,
                       colors: const [
-                        Color(0x2E58C9C5),
-                        Color(0x0E58C9C5),
+                        Color(0x5558C9C5),
+                        Color(0x1B58C9C5),
                         Colors.transparent,
                       ],
                       stops: const [0.0, 0.5, 1.0],
@@ -329,10 +335,10 @@ class _AmbientBackdropState extends State<AmbientBackdrop>
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
                       center: align3,
-                      radius: 0.85,
+                      radius: 0.95,
                       colors: const [
-                        Color(0x1CE056FD),
-                        Color(0x08E056FD),
+                        Color(0x35E056FD),
+                        Color(0x10E056FD),
                         Colors.transparent,
                       ],
                       stops: const [0.0, 0.45, 1.0],
