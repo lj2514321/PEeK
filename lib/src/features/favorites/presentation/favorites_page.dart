@@ -220,9 +220,10 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
         _nextStartIndex = _nextStartIndex > 0 ? _nextStartIndex - 1 : 0;
       });
       ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
+        ..removeCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
+            duration: const Duration(milliseconds: 2500),
             content: Text('已从收藏移除《${item.name}》'),
             action: SnackBarAction(
               label: '撤销',

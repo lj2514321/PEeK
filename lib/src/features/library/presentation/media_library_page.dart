@@ -678,9 +678,10 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
           ? '已将 ${ids.length} 项标记为已观看'
           : '已将 ${ids.length} 项标记为未观看';
       ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
+        ..removeCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
+            duration: const Duration(milliseconds: 2500),
             content: Text(completedLabel),
             action: SnackBarAction(
               label: '撤销',

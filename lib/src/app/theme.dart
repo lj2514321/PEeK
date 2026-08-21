@@ -286,6 +286,9 @@ abstract final class AppTheme {
         backgroundColor: const Color(0xEC151828),
         contentTextStyle: const TextStyle(color: AppColors.textPrimary),
         elevation: 12,
+        showCloseIcon: true,
+        closeIconColor: AppColors.textTertiary,
+        actionTextColor: AppColors.spotlight,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
