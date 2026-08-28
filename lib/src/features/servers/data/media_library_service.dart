@@ -757,6 +757,26 @@ class MediaLibraryService {
     }
   }
 
+  Future<void> deleteItem(
+    AuthenticatedServer account,
+    String itemId,
+  ) async {
+    final uri = _appendPath(account.server.apiBaseUri, 'Items/$itemId');
+    try {
+      await _dio.deleteUri<void>(
+        uri,
+        options: Options(headers: _authHeaders(account.accessToken)),
+      );
+      try {
+        await _cache.clear();
+      } on Object {
+        // Ignore cache clear error
+      }
+    } on DioException catch (error) {
+      throw _mapDioException(error);
+    }
+  }
+
   Future<MediaPage> _requestPage(
     Uri uri,
     AuthenticatedServer account, {

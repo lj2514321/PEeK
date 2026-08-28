@@ -8,6 +8,7 @@ import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
+import 'package:embyplayer/src/features/dedupe/presentation/media_dedupe_page.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
@@ -494,6 +495,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                 onSortChanged: _changeSort,
                                 onFilterPressed: _showFilters,
                                 onDensityChanged: _setDensity,
+                                onDedupePressed: _openDedupePage,
                                 onSelectPressed:
                                     _selectedLibrary?.isLocal == true
                                     ? null
@@ -743,6 +745,17 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       (_minCommunityRating == null ? 0 : 1) +
       (_productionYear == null ? 0 : 1);
 
+  void _openDedupePage() {
+    Navigator.of(context).push<void>(
+      Peek3DPageRoute(
+        builder: (context) => MediaDedupePage(
+          account: widget.account,
+          initialItems: _items,
+        ),
+      ),
+    );
+  }
+
   bool _isBrowsable(MediaItem item) {
     return item.kind == MediaItemKind.folder ||
         item.kind == MediaItemKind.series ||
@@ -846,6 +859,7 @@ class _LibraryToolbar extends StatelessWidget {
     required this.onFilterPressed,
     required this.onDensityChanged,
     required this.onSelectPressed,
+    required this.onDedupePressed,
   });
 
   final MediaLibrarySort sort;
@@ -855,6 +869,7 @@ class _LibraryToolbar extends StatelessWidget {
   final VoidCallback onFilterPressed;
   final ValueChanged<MediaGridDensity> onDensityChanged;
   final VoidCallback? onSelectPressed;
+  final VoidCallback onDedupePressed;
 
   @override
   Widget build(BuildContext context) {
@@ -908,6 +923,12 @@ class _LibraryToolbar extends StatelessWidget {
           ),
         ),
         _DensityControl(value: density, onChanged: onDensityChanged),
+        _ToolbarAction(
+          key: const ValueKey('library-dedupe-button'),
+          icon: Icons.difference_rounded,
+          label: '查重',
+          onPressed: onDedupePressed,
+        ),
         if (onSelectPressed != null)
           _ToolbarAction(
             key: const ValueKey('library-select-button'),

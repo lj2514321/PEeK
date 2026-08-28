@@ -26,6 +26,35 @@ class EmbyMediaItemParser {
     final played = userData is Map && userData['Played'] == true;
     final favorite = userData is Map && userData['IsFavorite'] == true;
 
+    final rawProviderIds = data['ProviderIds'];
+    final providerIds = <String, String>{};
+    if (rawProviderIds is Map) {
+      for (final entry in rawProviderIds.entries) {
+        if (entry.value != null && entry.value.toString().isNotEmpty) {
+          providerIds[entry.key.toString()] = entry.value.toString();
+        }
+      }
+    }
+
+    final mediaSources = data['MediaSources'];
+    final firstSource = (mediaSources is List && mediaSources.isNotEmpty && mediaSources.first is Map)
+        ? mediaSources.first as Map<String, dynamic>
+        : null;
+    final mediaStreams = (firstSource != null && firstSource['MediaStreams'] is List)
+        ? firstSource['MediaStreams'] as List
+        : (data['MediaStreams'] is List ? data['MediaStreams'] as List : const []);
+    final videoStream = mediaStreams.firstWhere(
+      (s) => s is Map && s['Type'] == 'Video',
+      orElse: () => null,
+    ) as Map<String, dynamic>?;
+
+    final width = readInt(videoStream?['Width']) ?? readInt(data['Width']);
+    final height = readInt(videoStream?['Height']) ?? readInt(data['Height']);
+    final videoCodec = readNullableString(videoStream, 'Codec') ?? readNullableString(data, 'VideoCodec');
+    final container = readNullableString(firstSource, 'Container') ?? readNullableString(data, 'Container');
+    final bitrate = readInt(firstSource?['Bitrate']) ?? readInt(data['Bitrate']);
+    final sourceSize = readInt(firstSource?['Size']);
+
     return MediaItem(
       id: id,
       name: readString(data, 'Name'),
@@ -64,11 +93,18 @@ class EmbyMediaItemParser {
       parentId: readNullableString(data, 'ParentId'),
       seriesId: readNullableString(data, 'SeriesId'),
       collectionType: readNullableString(data, 'CollectionType'),
+      fileSize: sourceSize,
       played: played,
       favorite: favorite,
       resumePosition: resumeTicks == null
           ? Duration.zero
           : Duration(microseconds: resumeTicks ~/ 10),
+      providerIds: providerIds,
+      videoCodec: videoCodec,
+      container: container,
+      width: width,
+      height: height,
+      bitrate: bitrate,
     );
   }
 
@@ -228,7 +264,8 @@ class EmbyMediaItemParser {
     return fallback;
   }
 
-  static String? readNullableString(Map<dynamic, dynamic> data, String key) {
+  static String? readNullableString(Map<dynamic, dynamic>? data, String key) {
+    if (data == null) return null;
     final value = data[key];
     if (value is String) {
       final trimmed = value.trim();

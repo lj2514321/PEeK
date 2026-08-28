@@ -42,6 +42,12 @@ class MediaItem {
     this.played = false,
     this.favorite = false,
     this.resumePosition = Duration.zero,
+    this.providerIds = const {},
+    this.videoCodec,
+    this.container,
+    this.width,
+    this.height,
+    this.bitrate,
   });
 
   final String id;
@@ -73,10 +79,27 @@ class MediaItem {
   final bool played;
   final bool favorite;
   final Duration resumePosition;
+  final Map<String, String> providerIds;
+  final String? videoCodec;
+  final String? container;
+  final int? width;
+  final int? height;
+  final int? bitrate;
 
   bool get isLocal => source == MediaItemSource.local;
 
-  MediaItem copyWith({bool? played, bool? favorite, Duration? resumePosition}) {
+  MediaItem copyWith({
+    bool? played,
+    bool? favorite,
+    Duration? resumePosition,
+    Map<String, String>? providerIds,
+    String? videoCodec,
+    String? container,
+    int? width,
+    int? height,
+    int? bitrate,
+    int? fileSize,
+  }) {
     return MediaItem(
       id: id,
       name: name,
@@ -102,11 +125,17 @@ class MediaItem {
       collectionType: collectionType,
       source: source,
       sourcePath: sourcePath,
-      fileSize: fileSize,
+      fileSize: fileSize ?? this.fileSize,
       dateModified: dateModified,
       played: played ?? this.played,
       favorite: favorite ?? this.favorite,
       resumePosition: resumePosition ?? this.resumePosition,
+      providerIds: providerIds ?? this.providerIds,
+      videoCodec: videoCodec ?? this.videoCodec,
+      container: container ?? this.container,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      bitrate: bitrate ?? this.bitrate,
     );
   }
 }
