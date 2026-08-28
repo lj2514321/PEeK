@@ -93,6 +93,59 @@ class MediaLibraryService {
     );
   }
 
+  Future<List<MediaItem>> fetchAllMediaForDedupe(
+    AuthenticatedServer account, {
+    String? parentId,
+    void Function(int loaded, int total)? onProgress,
+  }) async {
+    final allItems = <MediaItem>[];
+    var startIndex = 0;
+    const pageSize = 300;
+    int totalCount = 1;
+
+    try {
+      while (startIndex < totalCount) {
+        final query = <String, String>{
+          if (parentId != null && parentId.isNotEmpty) 'ParentId': parentId,
+          'Recursive': 'true',
+          'IncludeItemTypes': 'Movie,Episode,Video',
+          'Fields':
+              'Overview,PrimaryImageAspectRatio,ProductionYear,RunTimeTicks,'
+              'UserData,ProviderIds,MediaSources,MediaStreams,Path,People,ImageTags',
+          'ImageTypeLimit': '1',
+          'EnableImageTypes': 'Primary',
+          'EnableUserData': 'true',
+          'StartIndex': '$startIndex',
+          'Limit': '$pageSize',
+          'EnableTotalRecordCount': 'true',
+        };
+        final uri = _appendPath(
+          account.server.apiBaseUri,
+          'Users/${account.userId}/Items',
+        ).replace(queryParameters: query);
+
+        final page = await _requestPage(
+          uri,
+          account,
+          startIndex: startIndex,
+          cacheAge: Duration.zero,
+          forceRefresh: true,
+        );
+
+        allItems.addAll(page.items);
+        totalCount = page.totalRecordCount;
+        startIndex += page.items.length;
+        onProgress?.call(allItems.length, totalCount);
+
+        if (page.items.isEmpty) break;
+      }
+    } catch (_) {
+      // Return whatever loaded so far if server times out or disconnects
+    }
+
+    return allItems;
+  }
+
   Future<MediaPage> getFavoriteItems(
     AuthenticatedServer account, {
     int startIndex = 0,

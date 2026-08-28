@@ -750,6 +750,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       Peek3DPageRoute(
         builder: (context) => MediaDedupePage(
           account: widget.account,
+          libraryId: _selectedLibrary?.id,
+          libraryName: _selectedLibrary?.name,
           initialItems: _items,
         ),
       ),

@@ -2,20 +2,35 @@ import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 
 enum DuplicateMatchReason {
   providerId,
+  mediaCode,
+  imageTag,
+  titleAndCast,
+  titleAndRuntime,
   titleAndYear,
+  exactTitle,
   episode,
 }
 
 extension DuplicateMatchReasonLabel on DuplicateMatchReason {
   String get label => switch (this) {
     DuplicateMatchReason.providerId => 'TMDb / IMDb 元数据匹配',
+    DuplicateMatchReason.mediaCode => '识别码/番号匹配',
+    DuplicateMatchReason.imageTag => '相同封面海报',
+    DuplicateMatchReason.titleAndCast => '同名且主演阵容一致',
+    DuplicateMatchReason.titleAndRuntime => '同名且片长一致',
     DuplicateMatchReason.titleAndYear => '规范化标题与年份一致',
+    DuplicateMatchReason.exactTitle => '相同作品名称',
     DuplicateMatchReason.episode => '同一剧集季集号冲突',
   };
 
   String get shortTag => switch (this) {
-    DuplicateMatchReason.providerId => '精准元数据',
+    DuplicateMatchReason.providerId => '元数据',
+    DuplicateMatchReason.mediaCode => '番号识别',
+    DuplicateMatchReason.imageTag => '同封面',
+    DuplicateMatchReason.titleAndCast => '同演员',
+    DuplicateMatchReason.titleAndRuntime => '同片长',
     DuplicateMatchReason.titleAndYear => '标题年份',
+    DuplicateMatchReason.exactTitle => '同名',
     DuplicateMatchReason.episode => '剧集重集',
   };
 }

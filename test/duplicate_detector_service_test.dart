@@ -158,5 +158,70 @@ void main() {
 
       expect(groups, isEmpty);
     });
+
+    test('groups items by identical cover poster image tag', () {
+      const item1 = MediaItem(
+        id: 'c-1',
+        name: 'Custom Video Version A',
+        kind: MediaItemKind.video,
+        imageTag: 'poster_hash_abc123',
+      );
+
+      const item2 = MediaItem(
+        id: 'c-2',
+        name: 'Custom Video Version B',
+        kind: MediaItemKind.video,
+        imageTag: 'poster_hash_abc123',
+      );
+
+      final groups = service.findDuplicates([item1, item2]);
+      expect(groups.length, 1);
+      expect(groups.first.matchReason, DuplicateMatchReason.imageTag);
+      expect(groups.first.matchDetail, '相同封面海报');
+    });
+
+    test('groups items by same title and overlapping cast members', () {
+      const item1 = MediaItem(
+        id: 'cast-1',
+        name: 'Big Tit Stepmom Nurses My Cock Problem 1080p',
+        kind: MediaItemKind.video,
+        people: [
+          MediaPerson(id: 'p1', name: 'Lindsay Lee', type: 'Actor'),
+        ],
+      );
+
+      const item2 = MediaItem(
+        id: 'cast-2',
+        name: 'Big Tit Stepmom Nurses My Cock Problem 720p',
+        kind: MediaItemKind.video,
+        people: [
+          MediaPerson(id: 'p1', name: 'Lindsay Lee', type: 'Actor'),
+        ],
+      );
+
+      final groups = service.findDuplicates([item1, item2]);
+      expect(groups.length, 1);
+      expect(groups.first.matchReason, DuplicateMatchReason.titleAndCast);
+      expect(groups.first.matchDetail, contains('Lindsay Lee'));
+    });
+
+    test('groups items by media identification code / 番号', () {
+      const item1 = MediaItem(
+        id: 'code-1',
+        name: '【中文字幕】SSIS-123 绝美身材',
+        kind: MediaItemKind.video,
+      );
+
+      const item2 = MediaItem(
+        id: 'code-2',
+        name: 'SSIS-123 [4K无码流出]',
+        kind: MediaItemKind.video,
+      );
+
+      final groups = service.findDuplicates([item1, item2]);
+      expect(groups.length, 1);
+      expect(groups.first.matchReason, DuplicateMatchReason.mediaCode);
+      expect(groups.first.matchDetail, '识别码: SSIS-123');
+    });
   });
 }

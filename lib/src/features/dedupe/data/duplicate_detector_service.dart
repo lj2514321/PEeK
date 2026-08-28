@@ -10,12 +10,25 @@ class DuplicateDetectorService {
   const DuplicateDetectorService();
 
   static final _editionPattern = RegExp(
-    r'\b(4k|2160p|1080p|720p|480p|uhd|fhd|hd|hdr|hdr10|hdr10\+|dv|dolby\s*vision|remux|extended|unrated|director(?:\x27s)?\s*cut|theatrical|bluray|blu-ray|web-dl|webrip|h\.?264|h\.?265|hevc|av1|x264|x265|aac|dts|ddp5\.1|atmos)\b',
+    r'\b(4k|2160p|1080p|720p|480p|uhd|fhd|hd|hdr|hdr10|hdr10\+|dv|dolby\s*vision|remux|extended|unrated|director(?:\x27s)?\s*cut|theatrical|bluray|blu-ray|web-dl|webrip|h\.?264|h\.?265|hevc|av1|x264|x265|aac|dts|ddp5\.1|atmos|uncensored|censored|无码|有码|中文字幕|字幕|hd-c|part\s*\d+|cd\s*\d+)\b',
+    caseSensitive: false,
+  );
+
+  static final _mediaCodePattern = RegExp(
+    r'\b([a-zA-Z]{2,6}[-_]?\d{2,6}|fc2[-_]?(?:ppv)?[-_]?\d+)\b',
     caseSensitive: false,
   );
 
   static final _bracketPattern = RegExp(r'\[.*?\]|\(.*?\)|【.*?】|（.*?）');
   static final _punctuationPattern = RegExp(r'[^\w\s\u4e00-\u9fa5]+');
+
+  /// Extracts standard movie/video identification code (e.g. SSIS-123, FC2-PPV-123456)
+  String? extractMediaCode(String title) {
+    final match = _mediaCodePattern.firstMatch(title);
+    if (match == null) return null;
+    final raw = match.group(0)!;
+    return raw.replaceAll('_', '-').toLowerCase();
+  }
 
   /// Normalizes a media title by removing resolution tags, edition markers,
   /// bracketed noise, and special punctuation for comparison.
@@ -157,7 +170,9 @@ class DuplicateDetectorService {
     );
   }
 
-  /// Scans a collection of [MediaItem]s and identifies duplicate groups.
+  /// Scans a collection of [MediaItem]s and identifies duplicate groups
+  /// using graph-connected components across provider IDs, media codes,
+  /// identical cover image tags, matching cast, matching runtime, and titles.
   List<DuplicateMediaGroup> findDuplicates(
     List<MediaItem> items, {
     Set<String> ignoredGroupIds = const {},
@@ -168,80 +183,192 @@ class DuplicateDetectorService {
           item.kind != MediaItemKind.person;
     }).toList(growable: false);
 
-    final groupedByPrimaryId = <String, List<MediaItem>>{};
-    final itemAssignedKeys = <String, String>{};
+    final n = mediaList.length;
+    if (n < 2) return const [];
 
-    for (final item in mediaList) {
-      // 1. Check Provider ID (TMDb, IMDb)
+    // Disjoint-set union (DSU) for clustering
+    final parent = List<int>.generate(n, (i) => i);
+    final edgeReasons = <int, DuplicateMatchReason>{};
+    final edgeDetails = <int, String>{};
+
+    int find(int i) {
+      if (parent[i] == i) return i;
+      return parent[i] = find(parent[i]);
+    }
+
+    void union(int i, int j, DuplicateMatchReason reason, String detail) {
+      final rootI = find(i);
+      final rootJ = find(j);
+      if (rootI != rootJ) {
+        parent[rootI] = rootJ;
+        // Keep the highest-priority reason
+        final existingReason = edgeReasons[rootJ];
+        if (existingReason == null || reason.index < existingReason.index) {
+          edgeReasons[rootJ] = reason;
+          edgeDetails[rootJ] = detail;
+        }
+      }
+    }
+
+    // 1. Group by TMDb / IMDb Provider IDs
+    final tmdbMap = <String, int>{};
+    final imdbMap = <String, int>{};
+
+    // 2. Group by Media Identification Code (e.g. SSIS-123)
+    final codeMap = <String, int>{};
+
+    // 3. Group by Image Tag (Same Cover/Poster)
+    final imageTagMap = <String, int>{};
+
+    // 4. Group by Episode Key
+    final episodeMap = <String, int>{};
+
+    // 5. Group by Normalized Clean Title
+    final titleMap = <String, List<int>>{};
+
+    for (var i = 0; i < n; i++) {
+      final item = mediaList[i];
+
+      // Provider IDs
       final tmdb = item.providerIds['Tmdb'];
-      final imdb = item.providerIds['Imdb'];
       if (tmdb != null && tmdb.isNotEmpty) {
-        final key = 'tmdb:$tmdb';
-        groupedByPrimaryId.putIfAbsent(key, () => []).add(item);
-        itemAssignedKeys[item.id] = key;
-        continue;
-      }
-      if (imdb != null && imdb.isNotEmpty) {
-        final key = 'imdb:$imdb';
-        groupedByPrimaryId.putIfAbsent(key, () => []).add(item);
-        itemAssignedKeys[item.id] = key;
-        continue;
+        if (tmdbMap.containsKey(tmdb)) {
+          union(i, tmdbMap[tmdb]!, DuplicateMatchReason.providerId, 'TMDb ID: $tmdb');
+        } else {
+          tmdbMap[tmdb] = i;
+        }
       }
 
-      // 2. Check Episode matching (same show + season + episode)
+      final imdb = item.providerIds['Imdb'];
+      if (imdb != null && imdb.isNotEmpty) {
+        if (imdbMap.containsKey(imdb)) {
+          union(i, imdbMap[imdb]!, DuplicateMatchReason.providerId, 'IMDb ID: $imdb');
+        } else {
+          imdbMap[imdb] = i;
+        }
+      }
+
+      // Media Code
+      final code = extractMediaCode(item.name);
+      if (code != null && code.isNotEmpty) {
+        if (codeMap.containsKey(code)) {
+          union(i, codeMap[code]!, DuplicateMatchReason.mediaCode, '识别码: ${code.toUpperCase()}');
+        } else {
+          codeMap[code] = i;
+        }
+      }
+
+      // Image Tag (Same Cover Poster)
+      final tag = item.imageTag;
+      if (tag != null && tag.isNotEmpty) {
+        if (imageTagMap.containsKey(tag)) {
+          union(i, imageTagMap[tag]!, DuplicateMatchReason.imageTag, '相同封面海报');
+        } else {
+          imageTagMap[tag] = i;
+        }
+      }
+
+      // Episode Key
       if (item.kind == MediaItemKind.episode &&
           item.indexNumber != null &&
           (item.seriesName != null || item.seriesId != null)) {
         final seriesKey = (item.seriesName ?? item.seriesId ?? '').toLowerCase().trim();
         final season = item.parentIndexNumber ?? 1;
         final ep = item.indexNumber!;
-        final key = 'episode:$seriesKey:s$season:e$ep';
-        groupedByPrimaryId.putIfAbsent(key, () => []).add(item);
-        itemAssignedKeys[item.id] = key;
-        continue;
+        final epKey = '$seriesKey:s$season:e$ep';
+        if (episodeMap.containsKey(epKey)) {
+          union(i, episodeMap[epKey]!, DuplicateMatchReason.episode, '同一剧集单集 (S${season}E$ep)');
+        } else {
+          episodeMap[epKey] = i;
+        }
       }
 
-      // 3. Fallback: Normalized Title + Year
-      final normTitle = normalizeTitle(item.name);
-      if (normTitle.isNotEmpty) {
-        final year = item.productionYear?.toString() ?? 'unknown';
-        final key = 'title:$normTitle:$year';
-        groupedByPrimaryId.putIfAbsent(key, () => []).add(item);
-        itemAssignedKeys[item.id] = key;
+      // Clean Title
+      final cleanTitle = normalizeTitle(item.name);
+      if (cleanTitle.isNotEmpty) {
+        titleMap.putIfAbsent(cleanTitle, () => []).add(i);
       }
+    }
+
+    // 6. Inspect Clean Title groups:
+    // Match by exact title, or title + cast, title + runtime, title + year
+    for (final entry in titleMap.entries) {
+      final indices = entry.value;
+      if (indices.length < 2) continue;
+
+      for (var a = 0; a < indices.length - 1; a++) {
+        for (var b = a + 1; b < indices.length; b++) {
+          final idxA = indices[a];
+          final idxB = indices[b];
+          final itemA = mediaList[idxA];
+          final itemB = mediaList[idxB];
+
+          // Check Cast overlap
+          final castA = itemA.people.map((p) => p.name.trim().toLowerCase()).where((n) => n.isNotEmpty).toSet();
+          final castB = itemB.people.map((p) => p.name.trim().toLowerCase()).where((n) => n.isNotEmpty).toSet();
+          final sharedCast = castA.intersection(castB);
+
+          if (sharedCast.isNotEmpty) {
+            final actorName = itemA.people.firstWhere((p) => sharedCast.contains(p.name.trim().toLowerCase())).name;
+            union(idxA, idxB, DuplicateMatchReason.titleAndCast, '同名且主演阵容一致 ($actorName 等)');
+            continue;
+          }
+
+          // Check Runtime similarity (within 3 minutes or 5%)
+          if (itemA.runTime != null && itemB.runTime != null) {
+            final diffSecs = (itemA.runTime!.inSeconds - itemB.runTime!.inSeconds).abs();
+            if (diffSecs <= 180 || diffSecs / (itemA.runTime!.inSeconds + 1) < 0.05) {
+              union(idxA, idxB, DuplicateMatchReason.titleAndRuntime, '同名且片长一致 (~${itemA.runTime!.inMinutes}分钟)');
+              continue;
+            }
+          }
+
+          // Check Year match
+          if (itemA.productionYear != null && itemB.productionYear != null) {
+            final yearDiff = (itemA.productionYear! - itemB.productionYear!).abs();
+            if (yearDiff <= 1) {
+              union(idxA, idxB, DuplicateMatchReason.titleAndYear, '规范化标题与年份一致 (${itemA.productionYear})');
+              continue;
+            }
+          }
+
+          // Default fallback: Same Title
+          union(idxA, idxB, DuplicateMatchReason.exactTitle, '作品名称完全一致');
+        }
+      }
+    }
+
+    // 7. Extract clusters from DSU
+    final clusterMap = <int, List<MediaItem>>{};
+    for (var i = 0; i < n; i++) {
+      final root = find(i);
+      clusterMap.putIfAbsent(root, () => []).add(mediaList[i]);
     }
 
     final resultGroups = <DuplicateMediaGroup>[];
 
-    for (final entry in groupedByPrimaryId.entries) {
-      final groupKey = entry.key;
+    for (final entry in clusterMap.entries) {
+      final root = entry.key;
       final groupItems = entry.value;
 
-      // Only groups with 2 or more copies are duplicates
       if (groupItems.length < 2) continue;
 
-      // Skip ignored whitelist groups
-      if (ignoredGroupIds.contains(groupKey)) continue;
+      final matchReason = edgeReasons[root] ?? DuplicateMatchReason.exactTitle;
+      final matchDetail = edgeDetails[root] ?? matchReason.label;
 
-      // Determine match reason and detail
-      DuplicateMatchReason matchReason;
-      String matchDetail;
+      // Group ID for persistent ignore whitelist
+      final firstItem = groupItems.first;
+      final tmdb = firstItem.providerIds['Tmdb'];
+      final code = extractMediaCode(firstItem.name);
+      final groupId = tmdb != null && tmdb.isNotEmpty
+          ? 'tmdb:$tmdb'
+          : (code != null && code.isNotEmpty
+              ? 'code:$code'
+              : (firstItem.imageTag != null && firstItem.imageTag!.isNotEmpty
+                  ? 'img:${firstItem.imageTag}'
+                  : 'title:${normalizeTitle(firstItem.name)}'));
 
-      if (groupKey.startsWith('tmdb:') || groupKey.startsWith('imdb:')) {
-        matchReason = DuplicateMatchReason.providerId;
-        final idVal = groupKey.split(':').last;
-        matchDetail = groupKey.startsWith('tmdb:') ? 'TMDb ID: $idVal' : 'IMDb ID: $idVal';
-      } else if (groupKey.startsWith('episode:')) {
-        matchReason = DuplicateMatchReason.episode;
-        final parts = groupKey.split(':');
-        final season = parts.length > 2 ? parts[2].toUpperCase() : '';
-        final ep = parts.length > 3 ? parts[3].toUpperCase() : '';
-        matchDetail = '同一剧集单集 ($season$ep)';
-      } else {
-        matchReason = DuplicateMatchReason.titleAndYear;
-        final year = groupItems.first.productionYear;
-        matchDetail = year != null ? '规范化标题相同 ($year年)' : '规范化标题相同';
-      }
+      if (ignoredGroupIds.contains(groupId)) continue;
 
       // Compute quality metrics for each item in the group
       final scoredItems = groupItems.map((item) {
@@ -255,7 +382,6 @@ class DuplicateDetectorService {
       final bestItem = scoredItems.first;
       final recommendedKeepId = bestItem.item.id;
 
-      // Default to selecting all other items for deletion
       final defaultDeleteIds = scoredItems
           .where((i) => i.item.id != recommendedKeepId)
           .map((i) => i.item.id)
@@ -271,7 +397,7 @@ class DuplicateDetectorService {
 
       resultGroups.add(
         DuplicateMediaGroup(
-          id: groupKey,
+          id: groupId,
           title: groupItems.first.name,
           productionYear: groupItems.first.productionYear,
           matchReason: matchReason,

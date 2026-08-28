@@ -22,10 +22,14 @@ class MediaDedupePage extends ConsumerStatefulWidget {
     super.key,
     required this.account,
     this.initialItems = const [],
+    this.libraryId,
+    this.libraryName,
   });
 
   final AuthenticatedServer? account;
   final List<MediaItem> initialItems;
+  final String? libraryId;
+  final String? libraryName;
 
   @override
   ConsumerState<MediaDedupePage> createState() => _MediaDedupePageState();
@@ -37,6 +41,8 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
   Set<String> _ignoredGroupIds = {};
   bool _scanning = false;
   int _scannedItemCount = 0;
+  int _totalItemCount = 0;
+  String _scanProgressMessage = '准备扫描媒体库...';
   String _selectedFilter = 'all'; // 'all', 'movie', 'series', 'local'
 
   @override
@@ -52,30 +58,43 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
   }
 
   Future<void> _initAndScan() async {
-    setState(() => _scanning = true);
+    setState(() {
+      _scanning = true;
+      _scannedItemCount = 0;
+      _totalItemCount = 0;
+      _scanProgressMessage = '正在读取查重白名单配置...';
+    });
     final ignoredStore = ref.read(duplicateIgnoredStoreProvider);
     _ignoredGroupIds = await ignoredStore.read();
 
-    List<MediaItem> itemsToScan = widget.initialItems;
+    List<MediaItem> itemsToScan = [];
 
-    // If initial items are empty and account exists, fetch from media library
-    if (itemsToScan.isEmpty && widget.account != null) {
+    if (widget.account != null) {
       try {
         final libraryService = ref.read(mediaLibraryProvider);
-        final libraries = await libraryService.getLibraries(widget.account!);
-        final allItems = <MediaItem>[];
-        for (final lib in libraries) {
-          final page = await libraryService.getItems(
-            widget.account!,
-            parentId: lib.id,
-            limit: 300,
-          );
-          allItems.addAll(page.items);
-        }
-        itemsToScan = allItems;
+        setState(() => _scanProgressMessage = '正在全面拉取媒体库所有条目及演职员元数据...');
+        itemsToScan = await libraryService.fetchAllMediaForDedupe(
+          widget.account!,
+          parentId: widget.libraryId,
+          onProgress: (loaded, total) {
+            if (mounted) {
+              setState(() {
+                _scannedItemCount = loaded;
+                _totalItemCount = total;
+                _scanProgressMessage = '正在遍历媒体条目: 已拉取 $loaded / $total 项...';
+              });
+            }
+          },
+        );
       } catch (_) {
-        // Suppress initial fetch error, fallback to empty
+        itemsToScan = widget.initialItems;
       }
+    } else {
+      itemsToScan = widget.initialItems;
+    }
+
+    if (mounted) {
+      setState(() => _scanProgressMessage = '正在运行多维特征聚类算法（比对封面、主演、片长与番号）...');
     }
 
     final detector = ref.read(duplicateDetectorServiceProvider);
@@ -292,17 +311,46 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
               _buildFilterChips(),
               Expanded(
                 child: _scanning
-                    ? const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text(
-                              '正在智能多维扫描媒体库重复资源…',
-                              style: TextStyle(color: AppColors.textSecondary),
-                            ),
-                          ],
+                    ? Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(32),
+                          decoration: AppGlass.decoration(radius: 20),
+                          constraints: const BoxConstraints(maxWidth: 440),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CircularProgressIndicator(),
+                              const SizedBox(height: 20),
+                              Text(
+                                _scanProgressMessage,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              if (_totalItemCount > 0) ...[
+                                const SizedBox(height: 14),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: (_scannedItemCount / _totalItemCount).clamp(0.0, 1.0),
+                                    minHeight: 6,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '已处理 $_scannedItemCount / $_totalItemCount 项',
+                                  style: const TextStyle(
+                                    fontFamily: 'Cascadia Mono',
+                                    fontSize: 12,
+                                    color: AppColors.textTertiary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       )
                     : filteredGroups.isEmpty
@@ -337,20 +385,22 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
             icon: const Icon(Icons.arrow_back_rounded),
           ),
           const SizedBox(width: 14),
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '媒体库查重与智能去重',
-                style: TextStyle(
+                widget.libraryName != null
+                    ? '媒体库查重与智能去重 · ${widget.libraryName}'
+                    : '媒体库查重与智能去重',
+                style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
               ),
-              SizedBox(height: 3),
-              Text(
-                '基于 TMDb 元数据、标题年份及集数智能匹配，识别优质保留与冗余文件',
+              const SizedBox(height: 3),
+              const Text(
+                '基于 TMDb 元数据、封面海报、同名演职员、片长及识别码，多维聚类识别冗余文件',
                 style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
               ),
             ],
