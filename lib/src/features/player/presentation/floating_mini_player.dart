@@ -153,12 +153,14 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
                                   ),
                                 ),
                                 IconButton(
+                                  key: const ValueKey('mini-player-expand'),
                                   visualDensity: VisualDensity.compact,
                                   tooltip: '还原全屏播放',
                                   icon: const Icon(Icons.fullscreen_rounded, color: Colors.white, size: 20),
                                   onPressed: () => coordinator.expand(context),
                                 ),
                                 IconButton(
+                                  key: const ValueKey('mini-player-close'),
                                   visualDensity: VisualDensity.compact,
                                   tooltip: '关闭播放',
                                   icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
@@ -174,6 +176,7 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
+                                  key: const ValueKey('mini-player-seek-back'),
                                   tooltip: '快退 10 秒',
                                   icon: const Icon(Icons.replay_10_rounded, color: Colors.white, size: 24),
                                   onPressed: () => coordinator.seekRelative(const Duration(seconds: -10)),
@@ -185,6 +188,7 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
                                     shape: BoxShape.circle,
                                   ),
                                   child: IconButton(
+                                    key: const ValueKey('mini-player-play-pause'),
                                     tooltip: state.playing ? '暂停' : '播放',
                                     icon: Icon(
                                       state.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
@@ -196,6 +200,7 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton(
+                                  key: const ValueKey('mini-player-seek-forward'),
                                   tooltip: '快进 10 秒',
                                   icon: const Icon(Icons.forward_10_rounded, color: Colors.white, size: 24),
                                   onPressed: () => coordinator.seekRelative(const Duration(seconds: 10)),

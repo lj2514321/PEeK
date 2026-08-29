@@ -24,11 +24,17 @@ class EmbyPlayerApp extends StatelessWidget {
       builder: (context, child) {
         final content = PeekSmoothScroll(child: child ?? const SizedBox.shrink());
         if (defaultTargetPlatform != TargetPlatform.windows) {
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              content,
-              const FloatingMiniPlayer(),
+          return Overlay(
+            initialEntries: [
+              OverlayEntry(
+                builder: (context) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    content,
+                    const FloatingMiniPlayer(),
+                  ],
+                ),
+              ),
             ],
           );
         }
@@ -63,20 +69,26 @@ class _FramelessWindowSurface extends StatelessWidget {
             constraints.maxWidth > AppChrome.windowControlsWidth + 320;
         return DragToResizeArea(
           resizeEdgeSize: 5,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              child,
-              if (canShowDragArea)
-                const Positioned(
-                  top: 0,
-                  left: 260,
-                  right: AppChrome.windowControlsWidth,
-                  height: AppChrome.windowControlsHeight,
-                  child: DragToMoveArea(child: SizedBox.expand()),
+          child: Overlay(
+            initialEntries: [
+              OverlayEntry(
+                builder: (context) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    child,
+                    if (canShowDragArea)
+                      const Positioned(
+                        top: 0,
+                        left: 260,
+                        right: AppChrome.windowControlsWidth,
+                        height: AppChrome.windowControlsHeight,
+                        child: DragToMoveArea(child: SizedBox.expand()),
+                      ),
+                    const Positioned(top: 0, right: 0, child: _WindowControls()),
+                    const FloatingMiniPlayer(),
+                  ],
                 ),
-              const Positioned(top: 0, right: 0, child: _WindowControls()),
-              const FloatingMiniPlayer(),
+              ),
             ],
           ),
         );
