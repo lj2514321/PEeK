@@ -607,6 +607,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     }
     if (_fullScreen) {
       await _toggleFullScreen();
+    } else if (_isPip || WindowPipController.instance.isPip) {
+      await _togglePip();
     } else {
       await _close();
     }
@@ -1828,6 +1830,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       }
       _fullScreen = false;
     }
+    if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
+      try {
+        await WindowPipController.instance.exitPip();
+      } on Object {
+        // The page still needs to close if the native window is unavailable.
+      }
+      _isPip = false;
+    }
     await _disposePlayer();
     if (mounted) Navigator.of(context).pop();
   }
@@ -1864,6 +1874,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     }
     if (_fullScreen && Platform.isWindows) {
       unawaited(_setNativeFullScreen(false));
+    }
+    if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
+      unawaited(WindowPipController.instance.exitPip());
+      _isPip = false;
     }
     if (!_reportedStopped) unawaited(_safeReportStopped());
     if (!_systemMediaDisposed) unawaited(_disposeSystemMedia());

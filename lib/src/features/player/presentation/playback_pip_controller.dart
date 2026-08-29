@@ -9,13 +9,18 @@ class WindowPipController {
 
   bool _isPip = false;
   Rect? _savedBounds;
+  bool _wasMaximized = false;
 
   bool get isPip => _isPip;
 
   Future<bool> enterPip({Size pipSize = const Size(480, 270)}) async {
     if (_isPip) return true;
     try {
+      _wasMaximized = await windowManager.isMaximized();
       _savedBounds = await windowManager.getBounds();
+      if (_wasMaximized) {
+        await windowManager.unmaximize();
+      }
       await windowManager.setAlwaysOnTop(true);
       await windowManager.setMinimumSize(const Size(320, 180));
       await windowManager.setSize(pipSize);
@@ -31,15 +36,21 @@ class WindowPipController {
     try {
       await windowManager.setAlwaysOnTop(false);
       await windowManager.setMinimumSize(const Size(800, 500));
-      if (_savedBounds != null) {
+      if (_wasMaximized) {
+        await windowManager.maximize();
+      } else if (_savedBounds != null &&
+          _savedBounds!.width >= 640 &&
+          _savedBounds!.height >= 400) {
         await windowManager.setBounds(_savedBounds!);
-        _savedBounds = null;
       } else {
         await windowManager.setSize(const Size(1280, 720));
       }
+      _savedBounds = null;
+      _wasMaximized = false;
       _isPip = false;
       return true;
     } catch (_) {
+      _isPip = false;
       return false;
     }
   }
