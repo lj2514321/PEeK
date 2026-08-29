@@ -1868,8 +1868,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _minimize() async {
-    if (_closing) return;
-    _minimized = true;
+    if (_closing || _minimized) return;
+    if (mounted) {
+      setState(() => _minimized = true);
+    }
     if (_fullScreen && Platform.isWindows) {
       try {
         await _setNativeFullScreen(false);
@@ -2084,12 +2086,6 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
               },
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onPanStart: (_) {
-                  _ensureFocused();
-                  if (!_fullScreen && Platform.isWindows) {
-                    unawaited(windowManager.startDragging());
-                  }
-                },
                 onTap: () {
                   _ensureFocused();
                   _toggleControlsVisibility();
@@ -2102,7 +2098,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                   fit: StackFit.expand,
                   children: [
                     RepaintBoundary(
-                      child: _runtime.buildVideoSurface(
+                      child: _minimized
+                          ? const ColoredBox(color: Colors.black)
+                          : _runtime.buildVideoSurface(
                         subtitleConfiguration: SubtitleViewConfiguration(
                           style: TextStyle(
                             height: 1.35,

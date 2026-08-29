@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/presentation/floating_mini_player.dart';
 import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
@@ -137,6 +139,13 @@ void main() {
 
     expect(find.byKey(const ValueKey('fake-mini-video-surface')), findsOneWidget);
     expect(find.text('Interstellar'), findsOneWidget);
+
+    // Hover over mini player to reveal controls
+    final miniPlayer = find.byType(FloatingMiniPlayer);
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    await gesture.moveTo(tester.getCenter(miniPlayer));
+    await tester.pumpAndSettle();
 
     // Tap Close Button
     final closeBtn = find.byTooltip('关闭播放');

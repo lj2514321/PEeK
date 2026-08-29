@@ -26,7 +26,7 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
     if (state.mode != PlaybackPresentationMode.mini ||
         state.runtime == null ||
         state.item == null) {
-      return const SizedBox.shrink();
+      return const Positioned(width: 0, height: 0, child: SizedBox.shrink());
     }
 
     final screenSize = MediaQuery.of(context).size;
@@ -53,63 +53,73 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
       top: clampedY,
       width: FloatingMiniPlayer.miniWidth,
       height: FloatingMiniPlayer.miniHeight,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
-        child: GestureDetector(
-          onPanUpdate: (details) {
-            setState(() {
-              _position = Offset(
-                clampedX + details.delta.dx,
-                clampedY + details.delta.dy,
-              );
-            });
-          },
-          onTap: () => coordinator.expand(context),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.22),
-                width: 1.2,
+      child: Material(
+        type: MaterialType.transparency,
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          child: GestureDetector(
+            onPanUpdate: (details) {
+              setState(() {
+                _position = Offset(
+                  clampedX + details.delta.dx,
+                  clampedY + details.delta.dy,
+                );
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.22),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    blurRadius: 28,
+                    offset: const Offset(0, 10),
+                  ),
+                  BoxShadow(
+                    color: AppColors.spotlight.withValues(alpha: 0.25),
+                    blurRadius: 18,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.65),
-                  blurRadius: 28,
-                  offset: const Offset(0, 10),
-                ),
-                BoxShadow(
-                  color: AppColors.spotlight.withValues(alpha: 0.25),
-                  blurRadius: 18,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(15),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Video Surface
-                  state.runtime!.buildVideoSurface(
-                    subtitleConfiguration: const SubtitleViewConfiguration(
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(blurRadius: 4, color: Colors.black),
-                        ],
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Video Surface with tap-to-expand
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => coordinator.expand(context),
+                      child: Container(
+                        color: Colors.black,
+                        child: state.runtime!.buildVideoSurface(
+                          subtitleConfiguration: const SubtitleViewConfiguration(
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(blurRadius: 4, color: Colors.black),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
 
-                  // Hover Controls Overlay
-                  AnimatedOpacity(
-                    opacity: _isHovered ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 180),
-                    child: Container(
+                    // Hover Controls Overlay
+                    IgnorePointer(
+                      ignoring: !_isHovered,
+                      child: AnimatedOpacity(
+                        opacity: _isHovered ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 180),
+                        child: Container(
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
@@ -212,12 +222,14 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 }
