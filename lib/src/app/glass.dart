@@ -47,37 +47,87 @@ abstract final class AppGlass {
     double radius = radiusLarge,
     Color? tint,
     bool elevated = true,
+    Color? glowColor,
+    double borderOpacity = 0.22,
   }) {
-    final base = tint ?? Colors.black.withValues(alpha: 0.65);
+    final base = tint ?? Colors.black.withValues(alpha: 0.62);
+    final glow = glowColor ?? const Color(0x384A90E2);
     return BoxDecoration(
       color: base,
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Colors.white.withValues(alpha: 0.16),
+          Colors.white.withValues(alpha: 0.18),
           Colors.white.withValues(alpha: 0.04),
-          Colors.black.withValues(alpha: 0.45),
+          Colors.black.withValues(alpha: 0.50),
         ],
-        stops: const [0.0, 0.45, 1.0],
+        stops: const [0.0, 0.40, 1.0],
       ),
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: Colors.white.withValues(alpha: 0.22),
+        color: Colors.white.withValues(alpha: borderOpacity),
         width: 1.2,
       ),
       boxShadow: [
-        const BoxShadow(
-          color: Color(0x384A90E2),
+        BoxShadow(
+          color: glow,
           blurRadius: 36,
-          spreadRadius: 2,
+          spreadRadius: 1,
         ),
         BoxShadow(
-          color: Colors.black.withValues(alpha: elevated ? 0.55 : 0.3),
+          color: Colors.black.withValues(alpha: elevated ? 0.58 : 0.32),
           blurRadius: elevated ? 42 : 24,
-          offset: Offset(0, elevated ? 20 : 10),
+          offset: Offset(0, elevated ? 18 : 10),
         ),
       ],
+    );
+  }
+}
+
+/// VisionOS Ambient Glow Container for posters and hero cards.
+///
+/// Projects a diffuse, softened atmospheric aura behind the foreground card,
+/// mimicking the backlight bounce of Apple TV / VisionOS spatial cards.
+class PosterAmbientGlow extends StatelessWidget {
+  const PosterAmbientGlow({
+    super.key,
+    required this.child,
+    this.glowColor,
+    this.borderRadius = 18.0,
+    this.blurRadius = 38.0,
+    this.spreadRadius = 3.0,
+    this.offset = const Offset(0, 12),
+  });
+
+  final Widget child;
+  final Color? glowColor;
+  final double borderRadius;
+  final double blurRadius;
+  final double spreadRadius;
+  final Offset offset;
+
+  @override
+  Widget build(BuildContext context) {
+    final glow = glowColor ?? const Color(0x40767BEA);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(borderRadius),
+        boxShadow: [
+          BoxShadow(
+            color: glow,
+            blurRadius: blurRadius,
+            spreadRadius: spreadRadius,
+            offset: offset,
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 28,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }

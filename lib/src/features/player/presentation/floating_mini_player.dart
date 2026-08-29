@@ -1,3 +1,4 @@
+import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:flutter/material.dart';
@@ -68,28 +69,14 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
               });
             },
             child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.22),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    blurRadius: 28,
-                    offset: const Offset(0, 10),
-                  ),
-                  BoxShadow(
-                    color: AppColors.spotlight.withValues(alpha: 0.25),
-                    blurRadius: 18,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+              decoration: AppGlass.visionOSDecoration(
+                radius: 18,
+                elevated: true,
+                glowColor: const Color(0x354A90E2),
+                borderOpacity: 0.30,
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(18),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [

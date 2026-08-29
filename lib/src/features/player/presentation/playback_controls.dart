@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
@@ -416,22 +418,30 @@ class _PlaybackBottomBar extends StatelessWidget {
         final padding = compact
             ? const EdgeInsets.fromLTRB(10, 0, 10, 10)
             : const EdgeInsets.fromLTRB(22, 0, 22, 18);
+        final radius = compact ? 22.0 : 28.0;
         return Padding(
           padding: padding,
-          child: GlassSurface(
-            radius: compact ? 16 : 20,
-            blur: 0,
-            tint: const Color(0xB80D1018),
-            elevated: true,
-            padding: EdgeInsets.fromLTRB(
-              compact ? 8 : 14,
-              4,
-              compact ? 8 : 14,
-              compact ? 7 : 10,
+          child: Container(
+            decoration: AppGlass.visionOSDecoration(
+              radius: radius,
+              elevated: true,
+              glowColor: const Color(0x304A90E2),
+              borderOpacity: 0.28,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    compact ? 10 : 16,
+                    6,
+                    compact ? 10 : 16,
+                    compact ? 8 : 12,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                 if (chapters.isNotEmpty)
                   _ChapterRail(
                     chapters: chapters,
@@ -562,10 +572,13 @@ class _PlaybackBottomBar extends StatelessWidget {
               ],
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      ),
+    ),
+  );
+},
+);
+}
 }
 
 class _Timeline extends StatelessWidget {
@@ -787,6 +800,8 @@ class _ControlIconButton extends StatelessWidget {
           ? IconButton.styleFrom(
               foregroundColor: AppColors.onSpotlight,
               backgroundColor: AppColors.spotlight,
+              shadowColor: AppColors.spotlight.withValues(alpha: 0.45),
+              elevation: 8,
             )
           : null,
       icon: Icon(icon, size: prominent ? 25 : 21),

@@ -468,14 +468,24 @@ class _DetailPoster extends StatelessWidget {
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 2 / 3,
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: AppGlass.decoration(radius: 18, elevated: true),
-        child: PeekMediaImage(
-          uri: item.imageUri,
-          headers: item.imageHeaders,
-          kind: PeekMediaImageKind.poster,
-          placeholderIconSize: 54,
+      child: PosterAmbientGlow(
+        glowColor: const Color(0x404A90E2),
+        borderRadius: 20,
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.26),
+              width: 1.2,
+            ),
+          ),
+          child: PeekMediaImage(
+            uri: item.imageUri,
+            headers: item.imageHeaders,
+            kind: PeekMediaImageKind.poster,
+            placeholderIconSize: 54,
+          ),
         ),
       ),
     );
@@ -627,6 +637,10 @@ class _PlaybackActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = FilledButton.icon(
       onPressed: planning ? null : onPlay,
+      style: FilledButton.styleFrom(
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      ),
       icon: planning
           ? const SizedBox.square(
               dimension: 18,
@@ -643,6 +657,10 @@ class _PlaybackActions extends StatelessWidget {
     );
     final restart = OutlinedButton.icon(
       onPressed: planning ? null : onPlayFromBeginning,
+      style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      ),
       icon: const Icon(Icons.replay_rounded),
       label: const Text('从头播放'),
     );
@@ -691,6 +709,8 @@ class _UserStateActions extends StatelessWidget {
       key: const ValueKey('detail-favorite-button'),
       onPressed: updatingFavorite ? null : onToggleFavorite,
       style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         backgroundColor: favorite
             ? AppColors.spotlight.withValues(alpha: 0.12)
             : null,
@@ -710,6 +730,8 @@ class _UserStateActions extends StatelessWidget {
       key: const ValueKey('detail-played-button'),
       onPressed: updatingPlayed ? null : onTogglePlayed,
       style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         backgroundColor: played
             ? AppColors.success.withValues(alpha: 0.12)
             : null,
