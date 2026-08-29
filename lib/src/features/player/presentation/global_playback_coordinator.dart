@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
@@ -73,6 +74,7 @@ final globalPlaybackCoordinatorProvider =
 class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   PlaybackRuntime? _activeRuntime;
+  Timer? _miniProgressTimer;
 
   @override
   GlobalPlaybackState build() {
@@ -96,11 +98,14 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     _subscriptions.add(
       runtime.playingStream.listen((playing) {
         state = state.copyWith(playing: playing);
+        _syncMiniProgressTimer();
       }),
     );
     _subscriptions.add(
       runtime.positionStream.listen((position) {
-        state = state.copyWith(position: position);
+        if (position > Duration.zero || state.position == Duration.zero) {
+          state = state.copyWith(position: position);
+        }
       }),
     );
     _subscriptions.add(
@@ -124,6 +129,7 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   void minimize(BuildContext context) {
     if (state.runtime == null || state.item == null) return;
     state = state.copyWith(mode: PlaybackPresentationMode.mini);
+    _syncMiniProgressTimer();
     Navigator.of(context).pop();
   }
 
@@ -135,6 +141,8 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     final queue = state.queue;
     final runtime = state.runtime!;
 
+    _miniProgressTimer?.cancel();
+    _miniProgressTimer = null;
     state = state.copyWith(mode: PlaybackPresentationMode.full);
 
     Navigator.of(context).push<void>(
@@ -154,6 +162,7 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     final runtime = state.runtime;
     if (runtime == null) return;
     await runtime.playOrPause();
+    _syncMiniProgressTimer();
   }
 
   Future<void> seekRelative(Duration delta) async {
@@ -169,12 +178,17 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
       ),
     );
     await runtime.seek(clamped);
+    if (state.mode == PlaybackPresentationMode.mini) {
+      _reportMiniProgress('Seek');
+    }
   }
 
   Future<void> close({bool disposeRuntime = true}) async {
     final runtime = state.runtime;
     final item = state.item;
     final pos = state.position;
+    final account = state.account;
+    final plan = state.plan;
 
     _cancelSubscriptions();
 
@@ -190,6 +204,27 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
       }
     }
 
+    // If closing from floating mini player, report Stopped to Emby with latest position
+    if (disposeRuntime &&
+        account != null &&
+        plan != null &&
+        item != null &&
+        !item.isLocal &&
+        pos > Duration.zero) {
+      try {
+        final snapshot = PlaybackSessionSnapshot(
+          plan: plan,
+          position: pos,
+          isPaused: true,
+          volume: 100,
+          playbackRate: 1.0,
+        );
+        await ref.read(playbackServiceProvider).reportStopped(account, snapshot);
+      } catch (_) {
+        // Safe report
+      }
+    }
+
     state = const GlobalPlaybackState(mode: PlaybackPresentationMode.hidden);
     _activeRuntime = null;
 
@@ -199,7 +234,43 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     }
   }
 
+  void _syncMiniProgressTimer() {
+    _miniProgressTimer?.cancel();
+    _miniProgressTimer = null;
+    if (state.mode == PlaybackPresentationMode.mini && state.playing) {
+      _miniProgressTimer = Timer.periodic(
+        const Duration(seconds: 10),
+        (_) => _reportMiniProgress('TimeUpdate'),
+      );
+    }
+  }
+
+  void _reportMiniProgress(String eventName) {
+    final account = state.account;
+    final plan = state.plan;
+    final item = state.item;
+    if (account == null || plan == null || item == null || item.isLocal) return;
+    try {
+      final snapshot = PlaybackSessionSnapshot(
+        plan: plan,
+        position: state.position,
+        isPaused: !state.playing,
+        volume: 100,
+        playbackRate: 1.0,
+      );
+      ref.read(playbackServiceProvider).reportProgress(
+            account,
+            snapshot,
+            eventName: eventName,
+          );
+    } catch (_) {
+      // Periodic reporting can fail silently
+    }
+  }
+
   void _cancelSubscriptions() {
+    _miniProgressTimer?.cancel();
+    _miniProgressTimer = null;
     for (final s in _subscriptions) {
       unawaited(s.cancel());
     }

@@ -102,6 +102,11 @@ void main() {
 
       expect(runtime.seekCalls, [const Duration(seconds: 20)]);
 
+      // Premature completion event while only at 20s of a 2h movie should NOT mark played
+      runtime._completedController.add(true);
+      await tester.pump();
+      expect(playbackService.markPlayedCount, 0);
+
       await tester.tap(find.byKey(const ValueKey('player-close')));
       await tester.pump();
       await tester.pumpAndSettle();
@@ -320,6 +325,12 @@ class _RecordingPlaybackService extends PlaybackService {
 
   int startedCount = 0;
   int stoppedCount = 0;
+  int markPlayedCount = 0;
+
+  @override
+  Future<void> markPlayed(AuthenticatedServer account, String itemId) async {
+    markPlayedCount++;
+  }
 
   @override
   Future<void> reportStarted(

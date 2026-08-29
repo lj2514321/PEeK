@@ -1786,6 +1786,22 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Future<void> _finishCompletedPlayback() async {
     if (_closing || _changingSource || _nextEpisodeCountdown != null) return;
+
+    // Validate that playback has ACTUALLY reached the end
+    // (at least 90% or within 30 seconds of total duration).
+    // Prevents premature completion events from falsely marking items as played
+    // and removing them from "Continue Watching".
+    final duration = _effectiveDuration;
+    final isActuallyFinished = duration > const Duration(seconds: 30)
+        ? (_position >= duration * 0.90 || (duration - _position).inSeconds <= 30)
+        : _position > Duration.zero;
+
+    if (!isActuallyFinished) {
+      // False-positive EOF / stream disconnect; report current progress without marking played
+      unawaited(_safeReportProgress('TimeUpdate'));
+      return;
+    }
+
     _progressTimer?.cancel();
     await _safeReportStopped();
     unawaited(_safeMarkPlayed());
@@ -1798,9 +1814,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   PlaybackSessionSnapshot _snapshot() {
+    final effectivePosition = _position > _runtime.position ? _position : _runtime.position;
     return PlaybackSessionSnapshot(
       plan: _plan,
-      position: _runtime.position,
+      position: effectivePosition,
       isPaused: !_runtime.playing,
       volume: _volume,
       audioStreamIndex: _selectedAudioStreamIndex,
