@@ -102,7 +102,7 @@ void main() {
 
       expect(runtime.seekCalls, [const Duration(seconds: 20)]);
 
-      await tester.tap(find.byKey(const ValueKey('player-back')));
+      await tester.tap(find.byKey(const ValueKey('player-close')));
       await tester.pump();
       await tester.pumpAndSettle();
 

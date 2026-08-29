@@ -1,0 +1,208 @@
+import 'dart:async';
+
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
+import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
+import 'package:embyplayer/src/features/servers/domain/media_item.dart';
+import 'package:embyplayer/src/features/servers/domain/server.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+enum PlaybackPresentationMode {
+  hidden,
+  mini,
+  full,
+}
+
+class GlobalPlaybackState {
+  const GlobalPlaybackState({
+    this.mode = PlaybackPresentationMode.hidden,
+    this.account,
+    this.item,
+    this.plan,
+    this.queue,
+    this.runtime,
+    this.playing = false,
+    this.position = Duration.zero,
+    this.duration = Duration.zero,
+  });
+
+  final PlaybackPresentationMode mode;
+  final AuthenticatedServer? account;
+  final MediaItem? item;
+  final PlaybackPlan? plan;
+  final PlaybackQueue? queue;
+  final PlaybackRuntime? runtime;
+  final bool playing;
+  final Duration position;
+  final Duration duration;
+
+  GlobalPlaybackState copyWith({
+    PlaybackPresentationMode? mode,
+    AuthenticatedServer? account,
+    MediaItem? item,
+    PlaybackPlan? plan,
+    PlaybackQueue? queue,
+    PlaybackRuntime? runtime,
+    bool? playing,
+    Duration? position,
+    Duration? duration,
+  }) {
+    return GlobalPlaybackState(
+      mode: mode ?? this.mode,
+      account: account ?? this.account,
+      item: item ?? this.item,
+      plan: plan ?? this.plan,
+      queue: queue ?? this.queue,
+      runtime: runtime ?? this.runtime,
+      playing: playing ?? this.playing,
+      position: position ?? this.position,
+      duration: duration ?? this.duration,
+    );
+  }
+}
+
+final globalPlaybackCoordinatorProvider =
+    NotifierProvider<GlobalPlaybackCoordinator, GlobalPlaybackState>(
+  GlobalPlaybackCoordinator.new,
+);
+
+class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
+  PlaybackRuntime? _activeRuntime;
+
+  @override
+  GlobalPlaybackState build() {
+    ref.onDispose(() {
+      _cancelSubscriptions();
+      _activeRuntime?.dispose();
+    });
+    return const GlobalPlaybackState();
+  }
+
+  void registerActivePlayback({
+    required AuthenticatedServer? account,
+    required MediaItem item,
+    required PlaybackPlan plan,
+    PlaybackQueue? queue,
+    required PlaybackRuntime runtime,
+  }) {
+    _cancelSubscriptions();
+    _activeRuntime = runtime;
+
+    _subscriptions.add(
+      runtime.playingStream.listen((playing) {
+        state = state.copyWith(playing: playing);
+      }),
+    );
+    _subscriptions.add(
+      runtime.positionStream.listen((position) {
+        state = state.copyWith(position: position);
+      }),
+    );
+    _subscriptions.add(
+      runtime.durationStream.listen((duration) {
+        state = state.copyWith(duration: duration);
+      }),
+    );
+
+    state = GlobalPlaybackState(
+      mode: PlaybackPresentationMode.full,
+      account: account,
+      item: item,
+      plan: plan,
+      queue: queue,
+      runtime: runtime,
+      playing: runtime.playing,
+      position: runtime.position,
+    );
+  }
+
+  void minimize(BuildContext context) {
+    if (state.runtime == null || state.item == null) return;
+    state = state.copyWith(mode: PlaybackPresentationMode.mini);
+    Navigator.of(context).pop();
+  }
+
+  void expand(BuildContext context) {
+    if (state.runtime == null || state.item == null || state.plan == null) return;
+    final item = state.item!;
+    final account = state.account;
+    final plan = state.plan!;
+    final queue = state.queue;
+    final runtime = state.runtime!;
+
+    state = state.copyWith(mode: PlaybackPresentationMode.full);
+
+    Navigator.of(context).push<void>(
+      Peek3DPageRoute(
+        builder: (context) => PlaybackPage(
+          account: account,
+          item: item,
+          plan: plan,
+          queue: queue,
+          runtime: runtime,
+        ),
+      ),
+    );
+  }
+
+  Future<void> togglePlayPause() async {
+    final runtime = state.runtime;
+    if (runtime == null) return;
+    await runtime.playOrPause();
+  }
+
+  Future<void> seekRelative(Duration delta) async {
+    final runtime = state.runtime;
+    if (runtime == null) return;
+    final target = state.position + delta;
+    final clamped = Duration(
+      milliseconds: target.inMilliseconds.clamp(
+        0,
+        state.duration.inMilliseconds > 0
+            ? state.duration.inMilliseconds
+            : target.inMilliseconds,
+      ),
+    );
+    await runtime.seek(clamped);
+  }
+
+  Future<void> close({bool disposeRuntime = true}) async {
+    final runtime = state.runtime;
+    final item = state.item;
+    final pos = state.position;
+
+    _cancelSubscriptions();
+
+    if (item != null) {
+      final watchMinutes = (pos.inSeconds / 60).round();
+      if (watchMinutes > 0) {
+        unawaited(
+          ViewingHistoryStore().recordViewing(
+            minutes: watchMinutes,
+            kind: item.kind.name,
+          ),
+        );
+      }
+    }
+
+    state = const GlobalPlaybackState(mode: PlaybackPresentationMode.hidden);
+    _activeRuntime = null;
+
+    if (disposeRuntime && runtime != null) {
+      await runtime.pause();
+      await runtime.dispose();
+    }
+  }
+
+  void _cancelSubscriptions() {
+    for (final s in _subscriptions) {
+      unawaited(s.cancel());
+    }
+    _subscriptions.clear();
+  }
+}

@@ -26,6 +26,7 @@ import 'package:embyplayer/src/features/player/presentation/playback_drop_target
 import 'package:embyplayer/src/features/player/domain/audio_enhancement_settings.dart';
 import 'package:embyplayer/src/features/player/presentation/audio_enhancement_sheet.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_pip_controller.dart';
+import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
 import 'package:embyplayer/src/features/danmaku/data/dandanplay_service.dart';
 import 'package:embyplayer/src/features/danmaku/presentation/danmaku_overlay.dart';
@@ -86,6 +87,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   late final SystemMediaSession _systemMediaSession;
   final PlaybackDiagnosticsService _diagnosticsService =
       const PlaybackDiagnosticsService();
+  bool _minimized = false;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -182,6 +184,17 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _listenToPlayer();
     Future<void>.microtask(_initializeSystemMedia);
     Future<void>.microtask(_openInitialMedia);
+    Future<void>.microtask(() {
+      if (mounted) {
+        ref.read(globalPlaybackCoordinatorProvider.notifier).registerActivePlayback(
+          account: widget.account,
+          item: widget.item,
+          plan: widget.plan,
+          queue: widget.queue,
+          runtime: _runtime,
+        );
+      }
+    });
   }
 
   void _listenToPlayer() {
@@ -610,7 +623,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     } else if (_isPip || WindowPipController.instance.isPip) {
       await _togglePip();
     } else {
-      await _close();
+      await _minimize();
     }
   }
 
@@ -1798,9 +1811,50 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     );
   }
 
+  Future<void> _minimize() async {
+    if (_closing) return;
+    _minimized = true;
+    if (_fullScreen && Platform.isWindows) {
+      try {
+        await _setNativeFullScreen(false);
+      } on Object {
+        // Suppress failure during window restore
+      }
+      _fullScreen = false;
+    }
+    if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
+      try {
+        await WindowPipController.instance.exitPip();
+      } on Object {
+        // Suppress failure during window restore
+      }
+      _isPip = false;
+    }
+    _progressTimer?.cancel();
+    _interactions.cancelControlsHide();
+    _nextEpisodeTimer?.cancel();
+    _diagnosticsTimer?.cancel();
+    _subtitleSettingsTimer?.cancel();
+    _systemTimelineTimer?.cancel();
+    _systemVolumeRetryTimer?.cancel();
+    _interactions.cancelPendingSeek();
+
+    ref.read(globalPlaybackCoordinatorProvider.notifier).registerActivePlayback(
+      account: widget.account,
+      item: _item,
+      plan: _plan,
+      queue: _queue,
+      runtime: _runtime,
+    );
+    if (mounted) {
+      ref.read(globalPlaybackCoordinatorProvider.notifier).minimize(context);
+    }
+  }
+
   Future<void> _close() async {
     if (_closing) return;
     setState(() => _closing = true);
+    unawaited(ref.read(globalPlaybackCoordinatorProvider.notifier).close(disposeRuntime: false));
     _progressTimer?.cancel();
     _interactions.cancelControlsHide();
     _nextEpisodeTimer?.cancel();
@@ -1879,9 +1933,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       unawaited(WindowPipController.instance.exitPip());
       _isPip = false;
     }
-    if (!_reportedStopped) unawaited(_safeReportStopped());
-    if (!_systemMediaDisposed) unawaited(_disposeSystemMedia());
-    if (!_playerDisposed) unawaited(_disposePlayer());
+    if (!_minimized) {
+      if (!_reportedStopped) unawaited(_safeReportStopped());
+      if (!_systemMediaDisposed) unawaited(_disposeSystemMedia());
+      if (!_playerDisposed) unawaited(_disposePlayer());
+    }
     _timelineNotifier.dispose();
     _pageFocusNode.dispose();
     super.dispose();
@@ -2046,7 +2102,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                             queueAvailable: (_queue?.items.length ?? 0) > 1,
                             canPrevious: _queue?.hasPrevious ?? false,
                             canNext: _queue?.hasNext ?? false,
-                            onBack: () => unawaited(_close()),
+                            onBack: () => unawaited(_minimize()),
+                            onClose: () => unawaited(_close()),
                             onPlayPause: () => unawaited(_togglePlayPause()),
                             onSeekPreview: _previewSeek,
                             onSeek: (value) => unawaited(_seek(value)),

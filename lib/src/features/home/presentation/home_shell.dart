@@ -17,6 +17,7 @@ import 'package:embyplayer/src/features/local_library/data/local_media_library_s
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/people/presentation/actors_page.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
+import 'package:embyplayer/src/features/player/presentation/floating_mini_player.dart';
 import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:embyplayer/src/features/servers/presentation/server_accounts_page.dart';
@@ -705,6 +706,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                             onToggle: _toggleSidebar,
                           ),
                         ),
+                      const FloatingMiniPlayer(),
                     ],
                   ),
                 ),

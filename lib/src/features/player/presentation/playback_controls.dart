@@ -50,6 +50,7 @@ class PlaybackControls extends StatelessWidget {
     this.isPip = false,
     this.onPip,
     this.onAudioEnhancement,
+    this.onClose,
   });
 
   final String title;
@@ -74,6 +75,7 @@ class PlaybackControls extends StatelessWidget {
   final bool canPrevious;
   final bool canNext;
   final VoidCallback onBack;
+  final VoidCallback? onClose;
   final VoidCallback onPlayPause;
   final ValueChanged<Duration> onSeekPreview;
   final ValueChanged<Duration> onSeek;
@@ -117,6 +119,7 @@ class PlaybackControls extends StatelessWidget {
               changingSource: changingSource,
               sourceChangeLabel: sourceChangeLabel,
               onBack: onBack,
+              onClose: onClose,
               onDiagnostics: onDiagnostics,
               onQuality: onQuality,
               onAudioEnhancement: onAudioEnhancement,
@@ -190,6 +193,7 @@ class _PlaybackTopBar extends StatelessWidget {
     required this.changingSource,
     required this.sourceChangeLabel,
     required this.onBack,
+    this.onClose,
     required this.onDiagnostics,
     required this.onQuality,
     this.onAudioEnhancement,
@@ -201,6 +205,7 @@ class _PlaybackTopBar extends StatelessWidget {
   final bool changingSource;
   final String sourceChangeLabel;
   final VoidCallback onBack;
+  final VoidCallback? onClose;
   final VoidCallback onDiagnostics;
   final VoidCallback? onQuality;
   final VoidCallback? onAudioEnhancement;
@@ -227,7 +232,7 @@ class _PlaybackTopBar extends StatelessWidget {
               children: [
                 _ControlIconButton(
                   key: const ValueKey('player-back'),
-                  tooltip: '退出播放（Esc）',
+                  tooltip: '缩小为悬浮画中画（Esc）',
                   icon: Icons.arrow_back_rounded,
                   onPressed: onBack,
                 ),
@@ -287,6 +292,15 @@ class _PlaybackTopBar extends StatelessWidget {
                   )
                 else
                   const _LocalSourceBadge(),
+                if (onClose != null) ...[
+                  const SizedBox(width: 8),
+                  _ControlIconButton(
+                    key: const ValueKey('player-close'),
+                    tooltip: '退出播放',
+                    icon: Icons.close_rounded,
+                    onPressed: onClose,
+                  ),
+                ],
               ],
             ),
           ),
