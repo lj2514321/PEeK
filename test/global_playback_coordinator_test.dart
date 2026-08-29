@@ -157,4 +157,32 @@ void main() {
     expect(container.read(globalPlaybackCoordinatorProvider).mode, PlaybackPresentationMode.hidden);
     expect(runtime.isDisposed, isTrue);
   });
+
+  test('GlobalPlaybackCoordinator updates plan startPosition on seek and expand preparation', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final coordinator = container.read(globalPlaybackCoordinatorProvider.notifier);
+    final runtime = _FakeRuntime();
+
+    final testPlan = PlaybackPlan(
+      itemId: 'm2',
+      mediaSourceId: 'src2',
+      playSessionId: 'sess2',
+      streamUri: Uri.parse('http://localhost/video.mp4'),
+      method: PlaybackMethod.directPlay,
+      startPosition: Duration.zero,
+    );
+
+    coordinator.registerActivePlayback(
+      account: null,
+      item: const MediaItem(id: 'm2', name: 'Movie 2', kind: MediaItemKind.movie),
+      plan: testPlan,
+      runtime: runtime,
+    );
+
+    // Seek to 15 minutes
+    await coordinator.seekRelative(const Duration(minutes: 15));
+    expect(container.read(globalPlaybackCoordinatorProvider).position, const Duration(minutes: 15));
+  });
 }

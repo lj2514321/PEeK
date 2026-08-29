@@ -52,6 +52,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
     this.maxStreamingBitrate = PlaybackBitrate.original,
     this.subtitlePreferences = const SubtitlePreferences(),
     this.runtime,
+    this.isResumingFromMini = false,
   });
 
   final AuthenticatedServer? account;
@@ -62,6 +63,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final PlaybackBitrate maxStreamingBitrate;
   final SubtitlePreferences subtitlePreferences;
   final PlaybackRuntime? runtime;
+  final bool isResumingFromMini;
 
   @override
   ConsumerState<PlaybackPage> createState() => _PlaybackPageState();
@@ -154,7 +156,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     AppChrome.enterImmersive();
     unawaited(_fetchDanmaku());
     _duration = widget.plan.duration ?? Duration.zero;
-    _position = widget.plan.startPosition;
+    _position = widget.isResumingFromMini && widget.runtime != null && widget.runtime!.position > Duration.zero
+        ? widget.runtime!.position
+        : widget.plan.startPosition;
+    _playing = widget.isResumingFromMini ? (widget.runtime?.playing ?? false) : false;
+    _reportedStarted = widget.isResumingFromMini;
     _timelineNotifier = ValueNotifier(
       _PlaybackTimeline(
         position: _position,
@@ -202,7 +208,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _runtime.playingStream.listen(_playingChanged),
       _runtime.positionStream.listen((value) {
         if (mounted && _previewPosition == null) {
-          _position = value;
+          if (value > Duration.zero || _position == Duration.zero) {
+            _position = value;
+          }
           _publishTimeline();
           _scheduleSystemTimelineSync();
         }
@@ -410,6 +418,24 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _openInitialMedia() async {
+    // If runtime was already created and active (e.g. expanding from floating mini-player),
+    // DO NOT re-open the media or reset position! Just synchronize state!
+    if (widget.isResumingFromMini) {
+      _writeDiagnosticLog('playback_resumed_from_mini');
+      if (_runtime.position > Duration.zero) {
+        _position = _runtime.position;
+      }
+      _playing = _runtime.playing;
+      _duration = widget.plan.duration ?? _effectiveDuration;
+      _publishTimeline();
+      if (_remotePlayback) _startProgressTimer();
+      _syncSystemMetadata();
+      _syncSystemPlayback();
+      _scheduleSystemTimelineSync(immediate: true);
+      unawaited(_bindSystemVolume(resetAttempts: true));
+      return;
+    }
+
     try {
       await _openMedia(_plan, play: true);
       _writeDiagnosticLog('playback_opened');

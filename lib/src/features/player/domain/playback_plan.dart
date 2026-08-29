@@ -66,6 +66,40 @@ class PlaybackPlan {
   final int? audioStreamIndex;
   final int? subtitleStreamIndex;
   final List<String> transcodingReasons;
+
+  PlaybackPlan copyWith({
+    String? itemId,
+    String? mediaSourceId,
+    String? playSessionId,
+    Uri? streamUri,
+    PlaybackMethod? method,
+    Map<String, String>? httpHeaders,
+    Duration? startPosition,
+    Duration? duration,
+    List<PlaybackTrackInfo>? audioTracks,
+    List<PlaybackTrackInfo>? subtitleTracks,
+    List<MediaChapter>? chapters,
+    int? audioStreamIndex,
+    int? subtitleStreamIndex,
+    List<String>? transcodingReasons,
+  }) {
+    return PlaybackPlan(
+      itemId: itemId ?? this.itemId,
+      mediaSourceId: mediaSourceId ?? this.mediaSourceId,
+      playSessionId: playSessionId ?? this.playSessionId,
+      streamUri: streamUri ?? this.streamUri,
+      method: method ?? this.method,
+      httpHeaders: httpHeaders ?? this.httpHeaders,
+      startPosition: startPosition ?? this.startPosition,
+      duration: duration ?? this.duration,
+      audioTracks: audioTracks ?? this.audioTracks,
+      subtitleTracks: subtitleTracks ?? this.subtitleTracks,
+      chapters: chapters ?? this.chapters,
+      audioStreamIndex: audioStreamIndex ?? this.audioStreamIndex,
+      subtitleStreamIndex: subtitleStreamIndex ?? this.subtitleStreamIndex,
+      transcodingReasons: transcodingReasons ?? this.transcodingReasons,
+    );
+  }
 }
 
 class PlaybackSessionSnapshot {

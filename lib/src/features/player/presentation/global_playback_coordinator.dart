@@ -145,14 +145,22 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     _miniProgressTimer = null;
     state = state.copyWith(mode: PlaybackPresentationMode.full);
 
+    final currentPos = state.position > Duration.zero
+        ? state.position
+        : runtime.position;
+    final updatedPlan = plan.copyWith(
+      startPosition: currentPos > Duration.zero ? currentPos : plan.startPosition,
+    );
+
     Navigator.of(context).push<void>(
       Peek3DPageRoute(
         builder: (context) => PlaybackPage(
           account: account,
           item: item,
-          plan: plan,
+          plan: updatedPlan,
           queue: queue,
           runtime: runtime,
+          isResumingFromMini: true,
         ),
       ),
     );
