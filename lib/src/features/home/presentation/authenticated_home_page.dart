@@ -206,6 +206,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
             hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
             maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
             subtitlePreferences: prepared.settings.subtitlePreferences,
+            enableMiniPlayer: prepared.settings.enableMiniPlayer,
           ),
         ),
       );

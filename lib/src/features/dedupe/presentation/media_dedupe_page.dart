@@ -259,6 +259,7 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
             hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
             maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
             subtitlePreferences: prepared.settings.subtitlePreferences,
+            enableMiniPlayer: prepared.settings.enableMiniPlayer,
           ),
         ),
       );

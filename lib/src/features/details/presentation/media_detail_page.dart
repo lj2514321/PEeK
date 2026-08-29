@@ -113,6 +113,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
             hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
             maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
             subtitlePreferences: prepared.settings.subtitlePreferences,
+            enableMiniPlayer: prepared.settings.enableMiniPlayer,
           ),
         ),
       );

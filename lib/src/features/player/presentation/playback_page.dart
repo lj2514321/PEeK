@@ -509,10 +509,6 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _interactions.showControls();
   }
 
-  void _hideControls({bool force = false}) {
-    _interactions.hideControls(force: force);
-  }
-
   void _toggleControlsVisibility() {
     _interactions.toggleControls(playing: _playing);
   }
@@ -655,20 +651,18 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _closeDiagnostics();
       return;
     }
-    if (_controlsVisible && _playing) {
-      _hideControls(force: true);
-      return;
-    }
     if (_fullScreen) {
       await _toggleFullScreen();
-    } else if (_isPip || WindowPipController.instance.isPip) {
+      return;
+    }
+    if (_isPip || WindowPipController.instance.isPip) {
       await _togglePip();
+      return;
+    }
+    if (_enableMiniPlayer) {
+      await _minimize();
     } else {
-      if (_enableMiniPlayer) {
-        await _minimize();
-      } else {
-        await _close();
-      }
+      await _close();
     }
   }
 
@@ -1908,8 +1902,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       queue: _queue,
       runtime: _runtime,
     );
+    ref.read(globalPlaybackCoordinatorProvider.notifier).minimize();
     if (mounted) {
-      ref.read(globalPlaybackCoordinatorProvider.notifier).minimize(context);
+      Navigator.of(context).pop();
     }
   }
 

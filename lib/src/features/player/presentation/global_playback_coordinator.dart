@@ -131,9 +131,9 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     if (state.runtime == null || state.item == null) return;
     state = state.copyWith(mode: PlaybackPresentationMode.mini);
     _syncMiniProgressTimer();
-    final navigator = (context != null ? Navigator.maybeOf(context) : null) ??
-        EmbyPlayerApp.rootNavigatorKey.currentState;
-    navigator?.maybePop();
+    if (context != null) {
+      Navigator.maybeOf(context)?.pop();
+    }
   }
 
   void expand([BuildContext? context]) {
