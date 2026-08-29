@@ -53,6 +53,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
     this.subtitlePreferences = const SubtitlePreferences(),
     this.runtime,
     this.isResumingFromMini = false,
+    this.enableMiniPlayer = true,
   });
 
   final AuthenticatedServer? account;
@@ -64,6 +65,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final SubtitlePreferences subtitlePreferences;
   final PlaybackRuntime? runtime;
   final bool isResumingFromMini;
+  final bool enableMiniPlayer;
 
   @override
   ConsumerState<PlaybackPage> createState() => _PlaybackPageState();
@@ -125,6 +127,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   int _systemVolumeBindAttempts = 0;
   late PlaybackBitrate _maxStreamingBitrate = widget.maxStreamingBitrate;
   late SubtitlePreferences _subtitlePreferences = widget.subtitlePreferences;
+  late bool _enableMiniPlayer = widget.enableMiniPlayer;
   late final FocusNode _pageFocusNode = FocusNode(
     debugLabel: 'PlaybackPageFocus',
   );
@@ -189,6 +192,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     );
     _listenToPlayer();
     Future<void>.microtask(_initializeSystemMedia);
+    Future<void>.microtask(_loadPlaybackSettings);
     Future<void>.microtask(_openInitialMedia);
     Future<void>.microtask(() {
       if (mounted) {
@@ -201,6 +205,17 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         );
       }
     });
+  }
+
+  Future<void> _loadPlaybackSettings() async {
+    try {
+      final settings = await ref.read(playbackSettingsStoreProvider).read();
+      if (mounted) {
+        setState(() {
+          _enableMiniPlayer = settings.enableMiniPlayer;
+        });
+      }
+    } catch (_) {}
   }
 
   void _listenToPlayer() {
@@ -649,7 +664,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     } else if (_isPip || WindowPipController.instance.isPip) {
       await _togglePip();
     } else {
-      await _minimize();
+      if (_enableMiniPlayer) {
+        await _minimize();
+      } else {
+        await _close();
+      }
     }
   }
 
@@ -2145,7 +2164,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                             queueAvailable: (_queue?.items.length ?? 0) > 1,
                             canPrevious: _queue?.hasPrevious ?? false,
                             canNext: _queue?.hasNext ?? false,
-                            onBack: () => unawaited(_minimize()),
+                            backTooltip: _enableMiniPlayer
+                                ? '缩小为悬浮画中画（Esc）'
+                                : '退出播放（Esc）',
+                            onBack: () => unawaited(
+                              _enableMiniPlayer ? _minimize() : _close(),
+                            ),
                             onClose: () => unawaited(_close()),
                             onPlayPause: () => unawaited(_togglePlayPause()),
                             onSeekPreview: _previewSeek,

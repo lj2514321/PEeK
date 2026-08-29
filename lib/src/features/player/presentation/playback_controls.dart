@@ -48,6 +48,7 @@ class PlaybackControls extends StatelessWidget {
     required this.onQuality,
     required this.onFullScreen,
     this.isPip = false,
+    this.backTooltip,
     this.onPip,
     this.onAudioEnhancement,
     this.onClose,
@@ -74,6 +75,7 @@ class PlaybackControls extends StatelessWidget {
   final bool queueAvailable;
   final bool canPrevious;
   final bool canNext;
+  final String? backTooltip;
   final VoidCallback onBack;
   final VoidCallback? onClose;
   final VoidCallback onPlayPause;
@@ -118,6 +120,7 @@ class PlaybackControls extends StatelessWidget {
               quality: quality,
               changingSource: changingSource,
               sourceChangeLabel: sourceChangeLabel,
+              backTooltip: backTooltip,
               onBack: onBack,
               onClose: onClose,
               onDiagnostics: onDiagnostics,
@@ -194,6 +197,7 @@ class _PlaybackTopBar extends StatelessWidget {
     required this.sourceChangeLabel,
     required this.onBack,
     this.onClose,
+    this.backTooltip,
     required this.onDiagnostics,
     required this.onQuality,
     this.onAudioEnhancement,
@@ -204,6 +208,7 @@ class _PlaybackTopBar extends StatelessWidget {
   final PlaybackBitrate quality;
   final bool changingSource;
   final String sourceChangeLabel;
+  final String? backTooltip;
   final VoidCallback onBack;
   final VoidCallback? onClose;
   final VoidCallback onDiagnostics;
@@ -232,7 +237,7 @@ class _PlaybackTopBar extends StatelessWidget {
               children: [
                 _ControlIconButton(
                   key: const ValueKey('player-back'),
-                  tooltip: '缩小为悬浮画中画（Esc）',
+                  tooltip: backTooltip ?? '缩小为悬浮画中画（Esc）',
                   icon: Icons.arrow_back_rounded,
                   onPressed: onBack,
                 ),

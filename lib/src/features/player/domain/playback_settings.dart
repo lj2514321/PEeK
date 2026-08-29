@@ -123,21 +123,25 @@ class PlaybackSettings {
     this.maxStreamingBitrate = PlaybackBitrate.original,
     this.hardwareDecodingMode = HardwareDecodingMode.automatic,
     this.subtitlePreferences = const SubtitlePreferences(),
+    this.enableMiniPlayer = true,
   });
 
   final PlaybackBitrate maxStreamingBitrate;
   final HardwareDecodingMode hardwareDecodingMode;
   final SubtitlePreferences subtitlePreferences;
+  final bool enableMiniPlayer;
 
   PlaybackSettings copyWith({
     PlaybackBitrate? maxStreamingBitrate,
     HardwareDecodingMode? hardwareDecodingMode,
     SubtitlePreferences? subtitlePreferences,
+    bool? enableMiniPlayer,
   }) {
     return PlaybackSettings(
       maxStreamingBitrate: maxStreamingBitrate ?? this.maxStreamingBitrate,
       hardwareDecodingMode: hardwareDecodingMode ?? this.hardwareDecodingMode,
       subtitlePreferences: subtitlePreferences ?? this.subtitlePreferences,
+      enableMiniPlayer: enableMiniPlayer ?? this.enableMiniPlayer,
     );
   }
 
@@ -145,6 +149,7 @@ class PlaybackSettings {
     'maxStreamingBitrate': maxStreamingBitrate.name,
     'hardwareDecodingMode': hardwareDecodingMode.name,
     'subtitlePreferences': subtitlePreferences.toJson(),
+    'enableMiniPlayer': enableMiniPlayer,
   };
 
   factory PlaybackSettings.fromJson(Map<String, dynamic> json) {
@@ -158,6 +163,7 @@ class PlaybackSettings {
       subtitlePreferences: SubtitlePreferences.fromJson(
         json['subtitlePreferences'],
       ),
+      enableMiniPlayer: json['enableMiniPlayer'] as bool? ?? true,
     );
   }
 
@@ -166,7 +172,8 @@ class PlaybackSettings {
     return other is PlaybackSettings &&
         other.maxStreamingBitrate == maxStreamingBitrate &&
         other.hardwareDecodingMode == hardwareDecodingMode &&
-        other.subtitlePreferences == subtitlePreferences;
+        other.subtitlePreferences == subtitlePreferences &&
+        other.enableMiniPlayer == enableMiniPlayer;
   }
 
   @override
@@ -174,5 +181,6 @@ class PlaybackSettings {
     maxStreamingBitrate,
     hardwareDecodingMode,
     subtitlePreferences,
+    enableMiniPlayer,
   );
 }

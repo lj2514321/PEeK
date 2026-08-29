@@ -11,6 +11,7 @@ class PlaybackSettingsSection extends StatelessWidget {
     required this.saving,
     required this.onBitrateChanged,
     required this.onHardwareDecodingModeChanged,
+    this.onEnableMiniPlayerChanged,
     this.error,
   });
 
@@ -20,6 +21,7 @@ class PlaybackSettingsSection extends StatelessWidget {
   final String? error;
   final ValueChanged<PlaybackBitrate>? onBitrateChanged;
   final ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged;
+  final ValueChanged<bool>? onEnableMiniPlayerChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +97,72 @@ class PlaybackSettingsSection extends StatelessWidget {
                 ],
               );
             },
+          ),
+          const SizedBox(height: 28),
+          Text('悬浮画中画（迷你小窗）', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          const Text(
+            '全屏播放时点击返回或按 Esc，自动缩小为悬浮小窗继续播放，支持随意拖拽与边看边找片。',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              color: settings.enableMiniPlayer
+                  ? AppColors.indigo.withValues(alpha: 0.11)
+                  : AppColors.surfaceLow,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: settings.enableMiniPlayer
+                    ? AppColors.indigo.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.08),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.picture_in_picture_alt_rounded,
+                  color: settings.enableMiniPlayer
+                      ? AppColors.indigo
+                      : AppColors.textTertiary,
+                  size: 24,
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '开启应用内悬浮迷你播放器',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '关闭后，返回将直接退出并停止播放，不再缩小为小窗',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  key: const ValueKey('setting-enable-mini-player'),
+                  value: settings.enableMiniPlayer,
+                  activeTrackColor: AppColors.indigo,
+                  onChanged: (!loading && !saving && onEnableMiniPlayerChanged != null)
+                      ? onEnableMiniPlayerChanged
+                      : null,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           const Row(

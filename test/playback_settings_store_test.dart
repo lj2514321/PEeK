@@ -108,5 +108,21 @@ void main() {
     ).read();
 
     expect(restored.hardwareDecodingMode, HardwareDecodingMode.automatic);
+    expect(restored.enableMiniPlayer, isTrue);
+  });
+
+  test('persists and restores enableMiniPlayer setting', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'peek-playback-settings-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final store = JsonPlaybackSettingsStore(directory: directory);
+
+    await store.write(
+      const PlaybackSettings(enableMiniPlayer: false),
+    );
+
+    final restored = await store.read();
+    expect(restored.enableMiniPlayer, isFalse);
   });
 }

@@ -3,6 +3,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/cinematic_scroll_behavior.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/home/presentation/home_shell.dart';
+import 'package:embyplayer/src/features/player/presentation/floating_mini_player.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
@@ -10,9 +11,12 @@ import 'package:window_manager/window_manager.dart';
 class EmbyPlayerApp extends StatelessWidget {
   const EmbyPlayerApp({super.key});
 
+  static final rootNavigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: 'PEeK',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
@@ -20,7 +24,13 @@ class EmbyPlayerApp extends StatelessWidget {
       builder: (context, child) {
         final content = PeekSmoothScroll(child: child ?? const SizedBox.shrink());
         if (defaultTargetPlatform != TargetPlatform.windows) {
-          return content;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              content,
+              const FloatingMiniPlayer(),
+            ],
+          );
         }
         return ValueListenableBuilder<bool>(
           valueListenable: AppChrome.immersive,
@@ -66,6 +76,7 @@ class _FramelessWindowSurface extends StatelessWidget {
                   child: DragToMoveArea(child: SizedBox.expand()),
                 ),
               const Positioned(top: 0, right: 0, child: _WindowControls()),
+              const FloatingMiniPlayer(),
             ],
           ),
         );

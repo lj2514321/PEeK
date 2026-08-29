@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:embyplayer/src/app/app.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
@@ -126,14 +127,16 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     );
   }
 
-  void minimize(BuildContext context) {
+  void minimize([BuildContext? context]) {
     if (state.runtime == null || state.item == null) return;
     state = state.copyWith(mode: PlaybackPresentationMode.mini);
     _syncMiniProgressTimer();
-    Navigator.of(context).pop();
+    final navigator = (context != null ? Navigator.maybeOf(context) : null) ??
+        EmbyPlayerApp.rootNavigatorKey.currentState;
+    navigator?.maybePop();
   }
 
-  void expand(BuildContext context) {
+  void expand([BuildContext? context]) {
     if (state.runtime == null || state.item == null || state.plan == null) return;
     final item = state.item!;
     final account = state.account;
@@ -152,7 +155,10 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
       startPosition: currentPos > Duration.zero ? currentPos : plan.startPosition,
     );
 
-    Navigator.of(context).push<void>(
+    final navigator = (context != null ? Navigator.maybeOf(context) : null) ??
+        EmbyPlayerApp.rootNavigatorKey.currentState;
+
+    navigator?.push<void>(
       Peek3DPageRoute(
         builder: (context) => PlaybackPage(
           account: account,
