@@ -53,6 +53,7 @@ class PlaybackControls extends StatelessWidget {
     this.backTooltip,
     this.onPip,
     this.onAudioEnhancement,
+    this.onOpenExternalPlayer,
     this.onClose,
   });
 
@@ -99,6 +100,7 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onFullScreen;
   final VoidCallback? onPip;
   final VoidCallback? onAudioEnhancement;
+  final VoidCallback? onOpenExternalPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -128,6 +130,7 @@ class PlaybackControls extends StatelessWidget {
               onDiagnostics: onDiagnostics,
               onQuality: onQuality,
               onAudioEnhancement: onAudioEnhancement,
+              onOpenExternalPlayer: onOpenExternalPlayer,
             ),
           ),
         ),
@@ -203,6 +206,7 @@ class _PlaybackTopBar extends StatelessWidget {
     required this.onDiagnostics,
     required this.onQuality,
     this.onAudioEnhancement,
+    this.onOpenExternalPlayer,
   });
 
   final String title;
@@ -216,6 +220,7 @@ class _PlaybackTopBar extends StatelessWidget {
   final VoidCallback onDiagnostics;
   final VoidCallback? onQuality;
   final VoidCallback? onAudioEnhancement;
+  final VoidCallback? onOpenExternalPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -282,6 +287,15 @@ class _PlaybackTopBar extends StatelessWidget {
                     tooltip: '音画增强与夜间模式',
                     icon: Icons.graphic_eq_rounded,
                     onPressed: onAudioEnhancement!,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (onOpenExternalPlayer != null) ...[
+                  _ControlIconButton(
+                    key: const ValueKey('player-open-external'),
+                    tooltip: '在外部播放器（PotPlayer）中打开',
+                    icon: Icons.open_in_new_rounded,
+                    onPressed: onOpenExternalPlayer!,
                   ),
                   const SizedBox(width: 8),
                 ],

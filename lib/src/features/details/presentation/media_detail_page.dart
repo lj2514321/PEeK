@@ -6,6 +6,7 @@ import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
+import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -32,7 +33,7 @@ class MediaDetailPage extends ConsumerStatefulWidget {
 class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   late MediaItem _item = widget.initialItem;
   List<MediaItem> _similarItems = const [];
-  bool _loadingDetails = true;
+  bool _loadingDetails = false;
   bool _planningPlayback = false;
   bool _updatingFavorite = false;
   bool _updatingPlayed = false;
@@ -47,52 +48,44 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   }
 
   Future<void> _loadDetails({bool forceRefresh = false}) async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
+    if (_loadingDetails) return;
     setState(() {
       _loadingDetails = true;
       _detailError = null;
       _similarError = null;
     });
-    if (_item.isLocal) {
-      if (mounted) setState(() => _loadingDetails = false);
-      return;
-    }
-    final account = widget.account;
-    if (account == null) {
-      if (mounted) {
-        setState(() {
-          _loadingDetails = false;
-          _detailError = '请先登录对应的媒体服务器。';
-        });
-      }
-      return;
-    }
     final service = ref.read(mediaLibraryProvider);
-    final detailRequest = service.getItem(
-      account,
-      widget.initialItem.id,
-      forceRefresh: forceRefresh,
-    );
-    final similarRequest = service.getSimilar(
-      account,
-      widget.initialItem.id,
-      forceRefresh: forceRefresh,
-    );
     try {
-      final item = await detailRequest;
-      if (mounted) setState(() => _item = item);
+      final detailsFuture = service.getItem(
+        account,
+        widget.initialItem.id,
+        forceRefresh: forceRefresh,
+      );
+      final similarFuture = _item.kind == MediaItemKind.movie ||
+              _item.kind == MediaItemKind.series
+          ? service.getSimilar(account, _item.id)
+          : Future.value(const <MediaItem>[]);
+
+      final details = await detailsFuture;
+      final similar = await similarFuture;
+      if (!mounted) return;
+      setState(() {
+        _item = details;
+        _similarItems = similar;
+      });
     } on MediaLibraryException catch (error) {
       if (mounted) setState(() => _detailError = error.message);
+    } finally {
+      if (mounted) setState(() => _loadingDetails = false);
     }
-    try {
-      final similar = await similarRequest;
-      if (mounted) setState(() => _similarItems = similar);
-    } on MediaLibraryException catch (error) {
-      if (mounted) setState(() => _similarError = error.message);
-    }
-    if (mounted) setState(() => _loadingDetails = false);
   }
 
-  Future<void> _play({bool fromBeginning = false}) async {
+  Future<void> _play({
+    bool fromBeginning = false,
+    bool? forceExternalPlayer,
+  }) async {
     setState(() {
       _planningPlayback = true;
       _playbackError = null;
@@ -103,6 +96,31 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
           .read(playbackPreparationProvider)
           .prepare(widget.account, item, fromBeginning: fromBeginning);
       if (!mounted) return;
+
+      final shouldUseExternal =
+          forceExternalPlayer ?? prepared.settings.useExternalPlayer;
+      if (shouldUseExternal) {
+        final service = ref.read(externalPlayerServiceProvider);
+        final launched = await service.launch(
+          prepared.plan,
+          executablePath: prepared.settings.externalPlayerPath,
+          seekPosition: fromBeginning ? Duration.zero : null,
+          title: item.name,
+        );
+        if (!mounted) return;
+        if (launched) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已在外部播放器中启动《${item.name}》')),
+          );
+          if (!item.isLocal) await _loadDetails(forceRefresh: true);
+          return;
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('未能唤起外部播放器，正在回退到内置播放器...')),
+          );
+        }
+      }
+
       await Navigator.of(context).push<void>(
         Peek3DPageRoute(
           builder: (context) => PlaybackPage(
@@ -260,6 +278,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                 showUserStateActions: !_item.isLocal,
                 onPlay: () => _play(),
                 onPlayFromBeginning: () => _play(fromBeginning: true),
+                onPlayExternal: () => _play(forceExternalPlayer: true),
                 onToggleFavorite: _toggleFavorite,
                 onTogglePlayed: _togglePlayed,
               ),
@@ -335,6 +354,7 @@ class _DetailHero extends StatelessWidget {
     required this.showUserStateActions,
     required this.onPlay,
     required this.onPlayFromBeginning,
+    this.onPlayExternal,
     required this.onToggleFavorite,
     required this.onTogglePlayed,
   });
@@ -349,6 +369,7 @@ class _DetailHero extends StatelessWidget {
   final bool showUserStateActions;
   final VoidCallback onPlay;
   final VoidCallback onPlayFromBeginning;
+  final VoidCallback? onPlayExternal;
   final VoidCallback onToggleFavorite;
   final VoidCallback onTogglePlayed;
 
@@ -390,6 +411,7 @@ class _DetailHero extends StatelessWidget {
                   showUserStateActions: showUserStateActions,
                   onPlay: onPlay,
                   onPlayFromBeginning: onPlayFromBeginning,
+                  onPlayExternal: onPlayExternal,
                   onToggleFavorite: onToggleFavorite,
                   onTogglePlayed: onTogglePlayed,
                 );
@@ -504,6 +526,7 @@ class _DetailCopy extends StatelessWidget {
     required this.showUserStateActions,
     required this.onPlay,
     required this.onPlayFromBeginning,
+    this.onPlayExternal,
     required this.onToggleFavorite,
     required this.onTogglePlayed,
   });
@@ -518,6 +541,7 @@ class _DetailCopy extends StatelessWidget {
   final bool showUserStateActions;
   final VoidCallback onPlay;
   final VoidCallback onPlayFromBeginning;
+  final VoidCallback? onPlayExternal;
   final VoidCallback onToggleFavorite;
   final VoidCallback onTogglePlayed;
 
@@ -566,6 +590,7 @@ class _DetailCopy extends StatelessWidget {
             resumeLabel: _position(item.resumePosition),
             onPlay: onPlay,
             onPlayFromBeginning: onPlayFromBeginning,
+            onPlayExternal: onPlayExternal,
           ),
         ],
         if (showUserStateActions) ...[
@@ -624,6 +649,7 @@ class _PlaybackActions extends StatelessWidget {
     required this.resumeLabel,
     required this.onPlay,
     required this.onPlayFromBeginning,
+    this.onPlayExternal,
   });
 
   final bool compact;
@@ -632,6 +658,7 @@ class _PlaybackActions extends StatelessWidget {
   final String resumeLabel;
   final VoidCallback onPlay;
   final VoidCallback onPlayFromBeginning;
+  final VoidCallback? onPlayExternal;
 
   @override
   Widget build(BuildContext context) {
@@ -664,6 +691,16 @@ class _PlaybackActions extends StatelessWidget {
       icon: const Icon(Icons.replay_rounded),
       label: const Text('从头播放'),
     );
+    final externalPlay = OutlinedButton.icon(
+      key: const ValueKey('detail-play-external'),
+      onPressed: planning ? null : onPlayExternal,
+      style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      ),
+      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+      label: const Text('外部播放器'),
+    );
 
     if (compact) {
       return Column(
@@ -671,13 +708,18 @@ class _PlaybackActions extends StatelessWidget {
         children: [
           primary,
           if (resume) ...[const SizedBox(height: 10), restart],
+          if (onPlayExternal != null) ...[const SizedBox(height: 10), externalPlay],
         ],
       );
     }
     return Wrap(
       spacing: 12,
       runSpacing: 12,
-      children: [primary, if (resume) restart],
+      children: [
+        primary,
+        if (resume) restart,
+        if (onPlayExternal != null) externalPlay,
+      ],
     );
   }
 }

@@ -215,6 +215,21 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     );
   }
 
+  Future<void> _changeUseExternalPlayer(bool enabled) async {
+    await _savePlaybackSettings(
+      _playbackSettings.copyWith(useExternalPlayer: enabled),
+    );
+  }
+
+  Future<void> _changeExternalPlayerPath(String? path) async {
+    await _savePlaybackSettings(
+      _playbackSettings.copyWith(
+        externalPlayerPath: path,
+        clearExternalPlayerPath: path == null,
+      ),
+    );
+  }
+
   Future<void> _savePlaybackSettings(PlaybackSettings updated) async {
     if (_playbackSettingsLoading ||
         _playbackSettingsSaving ||
@@ -662,16 +677,28 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                                       bitrate,
                                                     ),
                                                   ),
-                                              onHardwareDecodingModeChanged:
-                                                  (mode) => unawaited(
-                                                    _changeHardwareDecodingMode(
-                                                      mode,
-                                                    ),
-                                                  ),
                                               onEnableMiniPlayerChanged:
                                                   (enabled) => unawaited(
                                                     _changeEnableMiniPlayer(
                                                       enabled,
+                                                    ),
+                                                  ),
+                                              onUseExternalPlayerChanged:
+                                                  (enabled) => unawaited(
+                                                    _changeUseExternalPlayer(
+                                                      enabled,
+                                                    ),
+                                                  ),
+                                              onExternalPlayerPathChanged:
+                                                  (path) => unawaited(
+                                                    _changeExternalPlayerPath(
+                                                      path,
+                                                    ),
+                                                  ),
+                                              onHardwareDecodingModeChanged:
+                                                  (mode) => unawaited(
+                                                    _changeHardwareDecodingMode(
+                                                      mode,
                                                     ),
                                                   ),
                                             )

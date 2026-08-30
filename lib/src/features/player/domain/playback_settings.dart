@@ -124,24 +124,35 @@ class PlaybackSettings {
     this.hardwareDecodingMode = HardwareDecodingMode.automatic,
     this.subtitlePreferences = const SubtitlePreferences(),
     this.enableMiniPlayer = true,
+    this.useExternalPlayer = false,
+    this.externalPlayerPath,
   });
 
   final PlaybackBitrate maxStreamingBitrate;
   final HardwareDecodingMode hardwareDecodingMode;
   final SubtitlePreferences subtitlePreferences;
   final bool enableMiniPlayer;
+  final bool useExternalPlayer;
+  final String? externalPlayerPath;
 
   PlaybackSettings copyWith({
     PlaybackBitrate? maxStreamingBitrate,
     HardwareDecodingMode? hardwareDecodingMode,
     SubtitlePreferences? subtitlePreferences,
     bool? enableMiniPlayer,
+    bool? useExternalPlayer,
+    String? externalPlayerPath,
+    bool clearExternalPlayerPath = false,
   }) {
     return PlaybackSettings(
       maxStreamingBitrate: maxStreamingBitrate ?? this.maxStreamingBitrate,
       hardwareDecodingMode: hardwareDecodingMode ?? this.hardwareDecodingMode,
       subtitlePreferences: subtitlePreferences ?? this.subtitlePreferences,
       enableMiniPlayer: enableMiniPlayer ?? this.enableMiniPlayer,
+      useExternalPlayer: useExternalPlayer ?? this.useExternalPlayer,
+      externalPlayerPath: clearExternalPlayerPath
+          ? null
+          : (externalPlayerPath ?? this.externalPlayerPath),
     );
   }
 
@@ -150,6 +161,8 @@ class PlaybackSettings {
     'hardwareDecodingMode': hardwareDecodingMode.name,
     'subtitlePreferences': subtitlePreferences.toJson(),
     'enableMiniPlayer': enableMiniPlayer,
+    'useExternalPlayer': useExternalPlayer,
+    'externalPlayerPath': externalPlayerPath,
   };
 
   factory PlaybackSettings.fromJson(Map<String, dynamic> json) {
@@ -164,6 +177,8 @@ class PlaybackSettings {
         json['subtitlePreferences'],
       ),
       enableMiniPlayer: json['enableMiniPlayer'] as bool? ?? true,
+      useExternalPlayer: json['useExternalPlayer'] as bool? ?? false,
+      externalPlayerPath: json['externalPlayerPath'] as String?,
     );
   }
 
@@ -173,7 +188,9 @@ class PlaybackSettings {
         other.maxStreamingBitrate == maxStreamingBitrate &&
         other.hardwareDecodingMode == hardwareDecodingMode &&
         other.subtitlePreferences == subtitlePreferences &&
-        other.enableMiniPlayer == enableMiniPlayer;
+        other.enableMiniPlayer == enableMiniPlayer &&
+        other.useExternalPlayer == useExternalPlayer &&
+        other.externalPlayerPath == externalPlayerPath;
   }
 
   @override
@@ -182,5 +199,7 @@ class PlaybackSettings {
     hardwareDecodingMode,
     subtitlePreferences,
     enableMiniPlayer,
+    useExternalPlayer,
+    externalPlayerPath,
   );
 }

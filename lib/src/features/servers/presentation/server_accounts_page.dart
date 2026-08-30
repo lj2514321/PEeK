@@ -23,6 +23,8 @@ class ServerAccountsPage extends StatelessWidget {
     this.onPlaybackBitrateChanged,
     this.onHardwareDecodingModeChanged,
     this.onEnableMiniPlayerChanged,
+    this.onUseExternalPlayerChanged,
+    this.onExternalPlayerPathChanged,
     this.busyProfileId,
     this.localLibraries = const [],
     this.addingLocalLibrary = false,
@@ -45,6 +47,8 @@ class ServerAccountsPage extends StatelessWidget {
   final ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged;
   final ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged;
   final ValueChanged<bool>? onEnableMiniPlayerChanged;
+  final ValueChanged<bool>? onUseExternalPlayerChanged;
+  final ValueChanged<String?>? onExternalPlayerPathChanged;
   final String? busyProfileId;
   final List<LocalMediaLibrary> localLibraries;
   final bool addingLocalLibrary;
@@ -89,6 +93,8 @@ class ServerAccountsPage extends StatelessWidget {
                     onHardwareDecodingModeChanged:
                         onHardwareDecodingModeChanged,
                     onEnableMiniPlayerChanged: onEnableMiniPlayerChanged,
+                    onUseExternalPlayerChanged: onUseExternalPlayerChanged,
+                    onExternalPlayerPathChanged: onExternalPlayerPathChanged,
                   ),
                   const SizedBox(height: 32),
                   _LocalLibrarySection(

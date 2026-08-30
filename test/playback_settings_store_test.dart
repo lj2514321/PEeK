@@ -125,4 +125,26 @@ void main() {
     final restored = await store.read();
     expect(restored.enableMiniPlayer, isFalse);
   });
+
+  test('persists and restores external player settings', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'peek-playback-settings-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final store = JsonPlaybackSettingsStore(directory: directory);
+
+    await store.write(
+      const PlaybackSettings(
+        useExternalPlayer: true,
+        externalPlayerPath: r'F:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe',
+      ),
+    );
+
+    final restored = await store.read();
+    expect(restored.useExternalPlayer, isTrue);
+    expect(
+      restored.externalPlayerPath,
+      r'F:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe',
+    );
+  });
 }
