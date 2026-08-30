@@ -7,6 +7,7 @@ import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostic_log.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostics_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
@@ -824,6 +825,39 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       );
     } on Object {
       // Playback must not be interrupted by an optional preference write.
+    }
+  }
+
+  Future<void> _openInExternalPlayer() async {
+    try {
+      await _runtime.pause();
+      final currentPos = _position;
+      final service = ref.read(externalPlayerServiceProvider);
+      final launched = await service.launch(
+        _plan,
+        seekPosition: currentPos,
+        title: widget.item.name,
+      );
+      if (!mounted) return;
+      if (launched) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '已在外部播放器中打开，当前进度：${ExternalPlayerService.formatHms(currentPos)}',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('唤起外部播放器失败，请在设置中检查播放器路径。')),
+        );
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('调用外部播放器出错：$error')),
+        );
+      }
     }
   }
 
@@ -2209,6 +2243,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                                 : null,
                             onAudioEnhancement:
                                 () => unawaited(_showAudioEnhancementSheet()),
+                            onOpenExternalPlayer:
+                                () => unawaited(_openInExternalPlayer()),
                           ),
                         );
                       },
