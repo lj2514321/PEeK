@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
@@ -44,12 +46,23 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   String? _similarError;
   String? _playbackError;
   final ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0;
 
   @override
   void initState() {
     super.initState();
     _selectedSeasonNumber = widget.initialItem.parentIndexNumber ?? 1;
+    _scrollController.addListener(_onScroll);
     Future<void>.microtask(_loadDetails);
+  }
+
+  void _onScroll() {
+    if (_scrollController.hasClients) {
+      final offset = _scrollController.offset;
+      if ((offset > 160) != (_scrollOffset > 160)) {
+        setState(() => _scrollOffset = offset);
+      }
+    }
   }
 
   @override
@@ -300,171 +313,276 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   Widget build(BuildContext context) {
     final currentSeasonEpisodes = _seasonEpisodeMap[_selectedSeasonNumber] ??
         (_episodes.isNotEmpty ? _episodes : const <MediaItem>[]);
+    final showScrolledTitle = _scrollOffset > 160;
 
     return Scaffold(
+      backgroundColor: AppColors.canvas,
       body: AmbientBackdrop(
-        child: CustomScrollView(
-          controller: _scrollController,
-          slivers: [
-            SliverAppBar(
-              pinned: true,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              backgroundColor: AppColors.canvas.withValues(alpha: 0.75),
-              surfaceTintColor: Colors.transparent,
-              leadingWidth: 72,
-              leading: Center(
-                child: Container(
-                  margin: const EdgeInsets.only(left: 16),
+        child: Stack(
+          children: [
+            CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _DetailHero(
+                    item: _item,
+                    loading: _loadingDetails,
+                    playable: _playable,
+                    planningPlayback: _planningPlayback && (_planningEpisodeId == _item.id || _planningEpisodeId == null),
+                    updatingFavorite: _updatingFavorite,
+                    updatingPlayed: _updatingPlayed,
+                    canMarkPlayed: _canMarkPlayed,
+                    showUserStateActions: !_item.isLocal,
+                    onPlay: () => _playItem(_item),
+                    onPlayFromBeginning: () => _playItem(_item, fromBeginning: true),
+                    onPlayExternal: () => _playItem(_item, forceExternalPlayer: true),
+                    onToggleFavorite: _toggleFavorite,
+                    onTogglePlayed: _togglePlayed,
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1240),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 64),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_detailError != null)
+                              _DetailNotice(
+                                message: _detailError!,
+                                actionLabel: '重新读取',
+                                onAction: _loadDetails,
+                              ),
+                            if (_playbackError != null)
+                              _DetailNotice(
+                                message: _playbackError!,
+                                actionLabel: '重试播放',
+                                onAction: () => _playItem(_item),
+                                error: true,
+                              ),
+                            if (_detailError != null || _playbackError != null)
+                              const SizedBox(height: 20),
+
+                            // Season and Episode Picker (for Series / Seasons)
+                            if (_isSeriesOrSeason && _episodes.isNotEmpty) ...[
+                              _EpisodePickerSection(
+                                item: _item,
+                                seasonNumbers: _availableSeasonNumbers,
+                                selectedSeason: _selectedSeasonNumber,
+                                episodes: currentSeasonEpisodes,
+                                planningEpisodeId: _planningEpisodeId,
+                                onSelectSeason: (season) {
+                                  setState(() => _selectedSeasonNumber = season);
+                                },
+                                onPlayEpisode: (ep) => _playItem(ep),
+                              ),
+                              const SizedBox(height: 32),
+                            ],
+
+                            // Synopsis & Technical Specs Bento Layout
+                            _OverviewAndSpecsBento(item: _item),
+
+                            // Cast & Crew
+                            if (_item.people.isNotEmpty) ...[
+                              const SizedBox(height: 32),
+                              _CastSection(
+                                people: _item.people,
+                                onOpen: _openPerson,
+                              ),
+                            ],
+
+                            // Similar Recommendations
+                            if (_similarItems.isNotEmpty) ...[
+                              const SizedBox(height: 32),
+                              _SimilarSection(
+                                items: _similarItems,
+                                onOpen: _openSimilar,
+                              ),
+                            ] else if (_similarError != null) ...[
+                              const SizedBox(height: 20),
+                              _DetailNotice(
+                                message: '相似推荐暂时无法读取：$_similarError',
+                                actionLabel: '重试',
+                                onAction: _loadDetails,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // Top Floating Navigation Bar Overlay
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _DetailFloatingNavBar(
+                item: _item,
+                showTitle: showScrolledTitle,
+                playable: _playable,
+                onBack: () => Navigator.of(context).pop(),
+                onPlayExternal: () => _playItem(_item, forceExternalPlayer: true),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailFloatingNavBar extends StatelessWidget {
+  const _DetailFloatingNavBar({
+    required this.item,
+    required this.showTitle,
+    required this.playable,
+    required this.onBack,
+    required this.onPlayExternal,
+  });
+
+  final MediaItem item;
+  final bool showTitle;
+  final bool playable;
+  final VoidCallback onBack;
+  final VoidCallback onPlayExternal;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      height: 58,
+      decoration: BoxDecoration(
+        color: showTitle
+            ? AppColors.canvas.withValues(alpha: 0.88)
+            : Colors.transparent,
+        border: showTitle
+            ? Border(
+                bottom: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  width: 1,
+                ),
+              )
+            : null,
+      ),
+      child: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: showTitle ? 20 : 0,
+            sigmaY: showTitle ? 20 : 0,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                // Floating Back Button
+                Container(
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(20),
+                    shape: BoxShape.circle,
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.18),
                       width: 1,
                     ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black45,
+                        blurRadius: 10,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
                   ),
                   child: IconButton(
                     tooltip: '返回',
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
-                    onPressed: () => Navigator.of(context).pop(),
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    onPressed: onBack,
                   ),
                 ),
-              ),
-              title: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  _item.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-              ),
-              centerTitle: true,
-              actions: [
-                if (_playable)
-                  Container(
-                    margin: const EdgeInsets.only(right: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        width: 1,
+                const SizedBox(width: 14),
+
+                // Scrolled-in Title
+                Expanded(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: showTitle ? 1.0 : 0.0,
+                    child: Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: Colors.white,
+                        letterSpacing: -0.2,
                       ),
                     ),
-                    child: IconButton(
-                      tooltip: '使用外部播放器播放',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.open_in_new_rounded, size: 18, color: Colors.white70),
-                      onPressed: () => _playItem(_item, forceExternalPlayer: true),
+                  ),
+                ),
+
+                // Actions on Right
+                if (playable) ...[
+                  Container(
+                    height: 34,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        width: 1,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black45,
+                          blurRadius: 10,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: InkWell(
+                      onTap: onPlayExternal,
+                      borderRadius: BorderRadius.circular(17),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.open_in_new_rounded,
+                            size: 15,
+                            color: Colors.white70,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            '外部播放',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                ],
+
                 if (defaultTargetPlatform == TargetPlatform.windows)
                   const SizedBox(width: AppChrome.windowControlsWidth),
               ],
             ),
-            SliverToBoxAdapter(
-              child: _DetailHero(
-                item: _item,
-                loading: _loadingDetails,
-                playable: _playable,
-                planningPlayback: _planningPlayback && (_planningEpisodeId == _item.id || _planningEpisodeId == null),
-                updatingFavorite: _updatingFavorite,
-                updatingPlayed: _updatingPlayed,
-                canMarkPlayed: _canMarkPlayed,
-                showUserStateActions: !_item.isLocal,
-                onPlay: () => _playItem(_item),
-                onPlayFromBeginning: () => _playItem(_item, fromBeginning: true),
-                onPlayExternal: () => _playItem(_item, forceExternalPlayer: true),
-                onToggleFavorite: _toggleFavorite,
-                onTogglePlayed: _togglePlayed,
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1240),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 64),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_detailError != null)
-                          _DetailNotice(
-                            message: _detailError!,
-                            actionLabel: '重新读取',
-                            onAction: _loadDetails,
-                          ),
-                        if (_playbackError != null)
-                          _DetailNotice(
-                            message: _playbackError!,
-                            actionLabel: '重试播放',
-                            onAction: () => _playItem(_item),
-                            error: true,
-                          ),
-                        if (_detailError != null || _playbackError != null)
-                          const SizedBox(height: 20),
-
-                        // Season and Episode Picker (for Series / Seasons)
-                        if (_isSeriesOrSeason && _episodes.isNotEmpty) ...[
-                          _EpisodePickerSection(
-                            item: _item,
-                            seasonNumbers: _availableSeasonNumbers,
-                            selectedSeason: _selectedSeasonNumber,
-                            episodes: currentSeasonEpisodes,
-                            planningEpisodeId: _planningEpisodeId,
-                            onSelectSeason: (season) {
-                              setState(() => _selectedSeasonNumber = season);
-                            },
-                            onPlayEpisode: (ep) => _playItem(ep),
-                          ),
-                          const SizedBox(height: 32),
-                        ],
-
-                        // Synopsis & Technical Specs Bento Layout
-                        _OverviewAndSpecsBento(item: _item),
-
-                        // Cast & Crew
-                        if (_item.people.isNotEmpty) ...[
-                          const SizedBox(height: 32),
-                          _CastSection(
-                            people: _item.people,
-                            onOpen: _openPerson,
-                          ),
-                        ],
-
-                        // Similar Recommendations
-                        if (_similarItems.isNotEmpty) ...[
-                          const SizedBox(height: 32),
-                          _SimilarSection(
-                            items: _similarItems,
-                            onOpen: _openSimilar,
-                          ),
-                        ] else if (_similarError != null) ...[
-                          const SizedBox(height: 20),
-                          _DetailNotice(
-                            message: '相似推荐暂时无法读取：$_similarError',
-                            actionLabel: '重试',
-                            onAction: _loadDetails,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -515,12 +633,12 @@ class _DetailHero extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  AppColors.canvas.withValues(alpha: 0.05),
-                  AppColors.canvas.withValues(alpha: 0.50),
-                  AppColors.canvas.withValues(alpha: 0.90),
+                  Colors.black.withValues(alpha: 0.65),
+                  Colors.transparent,
+                  AppColors.canvas.withValues(alpha: 0.70),
                   AppColors.canvas,
                 ],
-                stops: const [0.0, 0.40, 0.75, 1.0],
+                stops: const [0.0, 0.28, 0.75, 1.0],
               ),
             ),
           ),
@@ -553,7 +671,7 @@ class _DetailHero extends StatelessWidget {
                 return Padding(
                   padding: EdgeInsets.fromLTRB(
                     compact ? 20 : 36,
-                    compact ? 24 : 48,
+                    compact ? 72 : 88,
                     compact ? 20 : 36,
                     48,
                   ),
@@ -585,7 +703,7 @@ class _DetailHero extends StatelessWidget {
 
         if (loading)
           const Positioned(
-            top: 18,
+            top: 72,
             right: 24,
             child: SizedBox.square(
               dimension: 20,
@@ -606,7 +724,7 @@ class _Backdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final uri = item.backdropUri ?? item.imageUri;
     return Opacity(
-      opacity: 0.38,
+      opacity: 0.45,
       child: PeekMediaImage(
         uri: uri,
         headers: item.imageHeaders,
