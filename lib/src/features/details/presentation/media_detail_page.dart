@@ -310,25 +310,64 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
               pinned: true,
               elevation: 0,
               scrolledUnderElevation: 0,
-              backgroundColor: AppColors.canvas.withValues(alpha: 0.88),
+              backgroundColor: AppColors.canvas.withValues(alpha: 0.75),
               surfaceTintColor: Colors.transparent,
-              leading: IconButton(
-                tooltip: '返回',
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
+              leadingWidth: 72,
+              leading: Center(
+                child: Container(
+                  margin: const EdgeInsets.only(left: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      width: 1,
+                    ),
+                  ),
+                  child: IconButton(
+                    tooltip: '返回',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
               ),
-              title: Text(
-                _item.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              title: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  _item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
               ),
+              centerTitle: true,
               actions: [
                 if (_playable)
-                  IconButton(
-                    tooltip: '使用外部播放器播放',
-                    icon: const Icon(Icons.open_in_new_rounded, size: 20),
-                    onPressed: () => _playItem(_item, forceExternalPlayer: true),
+                  Container(
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        width: 1,
+                      ),
+                    ),
+                    child: IconButton(
+                      tooltip: '使用外部播放器播放',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18, color: Colors.white70),
+                      onPressed: () => _playItem(_item, forceExternalPlayer: true),
+                    ),
                   ),
                 if (defaultTargetPlatform == TargetPlatform.windows)
                   const SizedBox(width: AppChrome.windowControlsWidth),
