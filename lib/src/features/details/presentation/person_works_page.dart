@@ -179,21 +179,67 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
               scrolledUnderElevation: 0,
               shadowColor: Colors.transparent,
               surfaceTintColor: Colors.transparent,
-              backgroundColor: AppColors.glassStrong.withValues(alpha: 0.92),
-              title: Text(
-                widget.person.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              actions: [
-                IconButton(
-                  key: const ValueKey('actor-favorite-button'),
-                  tooltip: isFav ? '已收藏演员' : '收藏演员',
-                  icon: Icon(
-                    isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                    color: isFav ? const Color(0xFFFF4081) : null,
+              backgroundColor: AppColors.canvas.withValues(alpha: 0.75),
+              leadingWidth: 72,
+              leading: Center(
+                child: Container(
+                  margin: const EdgeInsets.only(left: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      width: 1,
+                    ),
                   ),
-                  onPressed: _toggleFavorite,
+                  child: IconButton(
+                    tooltip: '返回',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ),
+              title: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  widget.person.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              ),
+              centerTitle: true,
+              actions: [
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 1,
+                    ),
+                  ),
+                  child: IconButton(
+                    key: const ValueKey('actor-favorite-button'),
+                    tooltip: isFav ? '已收藏演员' : '收藏演员',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      size: 18,
+                      color: isFav ? const Color(0xFFFF4081) : Colors.white70,
+                    ),
+                    onPressed: _toggleFavorite,
+                  ),
                 ),
                 if (defaultTargetPlatform == TargetPlatform.windows)
                   const SizedBox(width: AppChrome.windowControlsWidth),

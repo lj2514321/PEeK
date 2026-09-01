@@ -102,18 +102,23 @@ class _WindowControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: AppChrome.windowControlsWidth,
       height: AppChrome.windowControlsHeight,
+      padding: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          WindowCaptionButton.minimize(
-            brightness: Brightness.dark,
-            onPressed: () => windowManager.minimize(),
+          _WindowCaptionAction(
+            icon: Icons.remove_rounded,
+            tooltip: '最小化',
+            onTap: () => windowManager.minimize(),
           ),
-          WindowCaptionButton.maximize(
-            brightness: Brightness.dark,
-            onPressed: () async {
+          const SizedBox(width: 2),
+          _WindowCaptionAction(
+            icon: Icons.crop_square_rounded,
+            tooltip: '最大化/还原',
+            onTap: () async {
               if (await windowManager.isMaximized()) {
                 await windowManager.unmaximize();
               } else {
@@ -121,11 +126,74 @@ class _WindowControls extends StatelessWidget {
               }
             },
           ),
-          WindowCaptionButton.close(
-            brightness: Brightness.dark,
-            onPressed: () => windowManager.close(),
+          const SizedBox(width: 2),
+          _WindowCaptionAction(
+            icon: Icons.close_rounded,
+            tooltip: '关闭',
+            isClose: true,
+            onTap: () => windowManager.close(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _WindowCaptionAction extends StatefulWidget {
+  const _WindowCaptionAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.isClose = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool isClose;
+
+  @override
+  State<_WindowCaptionAction> createState() => _WindowCaptionActionState();
+}
+
+class _WindowCaptionActionState extends State<_WindowCaptionAction> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hoverColor = widget.isClose
+        ? const Color(0xFFE81123)
+        : Colors.white.withValues(alpha: 0.12);
+    final iconColor = _hovered
+        ? Colors.white
+        : (widget.isClose
+            ? Colors.white.withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.70));
+
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            width: 38,
+            height: 28,
+            decoration: BoxDecoration(
+              color: _hovered ? hoverColor : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              widget.icon,
+              size: 15,
+              color: iconColor,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -1292,58 +1292,68 @@ class _TopCommandBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final horizontalPadding = compact ? 20.0 : 32.0;
+    final horizontalPadding = compact ? 16.0 : 28.0;
     final captionInset = defaultTargetPlatform == TargetPlatform.windows
         ? AppChrome.windowControlsWidth
         : 0.0;
     return Container(
       key: const ValueKey('top-command-bar'),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.45),
+        color: AppColors.canvas.withValues(alpha: 0.70),
         border: Border(
           bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.16),
-            width: 1.2,
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1.0,
           ),
         ),
       ),
       child: ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: SizedBox(
-            height: 76,
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: horizontalPadding,
-            right: horizontalPadding + captionInset,
-          ),
-          child: Row(
-            children: [
-              Expanded(child: _TopDestinationHeading(destination: destination)),
-              if (!compact) ...[
-                _SearchCommand(onTap: onSearch),
-                const SizedBox(width: 16),
-              ] else ...[
-                IconButton(
-                  tooltip: '搜索媒体库（Ctrl+K）',
-                  onPressed: onSearch,
-                  icon: const Icon(Icons.search_rounded),
-                ),
-                const SizedBox(width: 4),
-              ],
-              _AccountStatus(
-                server: server,
-                account: account,
-                compact: compact,
-                onTap: onAccount,
+            height: 60,
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: horizontalPadding,
+                right: horizontalPadding + captionInset,
               ),
-            ],
+              child: Row(
+                children: [
+                  Expanded(child: _TopDestinationHeading(destination: destination)),
+                  if (!compact) ...[
+                    _SearchCommand(onTap: onSearch),
+                    const SizedBox(width: 12),
+                  ] else ...[
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.10),
+                        ),
+                      ),
+                      child: IconButton(
+                        tooltip: '搜索媒体库（Ctrl+K）',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: onSearch,
+                        icon: const Icon(Icons.search_rounded, size: 18),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  _AccountStatus(
+                    server: server,
+                    account: account,
+                    compact: compact,
+                    onTap: onAccount,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 }
 
@@ -1354,7 +1364,6 @@ class _TopDestinationHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accentDuration = AppMotion.responsive(context, AppMotion.fast);
     return Semantics(
       header: true,
       label: '当前页面：${destination.label}',
@@ -1364,33 +1373,24 @@ class _TopDestinationHeading extends StatelessWidget {
           key: const ValueKey('top-destination-heading'),
           mainAxisSize: MainAxisSize.min,
           children: [
-            TweenAnimationBuilder<double>(
-              key: ValueKey('top-destination-icon-${destination.label}'),
-              duration: AppMotion.responsive(context, AppMotion.standard),
-              curve: Curves.easeOutBack,
-              tween: Tween(begin: 0, end: 1),
-              builder: (context, value, child) => Transform.rotate(
-                angle: -0.055 * (1 - value),
-                child: Transform.scale(
-                  scale: 0.84 + (0.16 * value),
-                  child: child,
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppColors.spotlight.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.spotlight.withValues(alpha: 0.28),
+                  width: 1,
                 ),
               ),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.spotlight.withValues(alpha: 0.11),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(
-                  destination.selectedIcon,
-                  size: 20,
-                  color: AppColors.spotlight,
-                ),
+              child: Icon(
+                destination.selectedIcon,
+                size: 17,
+                color: AppColors.spotlight,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Flexible(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1399,45 +1399,25 @@ class _TopDestinationHeading extends StatelessWidget {
                   Text(
                     'CURRENT VIEW',
                     maxLines: 1,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    style: const TextStyle(
                       color: AppColors.textTertiary,
                       fontSize: 9,
-                      letterSpacing: 1.05,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.1,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          destination.label,
-                          key: const ValueKey('top-destination-title'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      SizedBox(
-                        width: 24,
-                        height: 2,
-                        child: TweenAnimationBuilder<double>(
-                          key: ValueKey(
-                            'top-destination-accent-${destination.label}',
-                          ),
-                          duration: accentDuration,
-                          curve: AppMotion.enterCurve,
-                          tween: Tween(begin: 0, end: 1),
-                          builder: (context, value, child) => Transform.scale(
-                            scaleX: value,
-                            alignment: Alignment.centerLeft,
-                            child: child,
-                          ),
-                          child: const ColoredBox(color: AppColors.spotlight),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 1),
+                  Text(
+                    destination.label,
+                    key: const ValueKey('top-destination-title'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                      color: Colors.white,
+                    ),
                   ),
                 ],
               ),
@@ -1460,30 +1440,36 @@ class _SearchCommand extends StatelessWidget {
       button: true,
       label: '搜索媒体库，快捷键 Control K',
       child: Material(
-        color: AppColors.surfaceLow,
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           child: Container(
-            width: 300,
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+            width: 270,
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12),
+                width: 1,
+              ),
+            ),
             child: const Row(
               children: [
                 Icon(
                   Icons.search_rounded,
-                  size: 20,
+                  size: 16,
                   color: AppColors.textTertiary,
                 ),
-                SizedBox(width: 10),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '搜索电影、剧集与人物',
                     style: TextStyle(
                       color: AppColors.textTertiary,
-                      fontSize: 13,
+                      fontSize: 12,
                     ),
                   ),
                 ),
@@ -1505,17 +1491,22 @@ class _ShortcutBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.10),
+          width: 0.8,
+        ),
       ),
       child: Text(
         label,
         style: const TextStyle(
           color: AppColors.textTertiary,
           fontFamily: 'Cascadia Mono',
-          fontSize: 10,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -1551,43 +1542,56 @@ class _AccountStatus extends StatelessWidget {
       child: Tooltip(
         message: '服务器与账户',
         child: Material(
-          color: AppColors.surfaceLow,
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(18),
             child: Container(
-              height: 44,
-              padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
+              height: 36,
+              padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: (connected ? AppColors.success : Colors.white).withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 24,
-                    height: 24,
+                    width: 18,
+                    height: 18,
                     decoration: BoxDecoration(
                       color: connected
-                          ? AppColors.success.withValues(alpha: 0.15)
+                          ? AppColors.success.withValues(alpha: 0.20)
                           : AppColors.surfaceHigh,
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       connected ? Icons.person_rounded : Icons.dns_outlined,
-                      size: 15,
+                      size: 11,
                       color: connected
                           ? AppColors.success
                           : AppColors.textTertiary,
                     ),
                   ),
                   if (!compact) ...[
-                    const SizedBox(width: 9),
+                    const SizedBox(width: 8),
                     Text(
                       label,
                       style: const TextStyle(
-                        color: AppColors.textSecondary,
+                        color: Colors.white70,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 14,
+                      color: AppColors.textTertiary,
                     ),
                   ],
                 ],
