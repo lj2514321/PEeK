@@ -126,6 +126,35 @@ void main() {
     expect(find.byKey(const ValueKey('person-work-credit-id')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('displays seasons and episodes for TV series', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakeDetailService();
+    const seriesItem = MediaItem(
+      id: 'series-id',
+      name: '示例剧集',
+      kind: MediaItemKind.series,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: MediaDetailPage(account: account, initialItem: seriesItem),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('剧集选集'), findsOneWidget);
+    expect(find.text('第一集 序章'), findsOneWidget);
+    expect(find.text('第 1 季'), findsOneWidget);
+    expect(find.text('第 2 季'), findsOneWidget);
+  });
 }
 
 class _FakeDetailService extends MediaLibraryService {
@@ -141,6 +170,14 @@ class _FakeDetailService extends MediaLibraryService {
     String itemId, {
     bool forceRefresh = false,
   }) async {
+    if (itemId == 'series-id') {
+      return const MediaItem(
+        id: 'series-id',
+        name: '示例剧集',
+        kind: MediaItemKind.series,
+        overview: '剧集简介。',
+      );
+    }
     return const MediaItem(
       id: 'movie-id',
       name: '示例电影',
@@ -155,6 +192,40 @@ class _FakeDetailService extends MediaLibraryService {
         MediaPerson(id: 'person-id', name: '示例演员', type: 'Actor', role: '主角'),
       ],
     );
+  }
+
+  @override
+  Future<List<MediaItem>> getEpisodesForSeries(
+    AuthenticatedServer account, {
+    required String seriesId,
+    bool forceRefresh = false,
+  }) async {
+    return const [
+      MediaItem(
+        id: 'ep-1',
+        name: '第一集 序章',
+        kind: MediaItemKind.episode,
+        indexNumber: 1,
+        parentIndexNumber: 1,
+        runTime: Duration(minutes: 45),
+      ),
+      MediaItem(
+        id: 'ep-2',
+        name: '第二集 启程',
+        kind: MediaItemKind.episode,
+        indexNumber: 2,
+        parentIndexNumber: 1,
+        runTime: Duration(minutes: 48),
+      ),
+      MediaItem(
+        id: 'ep-3',
+        name: '第二季 第一集',
+        kind: MediaItemKind.episode,
+        indexNumber: 1,
+        parentIndexNumber: 2,
+        runTime: Duration(minutes: 50),
+      ),
+    ];
   }
 
   @override
