@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
+
 class ViewingRecord {
   const ViewingRecord({
     required this.dateString,
@@ -37,13 +39,7 @@ class ViewingHistoryStore {
         '${_directory.path}${Platform.pathSeparator}viewing_history_v1.json',
       );
 
-  static Directory _defaultDirectory() {
-    final localAppData = Platform.environment['LOCALAPPDATA'];
-    final root = localAppData == null || localAppData.isEmpty
-        ? Directory.systemTemp.path
-        : localAppData;
-    return Directory('$root${Platform.pathSeparator}PEeK');
-  }
+  static Directory _defaultDirectory() => AppStoragePath.defaultDirectory;
 
   Future<List<ViewingRecord>> readRecords() async {
     try {

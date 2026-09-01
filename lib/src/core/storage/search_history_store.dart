@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
+
 abstract interface class SearchHistoryStore {
   Future<List<String>> read();
 
@@ -39,13 +41,7 @@ class JsonSearchHistoryStore implements SearchHistoryStore {
   File get _file =>
       File('${_directory.path}${Platform.pathSeparator}search_history_v1.json');
 
-  static Directory _defaultDirectory() {
-    final localAppData = Platform.environment['LOCALAPPDATA'];
-    final root = localAppData == null || localAppData.isEmpty
-        ? Directory.systemTemp.path
-        : localAppData;
-    return Directory('$root${Platform.pathSeparator}PEeK');
-  }
+  static Directory _defaultDirectory() => AppStoragePath.defaultDirectory;
 
   @override
   Future<List<String>> read() async => List.unmodifiable(await _load());

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class PlaybackDropTarget extends StatefulWidget {
@@ -31,6 +32,10 @@ class _PlaybackDropTargetState extends State<PlaybackDropTarget> {
 
   @override
   Widget build(BuildContext context) {
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      return widget.child;
+    }
     return DropTarget(
       onDragEntered: (_) {
         setState(() => _dragging = true);

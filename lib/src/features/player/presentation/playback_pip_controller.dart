@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
 
 class WindowPipController {
@@ -14,6 +15,11 @@ class WindowPipController {
   bool get isPip => _isPip;
 
   Future<bool> enterPip({Size pipSize = const Size(480, 270)}) async {
+    if (defaultTargetPlatform != TargetPlatform.windows &&
+        defaultTargetPlatform != TargetPlatform.macOS &&
+        defaultTargetPlatform != TargetPlatform.linux) {
+      return false;
+    }
     if (_isPip) return true;
     try {
       _wasMaximized = await windowManager.isMaximized();
@@ -32,6 +38,12 @@ class WindowPipController {
   }
 
   Future<bool> exitPip() async {
+    if (defaultTargetPlatform != TargetPlatform.windows &&
+        defaultTargetPlatform != TargetPlatform.macOS &&
+        defaultTargetPlatform != TargetPlatform.linux) {
+      _isPip = false;
+      return true;
+    }
     if (!_isPip) return true;
     try {
       await windowManager.setAlwaysOnTop(false);

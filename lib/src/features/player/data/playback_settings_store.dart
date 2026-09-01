@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 
 abstract interface class PlaybackSettingsStore {
@@ -35,13 +36,7 @@ class JsonPlaybackSettingsStore implements PlaybackSettingsStore {
     '${_directory.path}${Platform.pathSeparator}playback_settings_v1.json',
   );
 
-  static Directory _defaultDirectory() {
-    final localAppData = Platform.environment['LOCALAPPDATA'];
-    final root = localAppData == null || localAppData.isEmpty
-        ? Directory.systemTemp.path
-        : localAppData;
-    return Directory('$root${Platform.pathSeparator}PEeK');
-  }
+  static Directory _defaultDirectory() => AppStoragePath.defaultDirectory;
 
   @override
   Future<PlaybackSettings> read() async {

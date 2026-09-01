@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
 import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
 import 'package:flutter/foundation.dart';
 
@@ -34,15 +35,11 @@ class LocalActorFavoritesStore implements ActorFavoritesStore {
 
   Future<File> get _file async {
     if (_filePathOverride != null) return File(_filePathOverride);
-    final appData = Platform.environment['LOCALAPPDATA'] ??
-        Platform.environment['APPDATA'] ??
-        Directory.current.path;
-    final sep = Platform.pathSeparator;
-    final dir = Directory('$appData${sep}PEeK${sep}ActorFavorites');
+    final dir = AppStoragePath.actorFavoritesDirectory;
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    return File('${dir.path}${sep}favorites.json');
+    return File('${dir.path}${Platform.pathSeparator}favorites.json');
   }
 
   @override

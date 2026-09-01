@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
+
 class PlaybackDiagnosticLog {
   PlaybackDiagnosticLog({
     Directory? directory,
@@ -22,15 +24,7 @@ class PlaybackDiagnosticLog {
     '${_directory.path}${Platform.pathSeparator}playback_diagnostics.previous.log',
   );
 
-  static Directory _defaultDirectory() {
-    final localAppData = Platform.environment['LOCALAPPDATA'];
-    final root = localAppData == null || localAppData.isEmpty
-        ? Directory.systemTemp.path
-        : localAppData;
-    return Directory(
-      '$root${Platform.pathSeparator}PEeK${Platform.pathSeparator}logs',
-    );
-  }
+  static Directory _defaultDirectory() => AppStoragePath.logsDirectory;
 
   Future<void> write(
     String event, {

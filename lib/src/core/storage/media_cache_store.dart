@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
+
 class MediaCacheEntry {
   const MediaCacheEntry({required this.storedAt, required this.payload});
 
@@ -64,13 +66,7 @@ class JsonFileMediaCacheStore implements MediaCacheStore {
   File get _file =>
       File('${_directory.path}${Platform.pathSeparator}media_cache_v1.json');
 
-  static Directory _defaultDirectory() {
-    final base = Platform.environment['LOCALAPPDATA'];
-    final root = base == null || base.isEmpty
-        ? Directory.systemTemp.path
-        : base;
-    return Directory('$root${Platform.pathSeparator}PEeK');
-  }
+  static Directory _defaultDirectory() => AppStoragePath.defaultDirectory;
 
   @override
   Future<MediaCacheEntry?> read(String key, {Duration? maxAge}) async {

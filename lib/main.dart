@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:embyplayer/src/app/app.dart';
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -8,6 +9,7 @@ import 'package:window_manager/window_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppStoragePath.ensureInitialized();
   MediaKit.ensureInitialized();
 
   if (Platform.isWindows) {

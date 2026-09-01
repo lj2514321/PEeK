@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final duplicateIgnoredStoreProvider = Provider<DuplicateIgnoredStore>((ref) {
@@ -50,13 +52,7 @@ class JsonDuplicateIgnoredStore implements DuplicateIgnoredStore {
   File get _file =>
       File('${_directory.path}${Platform.pathSeparator}dedupe_ignored_v1.json');
 
-  static Directory _defaultDirectory() {
-    final localAppData = Platform.environment['LOCALAPPDATA'];
-    final root = localAppData == null || localAppData.isEmpty
-        ? Directory.systemTemp.path
-        : localAppData;
-    return Directory('$root${Platform.pathSeparator}PEeK');
-  }
+  static Directory _defaultDirectory() => AppStoragePath.defaultDirectory;
 
   @override
   Future<Set<String>> read() async => Set.unmodifiable(await _load());

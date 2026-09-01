@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:embyplayer/src/core/storage/app_storage_path.dart';
 
 class DownloadTask {
   const DownloadTask({
@@ -38,15 +39,7 @@ class DownloadManagerService {
   final Dio _dio;
   final Directory _downloadDir;
 
-  static Directory _defaultDirectory() {
-    final localAppData = Platform.environment['LOCALAPPDATA'];
-    final root = localAppData == null || localAppData.isEmpty
-        ? Directory.systemTemp.path
-        : localAppData;
-    return Directory(
-      '$root${Platform.pathSeparator}PEeK${Platform.pathSeparator}Downloads',
-    );
-  }
+  static Directory _defaultDirectory() => AppStoragePath.downloadsDirectory;
 
   Future<DownloadTask> downloadFile({
     required String id,
