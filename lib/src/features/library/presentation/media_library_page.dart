@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/app/glass.dart';
@@ -12,6 +14,8 @@ import 'package:embyplayer/src/features/dedupe/presentation/media_dedupe_page.da
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
+import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -480,11 +484,14 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                 busyLabel: _bulkActionLabel,
                                 favoriteTarget: favoriteTarget,
                                 playedTarget: playedTarget,
+                                showUserStates: _selectedLibrary?.isLocal != true,
                                 onSelectAll: _selectAllLoaded,
                                 onFavorite: () =>
                                     _applyBulkState(favorite: favoriteTarget),
                                 onPlayed: () =>
                                     _applyBulkState(played: playedTarget),
+                                onDelete: _deleteSelectedItems,
+                                onPlayQueue: _playSelectedItems,
                                 onClose: _exitSelectionMode,
                               )
                             : _LibraryToolbar(
@@ -496,10 +503,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                 onFilterPressed: _showFilters,
                                 onDensityChanged: _setDensity,
                                 onDedupePressed: _openDedupePage,
-                                onSelectPressed:
-                                    _selectedLibrary?.isLocal == true
-                                    ? null
-                                    : _enterSelectionMode,
+                                onSelectPressed: _enterSelectionMode,
                               ),
                       ),
                       const SizedBox(height: 18),
@@ -521,6 +525,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                     _kindFilter = MediaLibraryKindFilter.all;
                                     _statusFilter =
                                         MediaLibraryStatusFilter.all;
+                                    _resolutionFilter =
+                                        MediaResolutionFilter.all;
+                                    _minCommunityRating = null;
                                     _productionYear = null;
                                   });
                                   await _reloadCurrentNode();
@@ -536,7 +543,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                           onOpen: _openItem,
                           onToggleSelection: _toggleSelection,
                           onEnterSelection: _enterSelectionMode,
-                          selectionAvailable: _selectedLibrary?.isLocal != true,
+                          onDelete: _deleteItemDirect,
+                          selectionAvailable: true,
                         ),
                         _PaginationFooter(
                           loadedCount: _items.length,
@@ -735,6 +743,232 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('撤销失败：${error.message}')));
+    }
+  }
+
+  Future<void> _deleteItemDirect(MediaItem item) async {
+    final confirm = await peekShowDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除该媒体？'),
+        content: Text(
+          '即将删除媒体条目《${item.name}》。\n'
+          '${item.isLocal ? '本地文件将被从磁盘中永久删除。' : '此操作将从媒体服务器中永久删除该条目及关联文件。'}\n'
+          '此操作无法撤销。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      if (item.isLocal && item.sourcePath != null) {
+        final file = File(item.sourcePath!);
+        if (await file.exists()) {
+          await file.delete();
+        } else {
+          final dir = Directory(item.sourcePath!);
+          if (await dir.exists()) {
+            await dir.delete(recursive: true);
+          }
+        }
+      } else if (widget.account != null) {
+        final libraryService = ref.read(mediaLibraryProvider);
+        await libraryService.deleteItem(widget.account!, item.id);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _items = _items.where((it) => it.id != item.id).toList(growable: false);
+        _totalItemCount = (_totalItemCount - 1).clamp(0, double.infinity).toInt();
+      });
+
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 2),
+            content: Text('已成功删除《${item.name}》'),
+          ),
+        );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('删除失败：$e')),
+        );
+    }
+  }
+
+  Future<void> _deleteSelectedItems() async {
+    final selectedItems =
+        _items.where((it) => _selectedIds.contains(it.id)).toList();
+    if (selectedItems.isEmpty || _bulkActionLabel != null) return;
+
+    final count = selectedItems.length;
+    final confirm = await peekShowDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('确认批量删除选中的 $count 项媒体？'),
+        content: Text(
+          '即将删除已选中的 $count 个媒体条目。\n'
+          '此操作将从媒体服务器或本地存储中永久删除这些文件，无法撤销。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _bulkActionLabel = '正在删除');
+    int deletedCount = 0;
+    final failedNames = <String>[];
+    final deletedIds = <String>{};
+
+    try {
+      final libraryService = ref.read(mediaLibraryProvider);
+      for (final item in selectedItems) {
+        try {
+          if (item.isLocal && item.sourcePath != null) {
+            final file = File(item.sourcePath!);
+            if (await file.exists()) {
+              await file.delete();
+            } else {
+              final dir = Directory(item.sourcePath!);
+              if (await dir.exists()) {
+                await dir.delete(recursive: true);
+              }
+            }
+          } else if (widget.account != null) {
+            await libraryService.deleteItem(widget.account!, item.id);
+          }
+          deletedIds.add(item.id);
+          deletedCount++;
+        } catch (e) {
+          failedNames.add(item.name);
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _items = _items
+            .where((it) => !deletedIds.contains(it.id))
+            .toList(growable: false);
+        _totalItemCount =
+            (_totalItemCount - deletedCount).clamp(0, double.infinity).toInt();
+        _selectionMode = false;
+        _selectedIds = {};
+        _bulkActionLabel = null;
+      });
+
+      if (deletedCount > 0) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(seconds: 3),
+              content: Text(
+                failedNames.isEmpty
+                    ? '已成功删除 $deletedCount 项媒体'
+                    : '已删除 $deletedCount 项媒体，${failedNames.length} 项删除失败',
+              ),
+            ),
+          );
+      } else if (failedNames.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(content: Text('删除失败：${failedNames.join(", ")}')),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _bulkActionLabel = null);
+    }
+  }
+
+  Future<void> _playSelectedItems() async {
+    final selectedItems =
+        _items.where((it) => _selectedIds.contains(it.id)).toList();
+    if (selectedItems.isEmpty) return;
+
+    final playableItems = selectedItems
+        .where(
+          (it) =>
+              it.kind == MediaItemKind.movie ||
+              it.kind == MediaItemKind.episode ||
+              it.kind == MediaItemKind.video ||
+              it.kind == MediaItemKind.audio,
+        )
+        .toList(growable: false);
+
+    if (playableItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('选中的项目中没有可直接播放的音视频内容。')),
+      );
+      return;
+    }
+
+    final firstItem = playableItems.first;
+    try {
+      final preparation = ref.read(playbackPreparationProvider);
+      final prepared = await preparation.prepare(widget.account, firstItem);
+      if (!mounted) return;
+
+      final queue = PlaybackQueue(
+        items: playableItems,
+        currentIndex: 0,
+      );
+
+      _exitSelectionMode();
+
+      await Navigator.of(context).push<void>(
+        Peek3DPageRoute(
+          builder: (context) => PlaybackPage(
+            account: widget.account,
+            item: prepared.item,
+            plan: prepared.plan,
+            queue: queue,
+            hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
+            maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
+            subtitlePreferences: prepared.settings.subtitlePreferences,
+            enableMiniPlayer: prepared.settings.enableMiniPlayer,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('准备播放失败：$e')),
+        );
+      }
     }
   }
 
@@ -1085,9 +1319,12 @@ class _BulkActionBar extends StatelessWidget {
     required this.busyLabel,
     required this.favoriteTarget,
     required this.playedTarget,
+    required this.showUserStates,
     required this.onSelectAll,
     required this.onFavorite,
     required this.onPlayed,
+    required this.onDelete,
+    required this.onPlayQueue,
     required this.onClose,
   });
 
@@ -1096,9 +1333,12 @@ class _BulkActionBar extends StatelessWidget {
   final String? busyLabel;
   final bool favoriteTarget;
   final bool playedTarget;
+  final bool showUserStates;
   final VoidCallback onSelectAll;
   final VoidCallback onFavorite;
   final VoidCallback onPlayed;
+  final VoidCallback onDelete;
+  final VoidCallback onPlayQueue;
   final VoidCallback onClose;
 
   @override
@@ -1133,24 +1373,49 @@ class _BulkActionBar extends StatelessWidget {
             label: const Text('全选已加载'),
           ),
           OutlinedButton.icon(
-            key: const ValueKey('bulk-favorite-button'),
-            onPressed: busy || selectedCount == 0 ? null : onFavorite,
-            icon: Icon(
-              favoriteTarget
-                  ? Icons.favorite_border_rounded
-                  : Icons.heart_broken_rounded,
-              size: 18,
-            ),
-            label: Text(favoriteTarget ? '收藏' : '取消收藏'),
+            key: const ValueKey('bulk-play-queue-button'),
+            onPressed: busy || selectedCount == 0 ? null : onPlayQueue,
+            icon: const Icon(Icons.playlist_play_rounded, size: 18),
+            label: const Text('连续播放'),
           ),
-          OutlinedButton.icon(
-            key: const ValueKey('bulk-played-button'),
-            onPressed: busy || selectedCount == 0 ? null : onPlayed,
-            icon: Icon(
-              playedTarget ? Icons.done_all_rounded : Icons.remove_done_rounded,
-              size: 18,
+          if (showUserStates) ...[
+            OutlinedButton.icon(
+              key: const ValueKey('bulk-favorite-button'),
+              onPressed: busy || selectedCount == 0 ? null : onFavorite,
+              icon: Icon(
+                favoriteTarget
+                    ? Icons.favorite_border_rounded
+                    : Icons.heart_broken_rounded,
+                size: 18,
+              ),
+              label: Text(favoriteTarget ? '收藏' : '取消收藏'),
             ),
-            label: Text(playedTarget ? '标为已观看' : '标为未观看'),
+            OutlinedButton.icon(
+              key: const ValueKey('bulk-played-button'),
+              onPressed: busy || selectedCount == 0 ? null : onPlayed,
+              icon: Icon(
+                playedTarget
+                    ? Icons.done_all_rounded
+                    : Icons.remove_done_rounded,
+                size: 18,
+              ),
+              label: Text(playedTarget ? '标为已观看' : '标为未观看'),
+            ),
+          ],
+          OutlinedButton.icon(
+            key: const ValueKey('bulk-delete-button'),
+            onPressed: busy || selectedCount == 0 ? null : onDelete,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: Color(0x66FF453A)),
+            ),
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 18,
+              color: AppColors.error,
+            ),
+            label:
+                const Text('批量删除', style: TextStyle(color: AppColors.error)),
           ),
           IconButton(
             tooltip: '退出批量选择',
@@ -1521,6 +1786,7 @@ class _MediaGrid extends StatelessWidget {
     required this.onOpen,
     required this.onToggleSelection,
     required this.onEnterSelection,
+    this.onDelete,
     this.selectionAvailable = true,
   });
 
@@ -1531,6 +1797,7 @@ class _MediaGrid extends StatelessWidget {
   final ValueChanged<MediaItem> onOpen;
   final ValueChanged<String> onToggleSelection;
   final ValueChanged<String> onEnterSelection;
+  final ValueChanged<MediaItem>? onDelete;
   final bool selectionAvailable;
 
   @override
@@ -1574,6 +1841,7 @@ class _MediaGrid extends StatelessWidget {
             onEnterSelection: selectionAvailable
                 ? () => onEnterSelection(items[index].id)
                 : null,
+            onDelete: onDelete != null ? () => onDelete!(items[index]) : null,
           ),
         );
       },
@@ -1589,6 +1857,7 @@ class _MediaCard extends StatelessWidget {
     required this.onOpen,
     required this.onToggleSelection,
     required this.onEnterSelection,
+    this.onDelete,
   });
 
   final MediaItem item;
@@ -1597,6 +1866,7 @@ class _MediaCard extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onToggleSelection;
   final VoidCallback? onEnterSelection;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1622,6 +1892,14 @@ class _MediaCard extends StatelessWidget {
             label: '多选管理',
             icon: Icons.checklist_rounded,
             onTap: onEnterSelection,
+          ),
+        if (onDelete != null)
+          PeekContextMenuItem(
+            id: 'delete',
+            label: '从服务器/本地删除',
+            icon: Icons.delete_outline_rounded,
+            danger: true,
+            onTap: onDelete,
           ),
       ],
       child: Semantics(

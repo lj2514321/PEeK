@@ -133,7 +133,7 @@ void main() {
 
     expect(find.text('你的本地放映架'), findsOneWidget);
     expect(find.text('Local Movie 2026'), findsOneWidget);
-    expect(find.byKey(const ValueKey('library-select-button')), findsNothing);
+    expect(find.byKey(const ValueKey('library-select-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -269,6 +269,51 @@ void main() {
     expect(service.requestedParentIds.last, 'series-id');
     expect(find.text('第 1 季'), findsOneWidget);
     expect(find.text('媒体库 1'), findsWidgets);
+  });
+
+  testWidgets('supports bulk selection and batch delete', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final fakeService = _FakeLibraryService();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaLibraryProvider.overrideWithValue(fakeService),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: MediaLibraryPage(account: account, onGoHome: () {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Enter selection mode via toolbar
+    final selectButton = find.byKey(const ValueKey('library-select-button'));
+    expect(selectButton, findsOneWidget);
+    await tester.tap(selectButton);
+    await tester.pump();
+
+    // Select item-0
+    await tester.tap(find.byKey(const ValueKey('media-card-artwork-item-0')));
+    await tester.pump();
+
+    // Tap bulk delete button
+    final bulkDeleteButton = find.byKey(const ValueKey('bulk-delete-button'));
+    expect(bulkDeleteButton, findsOneWidget);
+    await tester.tap(bulkDeleteButton);
+    await tester.pumpAndSettle();
+
+    // Confirm delete dialog
+    expect(find.text('确认删除'), findsOneWidget);
+    await tester.tap(find.text('确认删除'));
+    await tester.pumpAndSettle();
+
+    expect(fakeService.deletedIds, isNotEmpty);
   });
 }
 
@@ -418,5 +463,15 @@ class _FakeLibraryService extends MediaLibraryService {
   }) async {
     playedIds = itemIds.toSet();
     playedValue = played;
+  }
+
+  final List<String> deletedIds = [];
+
+  @override
+  Future<void> deleteItem(
+    AuthenticatedServer account,
+    String itemId,
+  ) async {
+    deletedIds.add(itemId);
   }
 }
