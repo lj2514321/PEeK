@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
@@ -101,6 +102,81 @@ class ExternalPlayerService {
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  /// Resolves the actual playable URL, parsing .strm files and injecting auth tokens.
+  Future<String> _resolvePlayableUrl(PlaybackPlan plan) async {
+    if (plan.streamUri.isScheme('file')) {
+      final filePath = plan.streamUri.toFilePath();
+      if (filePath.toLowerCase().endsWith('.strm') && File(filePath).existsSync()) {
+        try {
+          final lines = await File(filePath).readAsLines();
+          for (final line in lines) {
+            final trimmed = line.trim();
+            if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+            if (trimmed.startsWith('http://') ||
+                trimmed.startsWith('https://') ||
+                trimmed.startsWith('rtmp://') ||
+                trimmed.startsWith('rtsp://') ||
+                trimmed.startsWith('file://')) {
+              return trimmed;
+            }
+          }
+        } catch (_) {}
+      }
+      return filePath;
+    }
+
+    var uri = plan.streamUri;
+
+    // Attach Emby/Jellyfin token if missing from query params
+    final token = plan.httpHeaders['X-Emby-Token'] ??
+        plan.httpHeaders['X-MediaBrowser-Token'] ??
+        plan.httpHeaders['api_key'];
+    if (token != null &&
+        !uri.queryParameters.containsKey('api_key') &&
+        !uri.queryParameters.containsKey('X-Emby-Token')) {
+      uri = uri.replace(
+        queryParameters: {
+          ...uri.queryParameters,
+          'api_key': token,
+        },
+      );
+    }
+
+    var targetUrl = uri.toString();
+
+    // Check if the remote URL ends in .strm
+    final cleanPath = uri.path.toLowerCase();
+    if (cleanPath.endsWith('.strm') &&
+        (uri.scheme == 'http' || uri.scheme == 'https')) {
+      try {
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(seconds: 3);
+        final request = await client.getUrl(uri);
+        plan.httpHeaders.forEach((k, v) {
+          request.headers.set(k, v);
+        });
+        final response =
+            await request.close().timeout(const Duration(seconds: 3));
+        if (response.statusCode == 200) {
+          final body = await response.transform(utf8.decoder).join();
+          for (final line in body.split('\n')) {
+            final trimmed = line.trim();
+            if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+            if (trimmed.startsWith('http://') ||
+                trimmed.startsWith('https://') ||
+                trimmed.startsWith('rtmp://') ||
+                trimmed.startsWith('rtsp://')) {
+              targetUrl = trimmed;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return targetUrl;
+  }
+
   /// Launches an external player with the given playback plan.
   Future<bool> launch(
     PlaybackPlan plan, {
@@ -108,13 +184,8 @@ class ExternalPlayerService {
     Duration? seekPosition,
     String? title,
   }) async {
-    // Resolve target path or stream URL
-    String targetUrl;
-    if (plan.streamUri.isScheme('file')) {
-      targetUrl = plan.streamUri.toFilePath();
-    } else {
-      targetUrl = plan.streamUri.toString();
-    }
+    // Resolve target path or stream URL (with STRM & token resolution)
+    final targetUrl = await _resolvePlayableUrl(plan);
 
     // Resolve executable
     String? exe = executablePath;
@@ -137,6 +208,10 @@ class ExternalPlayerService {
         }
         if (title != null && title.trim().isNotEmpty) {
           args.add('/title=$title');
+        }
+        final userAgent = plan.httpHeaders['User-Agent'];
+        if (userAgent != null && userAgent.isNotEmpty) {
+          args.add('/user_agent=$userAgent');
         }
         // Attach external subtitle if present in plan
         final externalSub = plan.subtitleTracks

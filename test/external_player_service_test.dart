@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,6 +51,28 @@ void main() {
       );
 
       // Launch with non-existent path will attempt fallback and return without throwing
+      final result = await service.launch(
+        plan,
+        executablePath: r'Z:\NonExistent\FakePlayer.exe',
+      );
+      expect(result, isA<bool>());
+    });
+
+    test('parses local STRM files when launching', () async {
+      const service = ExternalPlayerService();
+      final tempDir = await Directory.systemTemp.createTemp('peek-strm-test-');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final strmFile = File('${tempDir.path}\\movie.strm');
+      await strmFile.writeAsString('# Comment line\nhttp://127.0.0.1:5244/d/alist/movie.mkv\n');
+
+      final plan = PlaybackPlan(
+        itemId: 'item-strm',
+        mediaSourceId: 'src-strm',
+        playSessionId: 'session-strm',
+        streamUri: strmFile.uri,
+        method: PlaybackMethod.directPlay,
+      );
+
       final result = await service.launch(
         plan,
         executablePath: r'Z:\NonExistent\FakePlayer.exe',

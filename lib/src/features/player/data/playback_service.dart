@@ -430,7 +430,7 @@ class PlaybackService {
       itemId: item.id,
       mediaSourceId: mediaSourceId,
       playSessionId: playSessionId,
-      streamUri: streamUri,
+      streamUri: _authenticateUri(account, streamUri),
       method: method,
       httpHeaders: {..._serverHeaders(account), ...requiredHeaders},
       startPosition: startPosition,
@@ -523,7 +523,13 @@ class PlaybackService {
   }
 
   Uri _authenticatedDeliveryUri(AuthenticatedServer account, String value) {
-    final uri = _resolveServerUri(account.server.apiBaseUri, value);
+    return _authenticateUri(
+      account,
+      _resolveServerUri(account.server.apiBaseUri, value),
+    );
+  }
+
+  Uri _authenticateUri(AuthenticatedServer account, Uri uri) {
     final base = account.server.apiBaseUri;
     final sameServer =
         uri.scheme == base.scheme &&
