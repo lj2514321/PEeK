@@ -1939,6 +1939,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       runtime: _runtime,
     );
     ref.read(globalPlaybackCoordinatorProvider.notifier).minimize();
+    if (_remotePlayback) {
+      await _safeReportProgress('TimeUpdate');
+    }
     if (mounted) {
       Navigator.of(context).pop();
     }

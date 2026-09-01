@@ -372,7 +372,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     required bool compact,
   }) {
     return [
-      if (feed.continueWatching.items.length > 1 ||
+      if (feed.continueWatching.items.isNotEmpty ||
           feed.continueWatching.hasError)
         _sectionSliver(
           title: '继续观看',

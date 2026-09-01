@@ -200,7 +200,7 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   Future<void> close({bool disposeRuntime = true}) async {
     final runtime = state.runtime;
     final item = state.item;
-    final pos = state.position;
+    final pos = runtime?.position ?? state.position;
     final account = state.account;
     final plan = state.plan;
 
@@ -253,26 +253,28 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     _miniProgressTimer = null;
     if (state.mode == PlaybackPresentationMode.mini && state.playing) {
       _miniProgressTimer = Timer.periodic(
-        const Duration(seconds: 10),
-        (_) => _reportMiniProgress('TimeUpdate'),
+        const Duration(seconds: 5),
+        (_) => unawaited(_reportMiniProgress('TimeUpdate')),
       );
     }
   }
 
-  void _reportMiniProgress(String eventName) {
+  Future<void> _reportMiniProgress(String eventName) async {
     final account = state.account;
     final plan = state.plan;
     final item = state.item;
+    final runtime = state.runtime;
     if (account == null || plan == null || item == null || item.isLocal) return;
     try {
+      final currentPos = runtime?.position ?? state.position;
       final snapshot = PlaybackSessionSnapshot(
         plan: plan,
-        position: state.position,
+        position: currentPos,
         isPaused: !state.playing,
         volume: 100,
         playbackRate: 1.0,
       );
-      ref.read(playbackServiceProvider).reportProgress(
+      await ref.read(playbackServiceProvider).reportProgress(
             account,
             snapshot,
             eventName: eventName,
