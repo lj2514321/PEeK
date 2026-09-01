@@ -403,117 +403,96 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             !selectedItems.every((item) => item.played);
         return RefreshIndicator(
           onRefresh: () => _loadCatalog(forceRefresh: true),
-          child: PeekSmoothScroll(
-            controller: _scrollController,
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                28,
-                horizontalPadding,
-                48,
-              ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1280),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _LibraryHeader(
-                      account: account,
-                      localLibraryCount: widget.localLibraries.length,
-                      onRefresh: () => _loadCatalog(forceRefresh: true),
-                    ),
-                    const SizedBox(height: 28),
-                    if (_catalogNotice != null) ...[
-                      _InlineLibraryError(
-                        message: _catalogNotice!,
-                        onRetry: () => _loadCatalog(forceRefresh: true),
-                      ),
-                      const SizedBox(height: 18),
-                    ],
-                    if (_libraries.isEmpty)
-                      _LibraryMessage(
-                        icon: Icons.create_new_folder_outlined,
-                        title: account == null ? '还没有媒体库' : '没有可见媒体库',
-                        message: account == null
-                            ? '添加电脑或局域网共享文件夹，也可以返回首页连接 Jellyfin / Emby。'
-                            : '添加本地文件夹，或检查当前用户的服务器媒体库权限。',
-                        actionLabel: '添加本地媒体库',
-                        onAction: widget.onAddLocalLibrary,
-                        embedded: true,
-                      )
-                    else ...[
-                      _SectionLabel(
-                        eyebrow: 'COLLECTIONS',
-                        title: '我的媒体库',
-                        detail: '${_libraries.length} 个可访问媒体库',
-                      ),
-                      const SizedBox(height: 14),
-                      _LibrarySelector(
-                        libraries: _libraries,
-                        selectedId: _selectedLibrary?.id,
-                        onSelected: _selectLibrary,
-                      ),
-                      const SizedBox(height: 32),
-                      if (_path.isNotEmpty) ...[
-                        _LibraryBreadcrumb(
-                          path: _path,
-                          onSelected: _navigateTo,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      _SectionLabel(
-                        eyebrow: 'BROWSE',
-                        title: _path.isEmpty ? '媒体内容' : _path.last.name,
-                        detail: _loadingItems
-                            ? '正在同步'
-                            : '已加载 ${_items.length} / $_totalItemCount 项',
-                      ),
-                      const SizedBox(height: 12),
-                      AnimatedSwitcher(
-                        duration: AppMotion.fast,
-                        child: _selectionMode
-                            ? _BulkActionBar(
-                                key: const ValueKey('bulk-action-bar'),
-                                selectedCount: selectedItems.length,
-                                allLoadedSelected:
-                                    _items.isNotEmpty &&
-                                    selectedItems.length == _items.length,
-                                busyLabel: _bulkActionLabel,
-                                favoriteTarget: favoriteTarget,
-                                playedTarget: playedTarget,
-                                showUserStates: _selectedLibrary?.isLocal != true,
-                                onSelectAll: _selectAllLoaded,
-                                onFavorite: () =>
-                                    _applyBulkState(favorite: favoriteTarget),
-                                onPlayed: () =>
-                                    _applyBulkState(played: playedTarget),
-                                onDelete: _deleteSelectedItems,
-                                onPlayQueue: _playSelectedItems,
-                                onClose: _exitSelectionMode,
-                              )
-                            : _LibraryToolbar(
-                                key: const ValueKey('library-toolbar'),
-                                sort: _sort,
-                                density: _density,
-                                activeFilterCount: _activeFilterCount,
-                                onSortChanged: _changeSort,
-                                onFilterPressed: _showFilters,
-                                onDensityChanged: _setDensity,
-                                onDedupePressed: _openDedupePage,
-                                onSelectPressed: _enterSelectionMode,
+          child: Stack(
+            children: [
+              PeekSmoothScroll(
+                controller: _scrollController,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    28,
+                    horizontalPadding,
+                    _selectionMode ? 120 : 48,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1280),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _LibraryHeader(
+                            account: account,
+                            localLibraryCount: widget.localLibraries.length,
+                            onRefresh: () => _loadCatalog(forceRefresh: true),
+                          ),
+                          const SizedBox(height: 28),
+                          if (_catalogNotice != null) ...[
+                            _InlineLibraryError(
+                              message: _catalogNotice!,
+                              onRetry: () => _loadCatalog(forceRefresh: true),
+                            ),
+                            const SizedBox(height: 18),
+                          ],
+                          if (_libraries.isEmpty)
+                            _LibraryMessage(
+                              icon: Icons.create_new_folder_outlined,
+                              title: account == null ? '还没有媒体库' : '没有可见媒体库',
+                              message: account == null
+                                  ? '添加电脑或局域网共享文件夹，也可以返回首页连接 Jellyfin / Emby。'
+                                  : '添加本地文件夹，或检查当前用户的服务器媒体库权限。',
+                              actionLabel: '添加本地媒体库',
+                              onAction: widget.onAddLocalLibrary,
+                              embedded: true,
+                            )
+                          else ...[
+                            _SectionLabel(
+                              eyebrow: 'COLLECTIONS',
+                              title: '我的媒体库',
+                              detail: '${_libraries.length} 个可访问媒体库',
+                            ),
+                            const SizedBox(height: 14),
+                            _LibrarySelector(
+                              libraries: _libraries,
+                              selectedId: _selectedLibrary?.id,
+                              onSelected: _selectLibrary,
+                            ),
+                            const SizedBox(height: 32),
+                            if (_path.isNotEmpty) ...[
+                              _LibraryBreadcrumb(
+                                path: _path,
+                                onSelected: _navigateTo,
                               ),
-                      ),
-                      const SizedBox(height: 18),
-                      if (_error != null)
-                        _InlineLibraryError(
-                          message: _error!,
-                          onRetry: _path.isEmpty
-                              ? _loadCatalog
-                              : () => _reloadCurrentNode(),
-                        )
+                              const SizedBox(height: 16),
+                            ],
+                            _SectionLabel(
+                              eyebrow: 'BROWSE',
+                              title: _path.isEmpty ? '媒体内容' : _path.last.name,
+                              detail: _loadingItems
+                                  ? '正在同步'
+                                  : '已加载 ${_items.length} / $_totalItemCount 项',
+                            ),
+                            const SizedBox(height: 12),
+                            _LibraryToolbar(
+                              key: const ValueKey('library-toolbar'),
+                              sort: _sort,
+                              density: _density,
+                              activeFilterCount: _activeFilterCount,
+                              onSortChanged: _changeSort,
+                              onFilterPressed: _showFilters,
+                              onDensityChanged: _setDensity,
+                              onDedupePressed: _openDedupePage,
+                              onSelectPressed: _enterSelectionMode,
+                            ),
+                            const SizedBox(height: 18),
+                            if (_error != null)
+                              _InlineLibraryError(
+                                message: _error!,
+                                onRetry: _path.isEmpty
+                                    ? _loadCatalog
+                                    : () => _reloadCurrentNode(),
+                              )
                       else if (_loadingItems)
                         const _ItemsLoadingGrid()
                       else if (_items.isEmpty)
@@ -562,7 +541,51 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             ),
           ),
         ),
-      );
+        // Floating sticky action bar at the bottom of the screen
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 24,
+          child: Center(
+            child: AnimatedSlide(
+              offset: _selectionMode ? Offset.zero : const Offset(0, 1.5),
+              duration: AppMotion.standard,
+              curve: AppMotion.enterCurve,
+              child: AnimatedOpacity(
+                opacity: _selectionMode ? 1.0 : 0.0,
+                duration: AppMotion.fast,
+                child: IgnorePointer(
+                  ignoring: !_selectionMode,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 860),
+                    child: _BulkActionBar(
+                      key: const ValueKey('bulk-action-bar'),
+                      selectedCount: selectedItems.length,
+                      allLoadedSelected:
+                          _items.isNotEmpty &&
+                          selectedItems.length == _items.length,
+                      busyLabel: _bulkActionLabel,
+                      favoriteTarget: favoriteTarget,
+                      playedTarget: playedTarget,
+                      showUserStates: _selectedLibrary?.isLocal != true,
+                      onSelectAll: _selectAllLoaded,
+                      onFavorite: () =>
+                          _applyBulkState(favorite: favoriteTarget),
+                      onPlayed: () =>
+                          _applyBulkState(played: playedTarget),
+                      onDelete: _deleteSelectedItems,
+                      onPlayQueue: _playSelectedItems,
+                      onClose: _exitSelectionMode,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
     },
   );
 }
@@ -1344,85 +1367,96 @@ class _BulkActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final busy = busyLabel != null;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: AppGlass.decoration(radius: 14, selected: true),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          if (busy)
-            const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            const Icon(
-              Icons.check_circle_outline_rounded,
-              size: 20,
-              color: AppColors.spotlight,
-            ),
-          Text(
-            busy ? '$busyLabel…' : '已选择 $selectedCount 项',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          TextButton.icon(
-            onPressed: busy || allLoadedSelected ? null : onSelectAll,
-            icon: const Icon(Icons.select_all_rounded, size: 18),
-            label: const Text('全选已加载'),
-          ),
-          OutlinedButton.icon(
-            key: const ValueKey('bulk-play-queue-button'),
-            onPressed: busy || selectedCount == 0 ? null : onPlayQueue,
-            icon: const Icon(Icons.playlist_play_rounded, size: 18),
-            label: const Text('连续播放'),
-          ),
-          if (showUserStates) ...[
-            OutlinedButton.icon(
-              key: const ValueKey('bulk-favorite-button'),
-              onPressed: busy || selectedCount == 0 ? null : onFavorite,
-              icon: Icon(
-                favoriteTarget
-                    ? Icons.favorite_border_rounded
-                    : Icons.heart_broken_rounded,
-                size: 18,
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: AppGlass.visionOSDecoration(
+          radius: 20,
+          elevated: true,
+          glowColor: const Color(0x404A90E2),
+          borderOpacity: 0.35,
+        ),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          alignment: WrapAlignment.center,
+          children: [
+            if (busy)
+              const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              const Icon(
+                Icons.check_circle_rounded,
+                size: 20,
+                color: AppColors.spotlight,
               ),
-              label: Text(favoriteTarget ? '收藏' : '取消收藏'),
+            Text(
+              busy ? '$busyLabel…' : '已选择 $selectedCount 项',
+              style:
+                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+            ),
+            const SizedBox(width: 2),
+            TextButton.icon(
+              onPressed: busy || allLoadedSelected ? null : onSelectAll,
+              icon: const Icon(Icons.select_all_rounded, size: 18),
+              label: const Text('全选已加载'),
             ),
             OutlinedButton.icon(
-              key: const ValueKey('bulk-played-button'),
-              onPressed: busy || selectedCount == 0 ? null : onPlayed,
-              icon: Icon(
-                playedTarget
-                    ? Icons.done_all_rounded
-                    : Icons.remove_done_rounded,
-                size: 18,
+              key: const ValueKey('bulk-play-queue-button'),
+              onPressed: busy || selectedCount == 0 ? null : onPlayQueue,
+              icon: const Icon(Icons.playlist_play_rounded, size: 18),
+              label: const Text('连续播放'),
+            ),
+            if (showUserStates) ...[
+              OutlinedButton.icon(
+                key: const ValueKey('bulk-favorite-button'),
+                onPressed: busy || selectedCount == 0 ? null : onFavorite,
+                icon: Icon(
+                  favoriteTarget
+                      ? Icons.favorite_border_rounded
+                      : Icons.heart_broken_rounded,
+                  size: 18,
+                ),
+                label: Text(favoriteTarget ? '收藏' : '取消收藏'),
               ),
-              label: Text(playedTarget ? '标为已观看' : '标为未观看'),
+              OutlinedButton.icon(
+                key: const ValueKey('bulk-played-button'),
+                onPressed: busy || selectedCount == 0 ? null : onPlayed,
+                icon: Icon(
+                  playedTarget
+                      ? Icons.done_all_rounded
+                      : Icons.remove_done_rounded,
+                  size: 18,
+                ),
+                label: Text(playedTarget ? '标为已观看' : '标为未观看'),
+              ),
+            ],
+            OutlinedButton.icon(
+              key: const ValueKey('bulk-delete-button'),
+              onPressed: busy || selectedCount == 0 ? null : onDelete,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: Color(0x66FF453A)),
+              ),
+              icon: const Icon(
+                Icons.delete_outline_rounded,
+                size: 18,
+                color: AppColors.error,
+              ),
+              label:
+                  const Text('批量删除', style: TextStyle(color: AppColors.error)),
+            ),
+            IconButton(
+              tooltip: '退出批量选择',
+              onPressed: busy ? null : onClose,
+              icon: const Icon(Icons.close_rounded, size: 19),
             ),
           ],
-          OutlinedButton.icon(
-            key: const ValueKey('bulk-delete-button'),
-            onPressed: busy || selectedCount == 0 ? null : onDelete,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.error,
-              side: const BorderSide(color: Color(0x66FF453A)),
-            ),
-            icon: const Icon(
-              Icons.delete_outline_rounded,
-              size: 18,
-              color: AppColors.error,
-            ),
-            label:
-                const Text('批量删除', style: TextStyle(color: AppColors.error)),
-          ),
-          IconButton(
-            tooltip: '退出批量选择',
-            onPressed: busy ? null : onClose,
-            icon: const Icon(Icons.close_rounded),
-          ),
-        ],
+        ),
       ),
     );
   }

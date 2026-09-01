@@ -216,9 +216,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('library-select-button')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('media-card-artwork-item-0')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('已选择 1 项'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('bulk-favorite-button')));
     await tester.pumpAndSettle();
@@ -228,9 +228,9 @@ void main() {
     expect(find.text('已收藏 1 项'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('library-select-button')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('media-card-artwork-item-1')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('bulk-played-button')));
     await tester.pumpAndSettle();
 
@@ -296,11 +296,11 @@ void main() {
     final selectButton = find.byKey(const ValueKey('library-select-button'));
     expect(selectButton, findsOneWidget);
     await tester.tap(selectButton);
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // Select item-0
     await tester.tap(find.byKey(const ValueKey('media-card-artwork-item-0')));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // Tap bulk delete button
     final bulkDeleteButton = find.byKey(const ValueKey('bulk-delete-button'));
