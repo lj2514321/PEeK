@@ -248,7 +248,10 @@ class EmbyMediaItemParser {
       'video' => MediaItemKind.video,
       'audio' => MediaItemKind.audio,
       'person' => MediaItemKind.person,
-      'folder' || 'userview' || 'collectionfolder' => MediaItemKind.folder,
+      'folder' ||
+      'userview' ||
+      'collectionfolder' ||
+      'boxset' => MediaItemKind.folder,
       _ => MediaItemKind.video,
     };
   }

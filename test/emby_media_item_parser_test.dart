@@ -68,4 +68,18 @@ void main() {
     expect(item.genres, contains('Sci-Fi'));
     expect(item.communityRating, 8.8);
   });
+
+  test('EmbyMediaItemParser maps BoxSet to browsable folder kind', () {
+    final rawBoxSet = {
+      'Id': 'boxset-202',
+      'Name': 'Actor Collection',
+      'Type': 'BoxSet',
+    };
+
+    final item = EmbyMediaItemParser.parseItem(rawBoxSet, account);
+
+    expect(item.id, 'boxset-202');
+    expect(item.name, 'Actor Collection');
+    expect(item.kind, MediaItemKind.folder);
+  });
 }

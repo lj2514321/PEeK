@@ -330,6 +330,9 @@ void main() {
     expect(page.items.single.resumePosition, const Duration(seconds: 30));
     expect(page.items.single.favorite, isTrue);
     expect(request?.uri.queryParameters['EnableUserData'], 'true');
+    expect(request?.uri.queryParameters['CollapseBoxSetItems'], 'false');
+    expect(request?.uri.queryParameters['GroupItemsIntoCollections'], 'false');
+    expect(request?.uri.queryParameters['ExcludeItemTypes'], 'Folder,BoxSet');
   });
 
   test('passes sorting and filtering through the paged item query', () async {
@@ -361,9 +364,68 @@ void main() {
 
     expect(request?.uri.queryParameters['SortBy'], 'CommunityRating,SortName');
     expect(request?.uri.queryParameters['SortOrder'], 'Descending');
-    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Movie');
+    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Movie,Video');
     expect(request?.uri.queryParameters['Filters'], 'IsFavorite');
     expect(request?.uri.queryParameters['Years'], '2025');
+    expect(request?.uri.queryParameters['CollapseBoxSetItems'], 'false');
+    expect(request?.uri.queryParameters['GroupItemsIntoCollections'], 'false');
+    expect(request?.uri.queryParameters['ExcludeItemTypes'], 'Folder,BoxSet');
+  });
+
+  test('passes collapseBoxSets=true to group items into collections', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {'Items': [], 'TotalRecordCount': 0},
+              ),
+            );
+          },
+        ),
+      );
+
+    await MediaLibraryService(dio).getItems(
+      account,
+      parentId: 'movies-id',
+      collapseBoxSets: true,
+    );
+
+    expect(request?.uri.queryParameters['CollapseBoxSetItems'], 'true');
+    expect(request?.uri.queryParameters['GroupItemsIntoCollections'], 'true');
+    expect(request?.uri.queryParameters.containsKey('ExcludeItemTypes'), isFalse);
+  });
+
+  test('does not exclude BoxSet when collectionType is boxsets', () async {
+    RequestOptions? request;
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            request = options;
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 200,
+                data: const {'Items': [], 'TotalRecordCount': 0},
+              ),
+            );
+          },
+        ),
+      );
+
+    await MediaLibraryService(dio).getItems(
+      account,
+      parentId: 'boxsets-id',
+      collectionType: 'boxsets',
+    );
+
+    expect(request?.uri.queryParameters.containsKey('ExcludeItemTypes'), isFalse);
   });
 
   test('loads global favorites across all media libraries', () async {

@@ -47,6 +47,7 @@ class MediaLibraryService {
   Future<MediaPage> getItems(
     AuthenticatedServer account, {
     required String parentId,
+    String? collectionType,
     int startIndex = 0,
     int limit = 60,
     MediaLibrarySort sort = MediaLibrarySort.nameAscending,
@@ -55,8 +56,10 @@ class MediaLibraryService {
     MediaResolutionFilter resolution = MediaResolutionFilter.all,
     double? minCommunityRating,
     int? productionYear,
+    bool collapseBoxSets = false,
     bool forceRefresh = false,
   }) async {
+    final isBoxSetLibrary = collectionType?.trim().toLowerCase() == 'boxsets';
     final query = <String, String>{
       'ParentId': parentId,
       'Recursive': 'true',
@@ -71,6 +74,10 @@ class MediaLibraryService {
       'StartIndex': '$startIndex',
       'Limit': '$limit',
       'EnableTotalRecordCount': 'true',
+      'CollapseBoxSetItems': collapseBoxSets ? 'true' : 'false',
+      'GroupItemsIntoCollections': collapseBoxSets ? 'true' : 'false',
+      if (!collapseBoxSets && !isBoxSetLibrary)
+        'ExcludeItemTypes': 'Folder,BoxSet',
       if (kind.apiTypes != null) 'IncludeItemTypes': kind.apiTypes!,
       if (status.apiFilter != null) 'Filters': status.apiFilter!,
       if (minCommunityRating != null)
@@ -1070,7 +1077,7 @@ extension MediaLibraryKindFilterApi on MediaLibraryKindFilter {
 
   String? get apiTypes => switch (this) {
     MediaLibraryKindFilter.all => null,
-    MediaLibraryKindFilter.movies => 'Movie',
+    MediaLibraryKindFilter.movies => 'Movie,Video',
     MediaLibraryKindFilter.series => 'Series',
     MediaLibraryKindFilter.episodes => 'Episode',
   };

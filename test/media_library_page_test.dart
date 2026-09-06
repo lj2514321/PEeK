@@ -449,6 +449,7 @@ class _FakeLibraryService extends MediaLibraryService {
   Future<MediaPage> getItems(
     AuthenticatedServer account, {
     required String parentId,
+    String? collectionType,
     int startIndex = 0,
     int limit = 60,
     MediaLibrarySort sort = MediaLibrarySort.nameAscending,
@@ -457,6 +458,7 @@ class _FakeLibraryService extends MediaLibraryService {
     MediaResolutionFilter resolution = MediaResolutionFilter.all,
     double? minCommunityRating,
     int? productionYear,
+    bool collapseBoxSets = false,
     bool forceRefresh = false,
   }) async {
     requestedStartIndexes.add(startIndex);

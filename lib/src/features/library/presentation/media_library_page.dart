@@ -69,6 +69,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   MediaResolutionFilter _resolutionFilter = MediaResolutionFilter.all;
   double? _minCommunityRating;
   int? _productionYear;
+  bool _collapseBoxSets = false;
   MediaGridDensity _density = MediaGridDensity.standard;
   Set<String> _selectedIds = {};
   bool _selectionMode = false;
@@ -427,6 +428,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         .getItems(
           account,
           parentId: node.id,
+          collectionType: _selectedLibrary?.collectionType,
           startIndex: startIndex,
           limit: limit,
           sort: _sort,
@@ -435,6 +437,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
           resolution: _resolutionFilter,
           minCommunityRating: _minCommunityRating,
           productionYear: _productionYear,
+          collapseBoxSets: _collapseBoxSets,
           forceRefresh: forceRefresh,
         );
   }
@@ -580,6 +583,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                               MediaResolutionFilter.all;
                                           _minCommunityRating = null;
                                           _productionYear = null;
+                                          _collapseBoxSets = false;
                                         });
                                         await _reloadCurrentNode();
                                       }
@@ -683,6 +687,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
           resolution: _resolutionFilter,
           minCommunityRating: _minCommunityRating,
           productionYear: _productionYear,
+          collapseBoxSets: _collapseBoxSets,
         ),
       ),
     );
@@ -691,7 +696,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         result.status == _statusFilter &&
         result.resolution == _resolutionFilter &&
         result.minCommunityRating == _minCommunityRating &&
-        result.productionYear == _productionYear) {
+        result.productionYear == _productionYear &&
+        result.collapseBoxSets == _collapseBoxSets) {
       return;
     }
     setState(() {
@@ -700,6 +706,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       _resolutionFilter = result.resolution;
       _minCommunityRating = result.minCommunityRating;
       _productionYear = result.productionYear;
+      _collapseBoxSets = result.collapseBoxSets;
     });
     await _reloadCurrentNode();
   }
@@ -1072,7 +1079,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       (_statusFilter == MediaLibraryStatusFilter.all ? 0 : 1) +
       (_resolutionFilter == MediaResolutionFilter.all ? 0 : 1) +
       (_minCommunityRating == null ? 0 : 1) +
-      (_productionYear == null ? 0 : 1);
+      (_productionYear == null ? 0 : 1) +
+      (_collapseBoxSets ? 1 : 0);
 
   void _openDedupePage() {
     Navigator.of(context).push<void>(
@@ -1545,6 +1553,7 @@ class _LibraryFilters {
     this.resolution = MediaResolutionFilter.all,
     this.minCommunityRating,
     required this.productionYear,
+    this.collapseBoxSets = false,
   });
 
   final MediaLibraryKindFilter kind;
@@ -1552,6 +1561,7 @@ class _LibraryFilters {
   final MediaResolutionFilter resolution;
   final double? minCommunityRating;
   final int? productionYear;
+  final bool collapseBoxSets;
 }
 
 class _LibraryFilterDialog extends StatefulWidget {
@@ -1568,6 +1578,7 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
   late MediaLibraryStatusFilter _status = widget.initialValue.status;
   late MediaResolutionFilter _resolution = widget.initialValue.resolution;
   late double? _minCommunityRating = widget.initialValue.minCommunityRating;
+  late bool _collapseBoxSets = widget.initialValue.collapseBoxSets;
   late final TextEditingController _yearController = TextEditingController(
     text: widget.initialValue.productionYear?.toString() ?? '',
   );
@@ -1594,6 +1605,7 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
         resolution: _resolution,
         minCommunityRating: _minCommunityRating,
         productionYear: year,
+        collapseBoxSets: _collapseBoxSets,
       ),
     );
   }
@@ -1688,6 +1700,26 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
                   prefixIcon: const Icon(Icons.calendar_month_rounded),
                 ),
               ),
+              const SizedBox(height: 22),
+              const Text('合集展示', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              FilterChip(
+                key: const ValueKey('library-collapse-boxsets-filter'),
+                label: const Text('按合集分组'),
+                selected: _collapseBoxSets,
+                onSelected: (selected) =>
+                    setState(() => _collapseBoxSets = selected),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _collapseBoxSets
+                    ? '已开启：属于同一合集的影片将收拢为一个合集卡片展示。'
+                    : '未开启（默认）：平铺展示所有独立影片，不按合集或演员名收束聚集。',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textTertiary,
+                ),
+              ),
             ],
           ),
         ),
@@ -1700,6 +1732,7 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
               _status = MediaLibraryStatusFilter.all;
               _resolution = MediaResolutionFilter.all;
               _minCommunityRating = null;
+              _collapseBoxSets = false;
               _yearController.clear();
               _yearError = null;
             });

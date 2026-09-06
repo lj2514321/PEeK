@@ -346,6 +346,7 @@ class _ShellLibraryService extends MediaLibraryService {
   Future<MediaPage> getItems(
     AuthenticatedServer account, {
     required String parentId,
+    String? collectionType,
     int startIndex = 0,
     int limit = 60,
     MediaLibrarySort sort = MediaLibrarySort.nameAscending,
@@ -354,6 +355,7 @@ class _ShellLibraryService extends MediaLibraryService {
     MediaResolutionFilter resolution = MediaResolutionFilter.all,
     double? minCommunityRating,
     int? productionYear,
+    bool collapseBoxSets = false,
     bool forceRefresh = false,
   }) async {
     return const MediaPage(items: [], totalRecordCount: 0, nextStartIndex: 0);
