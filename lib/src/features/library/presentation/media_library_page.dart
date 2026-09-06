@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -48,6 +49,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   static const _pageSize = 60;
 
   final _scrollController = SmoothScrollController();
+  final Map<String, double> _nodeScrollOffsets = {};
   List<MediaItem> _libraries = const [];
   List<MediaItem> _items = const [];
   List<MediaItem> _path = const [];
@@ -181,6 +183,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
 
   Future<void> _openItem(MediaItem item) async {
     if (_isBrowsable(item)) {
+      if (_scrollController.hasClients && _path.isNotEmpty) {
+        _nodeScrollOffsets[_path.last.id] = _scrollController.offset;
+      }
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(0);
       }
@@ -209,14 +214,14 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         });
       }
     } else {
-      await _refreshSingleItem(item);
+      unawaited(_refreshSingleItem(item));
     }
     if (currentScrollOffset != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_scrollController.hasClients) return;
         final maxScroll = _scrollController.position.maxScrollExtent;
         final clamped = currentScrollOffset.clamp(0.0, maxScroll);
-        if ((_scrollController.offset - clamped).abs() > 1.0) {
+        if ((_scrollController.offset - clamped).abs() > 0.5) {
           _scrollController.jumpTo(clamped);
         }
       });
@@ -249,10 +254,18 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       return;
     }
     final nextPath = _path.sublist(0, index + 1);
-    if (_scrollController.hasClients) {
-      _scrollController.jumpTo(0);
-    }
+    final savedOffset = _nodeScrollOffsets[nextPath.last.id];
     await _loadNode(nextPath.last, path: nextPath);
+    if (savedOffset != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        final clamped = savedOffset.clamp(0.0, maxScroll);
+        if ((_scrollController.offset - clamped).abs() > 0.5) {
+          _scrollController.jumpTo(clamped);
+        }
+      });
+    }
   }
 
   Future<void> _loadNode(

@@ -180,13 +180,27 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   }
 
   Future<void> _openDetails(MediaItem item) async {
+    final targetOffset = _scrollController.hasClients
+        ? _scrollController.offset
+        : null;
     await Navigator.of(context).push<void>(
       Peek3DPageRoute(
         builder: (context) =>
             MediaDetailPage(account: widget.account, initialItem: item),
       ),
     );
-    if (mounted) await _refreshContinueWatching();
+    if (!mounted) return;
+    await _refreshContinueWatching();
+    if (targetOffset != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        final clamped = targetOffset.clamp(0.0, maxScroll);
+        if ((_scrollController.offset - clamped).abs() > 0.5) {
+          _scrollController.jumpTo(clamped);
+        }
+      });
+    }
   }
 
   Future<void> _continuePlayback(MediaItem item) async {
@@ -207,9 +221,9 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
         );
         if (!mounted) return;
         if (launched) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已在外部播放器中启动《${item.name}》')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('已在外部播放器中启动《${item.name}》')));
           await _refreshContinueWatching();
           return;
         } else {
@@ -261,105 +275,106 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           return PeekSmoothScroll(
             controller: _scrollController,
             child: CustomScrollView(
+              key: const PageStorageKey('authenticated-home-scroll-view'),
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  compact ? 22 : 30,
-                  horizontalPadding,
-                  12,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1280),
-                      child: _HomeHeading(
-                        account: widget.account,
-                        refreshing: _refreshing,
-                        onRefresh: () => unawaited(_load(forceRefresh: true)),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                sliver: SliverToBoxAdapter(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1280),
-                      child: _loading && feed == null
-                          ? const _HomeHeroSkeleton()
-                          : feed?.heroItems.isNotEmpty ?? false
-                          ? _HomeHeroCarousel(
-                              items: feed!.heroItems,
-                              dailyRecommendations:
-                                  feed.dailyRecommendations.items.isNotEmpty,
-                              active: widget.active,
-                              planningItemId: _planningItemId,
-                              onPlay: (item) =>
-                                  unawaited(_continuePlayback(item)),
-                              onDetails: (item) =>
-                                  unawaited(_openDetails(item)),
-                            )
-                          : _HomeEmptyHero(
-                              error: _pageError,
-                              onOpenLibrary: widget.onOpenLibrary,
-                              onRetry: () =>
-                                  unawaited(_load(forceRefresh: true)),
-                            ),
-                    ),
-                  ),
-                ),
-              ),
-              if (_pageError != null && feed?.heroItem != null)
+              slivers: [
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    14,
+                    compact ? 22 : 30,
                     horizontalPadding,
-                    0,
+                    12,
                   ),
                   sliver: SliverToBoxAdapter(
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 1280),
-                        child: _HomeSectionNotice(
-                          message: _pageError!,
-                          onRetry: () => unawaited(_load(forceRefresh: true)),
+                        child: _HomeHeading(
+                          account: widget.account,
+                          refreshing: _refreshing,
+                          onRefresh: () => unawaited(_load(forceRefresh: true)),
                         ),
                       ),
                     ),
                   ),
                 ),
-              if (_loading && feed == null)
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    28,
-                    horizontalPadding,
-                    48,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                   sliver: SliverToBoxAdapter(
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 1280),
-                        child: const _HomeTracksSkeleton(),
+                        child: _loading && feed == null
+                            ? const _HomeHeroSkeleton()
+                            : feed?.heroItems.isNotEmpty ?? false
+                            ? _HomeHeroCarousel(
+                                items: feed!.heroItems,
+                                dailyRecommendations:
+                                    feed.dailyRecommendations.items.isNotEmpty,
+                                active: widget.active,
+                                planningItemId: _planningItemId,
+                                onPlay: (item) =>
+                                    unawaited(_continuePlayback(item)),
+                                onDetails: (item) =>
+                                    unawaited(_openDetails(item)),
+                              )
+                            : _HomeEmptyHero(
+                                error: _pageError,
+                                onOpenLibrary: widget.onOpenLibrary,
+                                onRetry: () =>
+                                    unawaited(_load(forceRefresh: true)),
+                              ),
                       ),
                     ),
                   ),
-                )
-              else if (feed != null)
-                ..._feedSlivers(
-                  feed,
-                  horizontalPadding: horizontalPadding,
-                  compact: compact,
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 48)),
-            ],
-          ),
+                if (_pageError != null && feed?.heroItem != null)
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      14,
+                      horizontalPadding,
+                      0,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1280),
+                          child: _HomeSectionNotice(
+                            message: _pageError!,
+                            onRetry: () => unawaited(_load(forceRefresh: true)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_loading && feed == null)
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      28,
+                      horizontalPadding,
+                      48,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1280),
+                          child: const _HomeTracksSkeleton(),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (feed != null)
+                  ..._feedSlivers(
+                    feed,
+                    horizontalPadding: horizontalPadding,
+                    compact: compact,
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 48)),
+              ],
+            ),
           );
         },
       ),
@@ -647,13 +662,21 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                       builder: (context, child) {
                         double pageOffset = 0.0;
                         if (_controller.position.haveDimensions) {
-                          pageOffset = (_controller.page ?? _currentIndex.toDouble()) - index;
+                          pageOffset =
+                              (_controller.page ?? _currentIndex.toDouble()) -
+                              index;
                         } else {
                           pageOffset = (_currentIndex - index).toDouble();
                         }
-                        final scale = (1.0 - (pageOffset.abs() * 0.06)).clamp(0.92, 1.0);
+                        final scale = (1.0 - (pageOffset.abs() * 0.06)).clamp(
+                          0.92,
+                          1.0,
+                        );
                         final rotateY = (pageOffset * -0.08).clamp(-0.25, 0.25);
-                        final opacity = (1.0 - (pageOffset.abs() * 0.45)).clamp(0.4, 1.0);
+                        final opacity = (1.0 - (pageOffset.abs() * 0.45)).clamp(
+                          0.4,
+                          1.0,
+                        );
 
                         return Transform(
                           transform: Matrix4.identity()
@@ -661,10 +684,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                             ..scaleByDouble(scale, scale, 1.0, 1.0)
                             ..rotateY(rotateY),
                           alignment: Alignment.center,
-                          child: Opacity(
-                            opacity: opacity,
-                            child: child,
-                          ),
+                          child: Opacity(opacity: opacity, child: child),
                         );
                       },
                       child: _HomeHero(
@@ -718,9 +738,7 @@ class _CarouselControls extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.52),
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Material(
         color: Colors.transparent,
@@ -1101,62 +1119,62 @@ class _HomeMediaCard extends StatelessWidget {
         button: true,
         label: '${item.name}，${_kindLabel(item.kind)}',
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Peek3DCard(
-              onTap: onOpen,
-              borderRadius: 16,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  _CardArtwork(item: item, portrait: portrait),
-                  if (item.played)
-                    const Positioned(
-                      top: 9,
-                      right: 9,
-                      child: Icon(
-                        Icons.check_circle_rounded,
-                        color: AppColors.success,
-                        size: 20,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Peek3DCard(
+                onTap: onOpen,
+                borderRadius: 16,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _CardArtwork(item: item, portrait: portrait),
+                    if (item.played)
+                      const Positioned(
+                        top: 9,
+                        right: 9,
+                        child: Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.success,
+                          size: 20,
+                        ),
                       ),
-                    ),
-                  if (progress > 0)
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 3,
-                        color: AppColors.spotlight,
-                        backgroundColor: Colors.white.withValues(alpha: 0.16),
+                    if (progress > 0)
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 3,
+                          color: AppColors.spotlight,
+                          backgroundColor: Colors.white.withValues(alpha: 0.16),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 9),
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            _itemMetadata(item),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textTertiary,
-              fontSize: 11,
+            const SizedBox(height: 9),
+            Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          ),
-        ],
+            const SizedBox(height: 3),
+            Text(
+              _itemMetadata(item),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _CardArtwork extends StatelessWidget {
