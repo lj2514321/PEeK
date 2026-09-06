@@ -131,6 +131,7 @@ class PlaybackControls extends StatelessWidget {
               onQuality: onQuality,
               onAudioEnhancement: onAudioEnhancement,
               onOpenExternalPlayer: onOpenExternalPlayer,
+              onFullScreen: onFullScreen,
             ),
           ),
         ),
@@ -207,6 +208,7 @@ class _PlaybackTopBar extends StatelessWidget {
     required this.onQuality,
     this.onAudioEnhancement,
     this.onOpenExternalPlayer,
+    required this.onFullScreen,
   });
 
   final String title;
@@ -221,12 +223,14 @@ class _PlaybackTopBar extends StatelessWidget {
   final VoidCallback? onQuality;
   final VoidCallback? onAudioEnhancement;
   final VoidCallback? onOpenExternalPlayer;
+  final VoidCallback onFullScreen;
 
   @override
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.topCenter,
-      child: DragToMoveArea(
+      child: _PlaybackDragToMoveArea(
+        onDoubleTap: onFullScreen,
         child: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -328,6 +332,28 @@ class _PlaybackTopBar extends StatelessWidget {
         ),
       ),
     ),
+    );
+  }
+}
+
+class _PlaybackDragToMoveArea extends StatelessWidget {
+  const _PlaybackDragToMoveArea({
+    required this.child,
+    required this.onDoubleTap,
+  });
+
+  final Widget child;
+  final VoidCallback onDoubleTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (_) {
+        windowManager.startDragging();
+      },
+      onDoubleTap: onDoubleTap,
+      child: child,
     );
   }
 }

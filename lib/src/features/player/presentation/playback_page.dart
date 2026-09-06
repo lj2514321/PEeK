@@ -119,6 +119,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   bool _changingSource = false;
   String _sourceChangeLabel = '正在切换媒体';
   bool _fullScreen = false;
+  bool _wasMaximizedBeforeFullscreen = false;
   bool _diagnosticsVisible = false;
   bool _diagnosticsLoading = false;
   bool _diagnosticsReading = false;
@@ -627,6 +628,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _setNativeFullScreen(bool fullScreen) async {
     if (!Platform.isWindows) return;
     if (fullScreen) {
+      final isMaximized = await windowManager.isMaximized();
+      _wasMaximizedBeforeFullscreen = isMaximized;
+      if (isMaximized) {
+        // Unmaximize first so window_manager captures clean, unmaximized bounds
+        // and does not leave flutter_view clipped in a broken maximized state when restoring.
+        await windowManager.unmaximize();
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+      }
       // window_manager does not resize an already-frameless window when its
       // fullscreen API is called. Temporarily restore its hidden-titlebar
       // mode so the plugin can capture the window bounds and fill the monitor.
@@ -640,6 +649,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     }
     await windowManager.setFullScreen(false);
     await _restoreFramelessWindow();
+    if (_wasMaximizedBeforeFullscreen) {
+      _wasMaximizedBeforeFullscreen = false;
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await windowManager.maximize();
+    }
   }
 
   Future<void> _restoreFramelessWindow() async {
