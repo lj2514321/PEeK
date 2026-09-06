@@ -67,6 +67,7 @@ class _Peek3DCardState extends State<Peek3DCard> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
               curve: Curves.easeOutQuad,
+              transformAlignment: Alignment.center,
               transform: Matrix4.identity()
                 ..setEntry(3, 2, 0.001)
                 ..scaleByDouble(scale, scale, 1.0, 1.0)
