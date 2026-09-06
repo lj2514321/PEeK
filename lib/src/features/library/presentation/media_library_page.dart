@@ -173,15 +173,24 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   Future<void> _selectLibrary(MediaItem library) async {
     if (library.id == _selectedLibrary?.id && _path.length == 1) return;
     setState(() => _selectedLibrary = library);
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
     await _loadNode(library, path: [library]);
   }
 
   Future<void> _openItem(MediaItem item) async {
     if (_isBrowsable(item)) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
       await _loadNode(item, path: [..._path, item]);
       return;
     }
-    await Navigator.of(context).push<void>(
+    final currentScrollOffset = _scrollController.hasClients
+        ? _scrollController.offset
+        : null;
+    final updatedItem = await Navigator.of(context).push<MediaItem>(
       Peek3DPageRoute(
         builder: (context) => MediaDetailPage(
           account: item.isLocal ? null : widget.account,
@@ -189,7 +198,50 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         ),
       ),
     );
-    if (mounted) await _reloadCurrentNode();
+    if (!mounted) return;
+    if (updatedItem != null) {
+      final index = _items.indexWhere((it) => it.id == updatedItem.id);
+      if (index != -1) {
+        setState(() {
+          final next = List<MediaItem>.from(_items);
+          next[index] = updatedItem;
+          _items = next;
+        });
+      }
+    } else {
+      await _refreshSingleItem(item);
+    }
+    if (currentScrollOffset != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        final clamped = currentScrollOffset.clamp(0.0, maxScroll);
+        if ((_scrollController.offset - clamped).abs() > 1.0) {
+          _scrollController.jumpTo(clamped);
+        }
+      });
+    }
+  }
+
+  Future<void> _refreshSingleItem(MediaItem item) async {
+    final account = widget.account;
+    if (account == null || item.isLocal) return;
+    try {
+      final fresh = await ref
+          .read(mediaLibraryProvider)
+          .getItem(account, item.id, forceRefresh: true);
+      if (!mounted) return;
+      final index = _items.indexWhere((it) => it.id == fresh.id);
+      if (index != -1) {
+        setState(() {
+          final next = List<MediaItem>.from(_items);
+          next[index] = fresh;
+          _items = next;
+        });
+      }
+    } catch (_) {
+      // Ignore background refresh errors
+    }
   }
 
   Future<void> _navigateTo(int index) async {
@@ -197,6 +249,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       return;
     }
     final nextPath = _path.sublist(0, index + 1);
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
     await _loadNode(nextPath.last, path: nextPath);
   }
 
@@ -408,6 +463,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               PeekSmoothScroll(
                 controller: _scrollController,
                 child: SingleChildScrollView(
+                  key: PageStorageKey(
+                    'media-library-scroll-${_selectedLibrary?.id ?? 'root'}-${_path.map((e) => e.id).join('/')}',
+                  ),
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: EdgeInsets.fromLTRB(
@@ -493,102 +551,103 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                     ? _loadCatalog
                                     : () => _reloadCurrentNode(),
                               )
-                      else if (_loadingItems)
-                        const _ItemsLoadingGrid()
-                      else if (_items.isEmpty)
-                        _EmptyLibrary(
-                          filtered: _activeFilterCount > 0,
-                          onClearFilters: _activeFilterCount > 0
-                              ? () async {
-                                  setState(() {
-                                    _kindFilter = MediaLibraryKindFilter.all;
-                                    _statusFilter =
-                                        MediaLibraryStatusFilter.all;
-                                    _resolutionFilter =
-                                        MediaResolutionFilter.all;
-                                    _minCommunityRating = null;
-                                    _productionYear = null;
-                                  });
-                                  await _reloadCurrentNode();
-                                }
-                              : null,
-                        )
-                      else ...[
-                        _MediaGrid(
-                          items: _items,
-                          density: _density,
-                          selectionMode: _selectionMode,
-                          selectedIds: _selectedIds,
-                          onOpen: _openItem,
-                          onToggleSelection: _toggleSelection,
-                          onEnterSelection: _enterSelectionMode,
-                          onDelete: _deleteItemDirect,
-                          selectionAvailable: true,
-                        ),
-                        _PaginationFooter(
-                          loadedCount: _items.length,
-                          totalCount: _totalItemCount,
-                          hasMore: _nextStartIndex < _totalItemCount,
-                          loading: _loadingMore,
-                          error: _paginationError,
-                          onLoadMore: _loadMore,
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        // Floating sticky action bar at the bottom of the screen
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 24,
-          child: Center(
-            child: AnimatedSlide(
-              offset: _selectionMode ? Offset.zero : const Offset(0, 1.5),
-              duration: AppMotion.standard,
-              curve: AppMotion.enterCurve,
-              child: AnimatedOpacity(
-                opacity: _selectionMode ? 1.0 : 0.0,
-                duration: AppMotion.fast,
-                child: IgnorePointer(
-                  ignoring: !_selectionMode,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 860),
-                    child: _BulkActionBar(
-                      key: const ValueKey('bulk-action-bar'),
-                      selectedCount: selectedItems.length,
-                      allLoadedSelected:
-                          _items.isNotEmpty &&
-                          selectedItems.length == _items.length,
-                      busyLabel: _bulkActionLabel,
-                      favoriteTarget: favoriteTarget,
-                      playedTarget: playedTarget,
-                      showUserStates: _selectedLibrary?.isLocal != true,
-                      onSelectAll: _selectAllLoaded,
-                      onFavorite: () =>
-                          _applyBulkState(favorite: favoriteTarget),
-                      onPlayed: () =>
-                          _applyBulkState(played: playedTarget),
-                      onDelete: _deleteSelectedItems,
-                      onPlayQueue: _playSelectedItems,
-                      onClose: _exitSelectionMode,
+                            else if (_loadingItems)
+                              const _ItemsLoadingGrid()
+                            else if (_items.isEmpty)
+                              _EmptyLibrary(
+                                filtered: _activeFilterCount > 0,
+                                onClearFilters: _activeFilterCount > 0
+                                    ? () async {
+                                        setState(() {
+                                          _kindFilter =
+                                              MediaLibraryKindFilter.all;
+                                          _statusFilter =
+                                              MediaLibraryStatusFilter.all;
+                                          _resolutionFilter =
+                                              MediaResolutionFilter.all;
+                                          _minCommunityRating = null;
+                                          _productionYear = null;
+                                        });
+                                        await _reloadCurrentNode();
+                                      }
+                                    : null,
+                              )
+                            else ...[
+                              _MediaGrid(
+                                items: _items,
+                                density: _density,
+                                selectionMode: _selectionMode,
+                                selectedIds: _selectedIds,
+                                onOpen: _openItem,
+                                onToggleSelection: _toggleSelection,
+                                onEnterSelection: _enterSelectionMode,
+                                onDelete: _deleteItemDirect,
+                                selectionAvailable: true,
+                              ),
+                              _PaginationFooter(
+                                loadedCount: _items.length,
+                                totalCount: _totalItemCount,
+                                hasMore: _nextStartIndex < _totalItemCount,
+                                loading: _loadingMore,
+                                error: _paginationError,
+                                onLoadMore: _loadMore,
+                              ),
+                            ],
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+              // Floating sticky action bar at the bottom of the screen
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 24,
+                child: Center(
+                  child: AnimatedSlide(
+                    offset: _selectionMode ? Offset.zero : const Offset(0, 1.5),
+                    duration: AppMotion.standard,
+                    curve: AppMotion.enterCurve,
+                    child: AnimatedOpacity(
+                      opacity: _selectionMode ? 1.0 : 0.0,
+                      duration: AppMotion.fast,
+                      child: IgnorePointer(
+                        ignoring: !_selectionMode,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 860),
+                          child: _BulkActionBar(
+                            key: const ValueKey('bulk-action-bar'),
+                            selectedCount: selectedItems.length,
+                            allLoadedSelected:
+                                _items.isNotEmpty &&
+                                selectedItems.length == _items.length,
+                            busyLabel: _bulkActionLabel,
+                            favoriteTarget: favoriteTarget,
+                            playedTarget: playedTarget,
+                            showUserStates: _selectedLibrary?.isLocal != true,
+                            onSelectAll: _selectAllLoaded,
+                            onFavorite: () =>
+                                _applyBulkState(favorite: favoriteTarget),
+                            onPlayed: () =>
+                                _applyBulkState(played: playedTarget),
+                            onDelete: _deleteSelectedItems,
+                            onPlayQueue: _playSelectedItems,
+                            onClose: _exitSelectionMode,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
-    ),
-  );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
   Future<void> _reloadCurrentNode() async {
     if (_path.isEmpty) return _loadCatalog(forceRefresh: true);
@@ -817,7 +876,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       if (!mounted) return;
       setState(() {
         _items = _items.where((it) => it.id != item.id).toList(growable: false);
-        _totalItemCount = (_totalItemCount - 1).clamp(0, double.infinity).toInt();
+        _totalItemCount = (_totalItemCount - 1)
+            .clamp(0, double.infinity)
+            .toInt();
       });
 
       ScaffoldMessenger.of(context)
@@ -832,15 +893,14 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..removeCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('删除失败：$e')),
-        );
+        ..showSnackBar(SnackBar(content: Text('删除失败：$e')));
     }
   }
 
   Future<void> _deleteSelectedItems() async {
-    final selectedItems =
-        _items.where((it) => _selectedIds.contains(it.id)).toList();
+    final selectedItems = _items
+        .where((it) => _selectedIds.contains(it.id))
+        .toList();
     if (selectedItems.isEmpty || _bulkActionLabel != null) return;
 
     final count = selectedItems.length;
@@ -905,8 +965,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         _items = _items
             .where((it) => !deletedIds.contains(it.id))
             .toList(growable: false);
-        _totalItemCount =
-            (_totalItemCount - deletedCount).clamp(0, double.infinity).toInt();
+        _totalItemCount = (_totalItemCount - deletedCount)
+            .clamp(0, double.infinity)
+            .toInt();
         _selectionMode = false;
         _selectedIds = {};
         _bulkActionLabel = null;
@@ -938,8 +999,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   }
 
   Future<void> _playSelectedItems() async {
-    final selectedItems =
-        _items.where((it) => _selectedIds.contains(it.id)).toList();
+    final selectedItems = _items
+        .where((it) => _selectedIds.contains(it.id))
+        .toList();
     if (selectedItems.isEmpty) return;
 
     final playableItems = selectedItems
@@ -953,9 +1015,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         .toList(growable: false);
 
     if (playableItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('选中的项目中没有可直接播放的音视频内容。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('选中的项目中没有可直接播放的音视频内容。')));
       return;
     }
 
@@ -965,10 +1027,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       final prepared = await preparation.prepare(widget.account, firstItem);
       if (!mounted) return;
 
-      final queue = PlaybackQueue(
-        items: playableItems,
-        currentIndex: 0,
-      );
+      final queue = PlaybackQueue(items: playableItems, currentIndex: 0);
 
       _exitSelectionMode();
 
@@ -988,9 +1047,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('准备播放失败：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('准备播放失败：$e')));
       }
     }
   }
@@ -1396,8 +1455,10 @@ class _BulkActionBar extends StatelessWidget {
               ),
             Text(
               busy ? '$busyLabel…' : '已选择 $selectedCount 项',
-              style:
-                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
+              ),
             ),
             const SizedBox(width: 2),
             TextButton.icon(
@@ -1447,8 +1508,10 @@ class _BulkActionBar extends StatelessWidget {
                 size: 18,
                 color: AppColors.error,
               ),
-              label:
-                  const Text('批量删除', style: TextStyle(color: AppColors.error)),
+              label: const Text(
+                '批量删除',
+                style: TextStyle(color: AppColors.error),
+              ),
             ),
             IconButton(
               tooltip: '退出批量选择',
@@ -1592,8 +1655,8 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
                             : '${rating.toStringAsFixed(1)}+ 分',
                       ),
                       selected: _minCommunityRating == rating,
-                      onSelected:
-                          (_) => setState(() => _minCommunityRating = rating),
+                      onSelected: (_) =>
+                          setState(() => _minCommunityRating = rating),
                     ),
                 ],
               ),
@@ -1917,7 +1980,9 @@ class _MediaCard extends StatelessWidget {
         PeekContextMenuItem(
           id: 'open',
           label: browsable ? '打开目录' : '查看详情',
-          icon: browsable ? Icons.folder_open_rounded : Icons.info_outline_rounded,
+          icon: browsable
+              ? Icons.folder_open_rounded
+              : Icons.info_outline_rounded,
           onTap: onOpen,
         ),
         if (onEnterSelection != null)
@@ -1941,94 +2006,97 @@ class _MediaCard extends StatelessWidget {
         button: true,
         selected: selected,
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Peek3DCard(
-              onTap: selectionMode ? onToggleSelection : onOpen,
-              borderRadius: 14,
-              child: Material(
-                key: ValueKey('media-card-artwork-${item.id}'),
-                color: AppColors.surfaceLow,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: selected
-                      ? const BorderSide(color: AppColors.spotlight, width: 2)
-                      : BorderSide.none,
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: selectionMode ? onToggleSelection : onOpen,
-                  onLongPress: selectionMode
-                    ? onToggleSelection
-                    : onEnterSelection,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _MediaArtwork(item: item),
-                      if (selectionMode)
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: _SelectionBadge(selected: selected),
-                        )
-                      else if (item.favorite)
-                        const Positioned(
-                          top: 10,
-                          left: 10,
-                          child: _FavoriteBadge(),
-                        ),
-                      if (item.played)
-                        const Positioned(
-                          top: 10,
-                          right: 10,
-                          child: _PlayedBadge(),
-                        ),
-                      if (browsable)
-                        const Positioned(
-                          left: 10,
-                          bottom: 10,
-                          child: _BrowseBadge(),
-                        ),
-                      if (progress > 0 && progress < 1)
-                        Positioned(
-                          left: 8,
-                          right: 8,
-                          bottom: 8,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(99),
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              minHeight: 4,
-                              backgroundColor: Colors.black54,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Peek3DCard(
+                onTap: selectionMode ? onToggleSelection : onOpen,
+                borderRadius: 14,
+                child: Material(
+                  key: ValueKey('media-card-artwork-${item.id}'),
+                  color: AppColors.surfaceLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: selected
+                        ? const BorderSide(color: AppColors.spotlight, width: 2)
+                        : BorderSide.none,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: selectionMode ? onToggleSelection : onOpen,
+                    onLongPress: selectionMode
+                        ? onToggleSelection
+                        : onEnterSelection,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _MediaArtwork(item: item),
+                        if (selectionMode)
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: _SelectionBadge(selected: selected),
+                          )
+                        else if (item.favorite)
+                          const Positioned(
+                            top: 10,
+                            left: 10,
+                            child: _FavoriteBadge(),
+                          ),
+                        if (item.played)
+                          const Positioned(
+                            top: 10,
+                            right: 10,
+                            child: _PlayedBadge(),
+                          ),
+                        if (browsable)
+                          const Positioned(
+                            left: 10,
+                            bottom: 10,
+                            child: _BrowseBadge(),
+                          ),
+                        if (progress > 0 && progress < 1)
+                          Positioned(
+                            left: 8,
+                            right: 8,
+                            bottom: 8,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(99),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 4,
+                                backgroundColor: Colors.black54,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _metadata(item),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _metadata(item),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   String _metadata(MediaItem item) {
     final parts = <String>[_kindLabel(item.kind)];

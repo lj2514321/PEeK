@@ -194,13 +194,46 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
   Future<void> _openItem(MediaItem item) async {
     final account = widget.account;
     if (account == null) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+    final currentScrollOffset = _scrollController.hasClients
+        ? _scrollController.offset
+        : null;
+    final updatedItem = await Navigator.of(context).push<MediaItem>(
+      Peek3DPageRoute(
         builder: (context) =>
             MediaDetailPage(account: account, initialItem: item),
       ),
     );
-    if (mounted) await _loadFavorites(forceRefresh: true);
+    if (!mounted) return;
+    if (updatedItem != null) {
+      if (!updatedItem.favorite) {
+        setState(() {
+          _items = _items
+              .where((candidate) => candidate.id != updatedItem.id)
+              .toList(growable: false);
+          _totalItemCount = _totalItemCount > 0 ? _totalItemCount - 1 : 0;
+          _nextStartIndex = _nextStartIndex > 0 ? _nextStartIndex - 1 : 0;
+        });
+      } else {
+        final index = _items.indexWhere((it) => it.id == updatedItem.id);
+        if (index != -1) {
+          setState(() {
+            final next = List<MediaItem>.from(_items);
+            next[index] = updatedItem;
+            _items = next;
+          });
+        }
+      }
+    }
+    if (currentScrollOffset != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        final clamped = currentScrollOffset.clamp(0.0, maxScroll);
+        if ((_scrollController.offset - clamped).abs() > 1.0) {
+          _scrollController.jumpTo(clamped);
+        }
+      });
+    }
   }
 
   Future<void> _removeFavorite(MediaItem item) async {
@@ -307,158 +340,170 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
               key: const PageStorageKey('favorites-scroll-view'),
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  28,
-                  horizontalPadding,
-                  20,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1280),
-                      child: _FavoritesHeader(
-                        account: account,
-                        count: _totalItemCount,
-                        loading: _loading,
-                        onRefresh: refresh,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (ref.watch(actorFavoritesProvider).value?.isNotEmpty ?? false)
-                SliverToBoxAdapter(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1280),
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalPadding,
-                          0,
-                          horizontalPadding,
-                          24,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '收藏的演员 (${(ref.watch(actorFavoritesProvider).value ?? []).length})',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              height: 110,
-                              child: ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                itemCount:
-                                    (ref.watch(actorFavoritesProvider).value ?? []).length,
-                                separatorBuilder: (context, index) =>
-                                    const SizedBox(width: 14),
-                                itemBuilder: (context, index) {
-                                  final actor =
-                                      (ref.watch(actorFavoritesProvider).value ?? [])[index];
-                                  return _FavoriteActorChipCard(
-                                    actor: actor,
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        Peek3DPageRoute(
-                                          builder: (_) => PersonWorksPage(
-                                            account: account,
-                                            person: actor.toMediaPerson(),
-                                            onOpen: (item) => _openItem(item),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (_items.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _FavoritesMessage(
-                    icon: Icons.favorite_border_rounded,
-                    title: '收藏还是空的',
-                    message: '在详情页点亮心形图标，喜欢的电影、剧集和单集就会出现在这里。',
-                    actionLabel: '去媒体库看看',
-                    onAction: widget.onOpenLibrary,
-                  ),
-                )
-              else
+              slivers: [
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    0,
+                    28,
                     horizontalPadding,
-                    48,
+                    20,
                   ),
-                  sliver: SliverLayoutBuilder(
-                    builder: (context, gridConstraints) {
-                      final width = gridConstraints.crossAxisExtent.clamp(
-                        0.0,
-                        1280.0,
-                      );
-                      final columns = switch (width) {
-                        < 520 => 2,
-                        < 780 => 3,
-                        < 1040 => 4,
-                        < 1240 => 5,
-                        _ => 6,
-                      };
-                      return SliverGrid(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          final item = _items[index];
-                          return _FavoriteMediaCard(
-                            item: item,
-                            updating: _updatingIds.contains(item.id),
-                            onOpen: () => _openItem(item),
-                            onRemove: () => _removeFavorite(item),
-                          );
-                        }, childCount: _items.length),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          crossAxisSpacing: 14,
-                          mainAxisSpacing: 20,
-                          childAspectRatio: 0.62,
+                  sliver: SliverToBoxAdapter(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1280),
+                        child: _FavoritesHeader(
+                          account: account,
+                          count: _totalItemCount,
+                          loading: _loading,
+                          onRefresh: refresh,
                         ),
-                      );
-                    },
+                      ),
+                    ),
                   ),
                 ),
-              if (_loadingMore)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: 28),
-                    child: Center(child: CircularProgressIndicator()),
+                if (ref.watch(actorFavoritesProvider).value?.isNotEmpty ??
+                    false)
+                  SliverToBoxAdapter(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1280),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalPadding,
+                            0,
+                            horizontalPadding,
+                            24,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '收藏的演员 (${(ref.watch(actorFavoritesProvider).value ?? []).length})',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                height: 110,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount:
+                                      (ref
+                                                  .watch(actorFavoritesProvider)
+                                                  .value ??
+                                              [])
+                                          .length,
+                                  separatorBuilder: (context, index) =>
+                                      const SizedBox(width: 14),
+                                  itemBuilder: (context, index) {
+                                    final actor =
+                                        (ref
+                                            .watch(actorFavoritesProvider)
+                                            .value ??
+                                        [])[index];
+                                    return _FavoriteActorChipCard(
+                                      actor: actor,
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          Peek3DPageRoute(
+                                            builder: (_) => PersonWorksPage(
+                                              account: account,
+                                              person: actor.toMediaPerson(),
+                                              onOpen: (item) => _openItem(item),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              if (_paginationError != null)
-                SliverToBoxAdapter(
-                  child: Padding(
+                if (_items.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _FavoritesMessage(
+                      icon: Icons.favorite_border_rounded,
+                      title: '收藏还是空的',
+                      message: '在详情页点亮心形图标，喜欢的电影、剧集和单集就会出现在这里。',
+                      actionLabel: '去媒体库看看',
+                      onAction: widget.onOpenLibrary,
+                    ),
+                  )
+                else
+                  SliverPadding(
                     padding: EdgeInsets.fromLTRB(
                       horizontalPadding,
                       0,
                       horizontalPadding,
-                      28,
+                      48,
                     ),
-                    child: _FavoritesPaginationError(
-                      message: _paginationError!,
-                      onRetry: _loadMore,
+                    sliver: SliverLayoutBuilder(
+                      builder: (context, gridConstraints) {
+                        final width = gridConstraints.crossAxisExtent.clamp(
+                          0.0,
+                          1280.0,
+                        );
+                        final columns = switch (width) {
+                          < 520 => 2,
+                          < 780 => 3,
+                          < 1040 => 4,
+                          < 1240 => 5,
+                          _ => 6,
+                        };
+                        return SliverGrid(
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final item = _items[index];
+                            return _FavoriteMediaCard(
+                              item: item,
+                              updating: _updatingIds.contains(item.id),
+                              onOpen: () => _openItem(item),
+                              onRemove: () => _removeFavorite(item),
+                            );
+                          }, childCount: _items.length),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 20,
+                                childAspectRatio: 0.62,
+                              ),
+                        );
+                      },
                     ),
                   ),
-                ),
-            ],
-          ),
+                if (_loadingMore)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: 28),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  ),
+                if (_paginationError != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        0,
+                        horizontalPadding,
+                        28,
+                      ),
+                      child: _FavoritesPaginationError(
+                        message: _paginationError!,
+                        onRetry: _loadMore,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -798,10 +843,7 @@ IconData _kindIcon(MediaItemKind kind) {
 }
 
 class _FavoriteActorChipCard extends StatelessWidget {
-  const _FavoriteActorChipCard({
-    required this.actor,
-    required this.onTap,
-  });
+  const _FavoriteActorChipCard({required this.actor, required this.onTap});
 
   final ActorFavorite actor;
   final VoidCallback onTap;
@@ -836,7 +878,10 @@ class _FavoriteActorChipCard extends StatelessWidget {
                 actor.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
               ),
             ],
           ),

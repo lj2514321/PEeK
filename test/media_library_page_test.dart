@@ -279,9 +279,7 @@ void main() {
     final fakeService = _FakeLibraryService();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          mediaLibraryProvider.overrideWithValue(fakeService),
-        ],
+        overrides: [mediaLibraryProvider.overrideWithValue(fakeService)],
         child: MaterialApp(
           theme: AppTheme.dark(),
           home: Scaffold(
@@ -315,6 +313,63 @@ void main() {
 
     expect(fakeService.deletedIds, isNotEmpty);
   });
+
+  testWidgets(
+    'preserves scroll offset and items when returning from media detail',
+    (tester) async {
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final service = _FakeLibraryService();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [mediaLibraryProvider.overrideWithValue(service)],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: Scaffold(
+              body: MediaLibraryPage(account: account, onGoHome: () {}),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Scroll down
+      await tester.drag(
+        find.byType(SingleChildScrollView),
+        const Offset(0, -600),
+      );
+      await tester.pumpAndSettle();
+
+      final scrollable = tester.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      final controller = scrollable.controller!;
+      final offsetBeforeOpen = controller.offset;
+      expect(offsetBeforeOpen, greaterThan(100));
+
+      // Tap on a visible media card to open detail page
+      final card = find.byKey(const ValueKey('media-card-artwork-item-5'));
+      expect(card, findsOneWidget);
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+
+      // In detail page, tap back
+      expect(find.byTooltip('返回'), findsOneWidget);
+      await tester.tap(find.byTooltip('返回'));
+      await tester.pumpAndSettle();
+
+      // Back in media library, verify scroll position was preserved
+      expect(find.text('晚上好，Alex'), findsOneWidget);
+      expect(controller.offset, closeTo(offsetBeforeOpen, 2.0));
+      expect(
+        find.byKey(const ValueKey('media-card-artwork-item-5')),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 void _noop() {}
@@ -468,10 +523,16 @@ class _FakeLibraryService extends MediaLibraryService {
   final List<String> deletedIds = [];
 
   @override
-  Future<void> deleteItem(
-    AuthenticatedServer account,
-    String itemId,
-  ) async {
+  Future<void> deleteItem(AuthenticatedServer account, String itemId) async {
     deletedIds.add(itemId);
+  }
+
+  @override
+  Future<MediaItem> getItem(
+    AuthenticatedServer account,
+    String itemId, {
+    bool forceRefresh = false,
+  }) async {
+    return MediaItem(id: itemId, name: '电影 $itemId', kind: MediaItemKind.movie);
   }
 }
