@@ -171,37 +171,50 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
         setState(() => _error = error.message);
         _usernameFocus.requestFocus();
       }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = '登录发生异常：$error');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _openQuickConnect() async {
-    final result = await showModal<QuickConnectStateResult>(
-      context: context,
-      configuration: const FadeScaleTransitionConfiguration(
-        barrierColor: Color(0x94000000),
-      ),
-      builder: (context) => QuickConnectDialog(
-        serverUri: widget.server.apiBaseUri,
-        service: ref.read(mediaLibraryProvider),
-      ),
-    );
-
-    if (result != null &&
-        result.authenticated &&
-        result.accessToken != null &&
-        result.userId != null) {
-      final account = AuthenticatedServer(
-        server: widget.server,
-        userId: result.userId!,
-        userName: result.userName ?? 'QuickConnectUser',
-        deviceId: 'device-quickconnect',
-        accessToken: result.accessToken!,
+    try {
+      final result = await showModal<QuickConnectStateResult>(
+        context: context,
+        configuration: const FadeScaleTransitionConfiguration(
+          barrierColor: Color(0x94000000),
+        ),
+        builder: (context) => QuickConnectDialog(
+          serverUri: widget.server.apiBaseUri,
+          service: ref.read(mediaLibraryProvider),
+        ),
       );
-      await ref.read(secureTokenStoreProvider).writeSession(account);
+
+      if (result != null &&
+          result.authenticated &&
+          result.accessToken != null &&
+          result.userId != null) {
+        final deviceId = await ref
+            .read(secureTokenStoreProvider)
+            .getOrCreateDeviceId();
+        final account = AuthenticatedServer(
+          server: widget.server,
+          userId: result.userId!,
+          userName: result.userName ?? 'QuickConnectUser',
+          deviceId: deviceId,
+          accessToken: result.accessToken!,
+        );
+        await ref.read(secureTokenStoreProvider).writeSession(account);
+        if (mounted) {
+          Navigator.of(context).pop(account);
+        }
+      }
+    } catch (error) {
       if (mounted) {
-        Navigator.of(context).pop(account);
+        setState(() => _error = 'Quick Connect 登录失败：$error');
       }
     }
   }

@@ -15,6 +15,7 @@ class PlaybackSettingsSection extends StatelessWidget {
     required this.saving,
     required this.onBitrateChanged,
     required this.onHardwareDecodingModeChanged,
+    this.onLongPressSpeedChanged,
     this.onEnableMiniPlayerChanged,
     this.onUseExternalPlayerChanged,
     this.onExternalPlayerPathChanged,
@@ -27,6 +28,7 @@ class PlaybackSettingsSection extends StatelessWidget {
   final String? error;
   final ValueChanged<PlaybackBitrate>? onBitrateChanged;
   final ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged;
+  final ValueChanged<double>? onLongPressSpeedChanged;
   final ValueChanged<bool>? onEnableMiniPlayerChanged;
   final ValueChanged<bool>? onUseExternalPlayerChanged;
   final ValueChanged<String?>? onExternalPlayerPathChanged;
@@ -36,6 +38,8 @@ class PlaybackSettingsSection extends StatelessWidget {
     final bitrateEnabled = !loading && !saving && onBitrateChanged != null;
     final hardwareDecodingEnabled =
         !loading && !saving && onHardwareDecodingModeChanged != null;
+    final longPressSpeedEnabled =
+        !loading && !saving && onLongPressSpeedChanged != null;
     return Container(
       key: const ValueKey('playback-settings-section'),
       padding: const EdgeInsets.all(24),
@@ -100,6 +104,42 @@ class PlaybackSettingsSection extends StatelessWidget {
                         enabled: hardwareDecodingEnabled,
                         onSelected: () =>
                             onHardwareDecodingModeChanged?.call(mode),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 28),
+          Text('长按倍速播放', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          const Text(
+            '全屏或窗口播放时长按方向右键或 L 键触发的快速快进倍速（松开后恢复原速）。',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 820
+                  ? 4
+                  : constraints.maxWidth >= 500
+                  ? 4
+                  : 2;
+              const gap = 12.0;
+              final width =
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final speed in const [1.5, 2.0, 2.5, 3.0])
+                    SizedBox(
+                      width: width,
+                      child: _LongPressSpeedOption(
+                        speed: speed,
+                        selected: settings.longPressSpeed == speed,
+                        enabled: longPressSpeedEnabled,
+                        onSelected: () => onLongPressSpeedChanged?.call(speed),
                       ),
                     ),
                 ],
@@ -301,6 +341,114 @@ class _HardwareDecodingOption extends StatelessWidget {
                     Icons.check_circle_rounded,
                     size: 18,
                     color: AppColors.indigo,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LongPressSpeedOption extends StatelessWidget {
+  const _LongPressSpeedOption({
+    required this.speed,
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final double speed;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onSelected;
+
+  static String _label(double s) {
+    if (s == 1.5) return '1.5X';
+    if (s == 2.0) return '2.0X（推荐）';
+    if (s == 2.5) return '2.5X';
+    if (s == 3.0) return '3.0X';
+    return '${s.toStringAsFixed(1)}X';
+  }
+
+  static String _detail(double s) {
+    if (s == 1.5) return '温和快进';
+    if (s == 2.0) return '默认倍速';
+    if (s == 2.5) return '快速浏览';
+    if (s == 3.0) return '极速跳过';
+    return '自定义倍速';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = _label(speed);
+    final detail = _detail(speed);
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: enabled,
+      label: '$label，$detail',
+      hint: selected ? '当前长按倍速' : '选择后自动保存',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: ValueKey('long-press-speed-${speed.toStringAsFixed(1)}'),
+          onTap: enabled ? onSelected : null,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: AppMotion.responsive(context, AppMotion.fast),
+            constraints: const BoxConstraints(minHeight: 78),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.spotlight.withValues(alpha: 0.09)
+                  : AppColors.surfaceLow,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? AppColors.spotlight : AppColors.outline,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selected
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                          fontSize: 13,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        detail,
+                        style: const TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 18,
+                    color: AppColors.spotlight,
                   ),
                 ],
               ],

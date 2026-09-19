@@ -7,10 +7,13 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/features/details/presentation/identify_dialog.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
+import 'package:embyplayer/src/features/scrobble/presentation/bangumi_summary_card.dart';
+import 'package:embyplayer/src/features/download/presentation/batch_download_sheet.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -36,6 +39,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   late MediaItem _item = widget.initialItem;
   List<MediaItem> _similarItems = const [];
   List<MediaItem> _episodes = const [];
+  List<MediaItem> _collections = const [];
+  List<MediaItem> _collectionItems = const [];
+  final GlobalKey _collectionSectionKey = GlobalKey();
   int _selectedSeasonNumber = 1;
   bool _loadingDetails = false;
   bool _planningPlayback = false;
@@ -45,12 +51,16 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   String? _detailError;
   String? _similarError;
   String? _playbackError;
+  String? _selectedMediaSourceId;
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0;
 
   @override
   void initState() {
     super.initState();
+    if (widget.initialItem.mediaSources.isNotEmpty) {
+      _selectedMediaSourceId = widget.initialItem.mediaSources.first.id;
+    }
     _selectedSeasonNumber = widget.initialItem.parentIndexNumber ?? 1;
     _scrollController.addListener(_onScroll);
     Future<void>.microtask(_loadDetails);
@@ -118,15 +128,45 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
             )
           : Future.value(const <MediaItem>[]);
 
+      final collectionsFuture = !_item.isLocal
+          ? service.getCollectionsForItem(
+              account,
+              widget.initialItem.id,
+              forceRefresh: forceRefresh,
+            )
+          : Future.value(const <MediaItem>[]);
+
       final details = await detailsFuture;
       final similar = await similarFuture;
       final episodes = await episodesFuture;
+      final collections = await collectionsFuture;
+
+      List<MediaItem> collectionItems = const [];
+      if (collections.isNotEmpty) {
+        try {
+          collectionItems = await service.getCollectionItems(
+            account,
+            collections.first.id,
+            forceRefresh: forceRefresh,
+          );
+        } catch (_) {
+          // Ignore collection items loading error
+        }
+      }
 
       if (!mounted) return;
       setState(() {
         _item = details;
+        if (details.mediaSources.isNotEmpty) {
+          if (_selectedMediaSourceId == null ||
+              details.mediaSources.every((s) => s.id != _selectedMediaSourceId)) {
+            _selectedMediaSourceId = details.mediaSources.first.id;
+          }
+        }
         _similarItems = similar;
         _episodes = episodes;
+        _collections = collections;
+        _collectionItems = collectionItems;
         if (episodes.isNotEmpty) {
           final seasons = _availableSeasonNumbers;
           if (!seasons.contains(_selectedSeasonNumber)) {
@@ -154,7 +194,12 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     try {
       final prepared = await ref
           .read(playbackPreparationProvider)
-          .prepare(widget.account, targetItem, fromBeginning: fromBeginning);
+          .prepare(
+            widget.account,
+            targetItem,
+            fromBeginning: fromBeginning,
+            mediaSourceId: targetItem.id == _item.id ? _selectedMediaSourceId : null,
+          );
       if (!mounted) return;
 
       final shouldUseExternal =
@@ -192,6 +237,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
             maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
             subtitlePreferences: prepared.settings.subtitlePreferences,
             enableMiniPlayer: prepared.settings.enableMiniPlayer,
+            longPressSpeed: prepared.settings.longPressSpeed,
           ),
         ),
       );
@@ -280,7 +326,84 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     }
   }
 
+  Future<void> _openIdentifyDialog() async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
+    final updated = await peekShowDialog<bool>(
+      context: context,
+      builder: (context) => IdentifyDialog(
+        account: account,
+        item: _item,
+      ),
+    );
+    if (updated == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已向服务器提交识别匹配，正在重新加载《${_item.name}》...')),
+      );
+      await _loadDetails(forceRefresh: true);
+    }
+  }
+
+  Future<void> _openBatchDownloadDialog() async {
+    final account = widget.account;
+    if (account == null || _item.isLocal) return;
+
+    final count = await peekShowDialog<int>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: BatchDownloadSheet(
+          item: _item,
+          episodes: _episodes,
+          account: account,
+        ),
+      ),
+    );
+
+    if (count != null && count > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.surfaceHigh,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: AppColors.spotlight, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '已添加 $count 个任务至离线下载中心',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
   Future<void> _openSimilar(MediaItem item) async {
+    await Navigator.of(context).push<void>(
+      Peek3DPageRoute(
+        builder: (context) =>
+            MediaDetailPage(account: widget.account, initialItem: item),
+      ),
+    );
+  }
+
+  void _scrollToCollection() {
+    final context = _collectionSectionKey.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+  }
+
+  Future<void> _openCollectionItem(MediaItem item) async {
+    if (item.id == _item.id) return;
     await Navigator.of(context).push<void>(
       Peek3DPageRoute(
         builder: (context) =>
@@ -336,6 +459,8 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                   SliverToBoxAdapter(
                     child: _DetailHero(
                       item: _item,
+                      collectionName: _collections.firstOrNull?.name,
+                      onTapCollection: _scrollToCollection,
                       loading: _loadingDetails,
                       playable: _playable,
                       planningPlayback:
@@ -353,6 +478,12 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                           _playItem(_item, forceExternalPlayer: true),
                       onToggleFavorite: _toggleFavorite,
                       onTogglePlayed: _togglePlayed,
+                      onIdentify: !_item.isLocal && widget.account != null
+                          ? _openIdentifyDialog
+                          : null,
+                      onDownload: !_item.isLocal && widget.account != null
+                          ? _openBatchDownloadDialog
+                          : null,
                     ),
                   ),
                   SliverToBoxAdapter(
@@ -401,7 +532,25 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                               ],
 
                               // Synopsis & Technical Specs Bento Layout
-                              _OverviewAndSpecsBento(item: _item),
+                              _OverviewAndSpecsBento(
+                                item: _item,
+                                selectedMediaSourceId: _selectedMediaSourceId,
+                                onSelectMediaSource: (id) {
+                                  setState(() => _selectedMediaSourceId = id);
+                                },
+                              ),
+
+                              // Collection (if media belongs to a BoxSet / Collection)
+                              if (_collections.isNotEmpty) ...[
+                                const SizedBox(height: 32),
+                                _CollectionSection(
+                                  key: _collectionSectionKey,
+                                  currentItem: _item,
+                                  collection: _collections.first,
+                                  items: _collectionItems,
+                                  onOpenItem: _openCollectionItem,
+                                ),
+                              ],
 
                               // Cast & Crew
                               if (_item.people.isNotEmpty) ...[
@@ -444,10 +593,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                 child: _DetailFloatingNavBar(
                   item: _item,
                   showTitle: showScrolledTitle,
-                  playable: _playable,
                   onBack: () => Navigator.of(context).pop(_item),
-                  onPlayExternal: () =>
-                      _playItem(_item, forceExternalPlayer: true),
                 ),
               ),
             ],
@@ -462,16 +608,12 @@ class _DetailFloatingNavBar extends StatelessWidget {
   const _DetailFloatingNavBar({
     required this.item,
     required this.showTitle,
-    required this.playable,
     required this.onBack,
-    required this.onPlayExternal,
   });
 
   final MediaItem item;
   final bool showTitle;
-  final bool playable;
   final VoidCallback onBack;
-  final VoidCallback onPlayExternal;
 
   @override
   Widget build(BuildContext context) {
@@ -554,53 +696,6 @@ class _DetailFloatingNavBar extends StatelessWidget {
                     ),
                   ),
 
-                  // Actions on Right
-                  if (playable) ...[
-                    Container(
-                      height: 34,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        borderRadius: BorderRadius.circular(17),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.18),
-                          width: 1,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black45,
-                            blurRadius: 10,
-                            offset: Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: InkWell(
-                        onTap: onPlayExternal,
-                        borderRadius: BorderRadius.circular(17),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.open_in_new_rounded,
-                              size: 15,
-                              color: Colors.white70,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              '外部播放',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-
                   if (defaultTargetPlatform == TargetPlatform.windows)
                     const SizedBox(width: AppChrome.windowControlsWidth),
                 ],
@@ -616,6 +711,8 @@ class _DetailFloatingNavBar extends StatelessWidget {
 class _DetailHero extends StatelessWidget {
   const _DetailHero({
     required this.item,
+    this.collectionName,
+    this.onTapCollection,
     required this.loading,
     required this.playable,
     required this.planningPlayback,
@@ -628,9 +725,13 @@ class _DetailHero extends StatelessWidget {
     this.onPlayExternal,
     required this.onToggleFavorite,
     required this.onTogglePlayed,
+    this.onIdentify,
+    this.onDownload,
   });
 
   final MediaItem item;
+  final String? collectionName;
+  final VoidCallback? onTapCollection;
   final bool loading;
   final bool playable;
   final bool planningPlayback;
@@ -643,6 +744,8 @@ class _DetailHero extends StatelessWidget {
   final VoidCallback? onPlayExternal;
   final VoidCallback onToggleFavorite;
   final VoidCallback onTogglePlayed;
+  final VoidCallback? onIdentify;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -678,6 +781,8 @@ class _DetailHero extends StatelessWidget {
                 final poster = _DetailPoster(item: item);
                 final copy = _DetailCopy(
                   item: item,
+                  collectionName: collectionName,
+                  onTapCollection: onTapCollection,
                   compact: compact,
                   playable: playable,
                   planningPlayback: planningPlayback,
@@ -690,14 +795,16 @@ class _DetailHero extends StatelessWidget {
                   onPlayExternal: onPlayExternal,
                   onToggleFavorite: onToggleFavorite,
                   onTogglePlayed: onTogglePlayed,
+                  onIdentify: onIdentify,
+                  onDownload: onDownload,
                 );
 
                 return Padding(
                   padding: EdgeInsets.fromLTRB(
                     compact ? 20 : 36,
-                    compact ? 72 : 88,
+                    compact ? 56 : 88,
                     compact ? 20 : 36,
-                    48,
+                    compact ? 24 : 48,
                   ),
                   child: compact
                       ? Column(
@@ -705,17 +812,17 @@ class _DetailHero extends StatelessWidget {
                           children: [
                             Align(
                               alignment: Alignment.centerLeft,
-                              child: SizedBox(width: 170, child: poster),
+                              child: SizedBox(width: 140, child: poster),
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 16),
                             copy,
                           ],
                         )
                       : Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(width: 260, child: poster),
-                            const SizedBox(width: 44),
+                            SizedBox(width: 220, child: poster),
+                            const SizedBox(width: 36),
                             Expanded(child: copy),
                           ],
                         ),
@@ -802,6 +909,8 @@ class _DetailPoster extends StatelessWidget {
 class _DetailCopy extends StatelessWidget {
   const _DetailCopy({
     required this.item,
+    this.collectionName,
+    this.onTapCollection,
     required this.compact,
     required this.playable,
     required this.planningPlayback,
@@ -814,9 +923,13 @@ class _DetailCopy extends StatelessWidget {
     this.onPlayExternal,
     required this.onToggleFavorite,
     required this.onTogglePlayed,
+    this.onIdentify,
+    this.onDownload,
   });
 
   final MediaItem item;
+  final String? collectionName;
+  final VoidCallback? onTapCollection;
   final bool compact;
   final bool playable;
   final bool planningPlayback;
@@ -829,6 +942,8 @@ class _DetailCopy extends StatelessWidget {
   final VoidCallback? onPlayExternal;
   final VoidCallback onToggleFavorite;
   final VoidCallback onTogglePlayed;
+  final VoidCallback? onIdentify;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -838,7 +953,7 @@ class _DetailCopy extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Category / Subtitle
+        // Category / Subtitle / Collection
         Row(
           children: [
             Container(
@@ -861,6 +976,44 @@ class _DetailCopy extends StatelessWidget {
                 ),
               ),
             ),
+            if (collectionName != null && collectionName!.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: onTapCollection,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.cyan.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.cyan.withValues(alpha: 0.4),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.collections_bookmark_rounded,
+                        size: 13,
+                        color: AppColors.cyan,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '所属合集 · $collectionName',
+                        style: const TextStyle(
+                          color: AppColors.cyan,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             if (item.seriesName != null &&
                 item.kind != MediaItemKind.series) ...[
               const SizedBox(width: 8),
@@ -945,6 +1098,8 @@ class _DetailCopy extends StatelessWidget {
             updatingPlayed: updatingPlayed,
             onToggleFavorite: onToggleFavorite,
             onTogglePlayed: onTogglePlayed,
+            onIdentify: onIdentify,
+            onDownload: onDownload,
           ),
         ],
       ],
@@ -1000,6 +1155,17 @@ class _DetailCopy extends StatelessWidget {
       );
     }
 
+    // Multi-version badge
+    if (item.mediaSources.length > 1) {
+      list.add(
+        _SpecData(
+          label: '${item.mediaSources.length} 个版本可选',
+          isHighlight: true,
+          highlightColor: AppColors.spotlight,
+        ),
+      );
+    }
+
     // Genres
     for (final genre in item.genres.take(3)) {
       list.add(_SpecData(label: genre, isHighlight: false));
@@ -1022,7 +1188,7 @@ class _DetailCopy extends StatelessWidget {
 class _SpecData {
   const _SpecData({
     required this.label,
-    this.isHighlight = false,
+    required this.isHighlight,
     this.highlightColor,
   });
 
@@ -1038,26 +1204,35 @@ class _SpecChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (spec.isHighlight) {
-      final color = spec.highlightColor ?? AppColors.spotlight;
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.40), width: 1),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: spec.isHighlight
+            ? (spec.highlightColor ?? AppColors.spotlight).withValues(
+                alpha: 0.16,
+              )
+            : Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: spec.isHighlight
+              ? (spec.highlightColor ?? AppColors.spotlight).withValues(
+                  alpha: 0.45,
+                )
+            : Colors.white.withValues(alpha: 0.12),
+          width: 1,
         ),
-        child: Text(
-          spec.label,
-          style: TextStyle(
-            color: color,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
+      ),
+      child: Text(
+        spec.label,
+        style: TextStyle(
+          color: spec.isHighlight
+              ? (spec.highlightColor ?? AppColors.spotlight)
+              : Colors.white.withValues(alpha: 0.85),
+          fontSize: 12,
+          fontWeight: spec.isHighlight ? FontWeight.w700 : FontWeight.w500,
         ),
-      );
-    }
-    return VisionGlassBadge(label: spec.label);
+      ),
+    );
   }
 }
 
@@ -1171,6 +1346,8 @@ class _UserStateActions extends StatelessWidget {
     required this.updatingPlayed,
     required this.onToggleFavorite,
     required this.onTogglePlayed,
+    this.onIdentify,
+    this.onDownload,
   });
 
   final bool compact;
@@ -1181,6 +1358,8 @@ class _UserStateActions extends StatelessWidget {
   final bool updatingPlayed;
   final VoidCallback onToggleFavorite;
   final VoidCallback onTogglePlayed;
+  final VoidCallback? onIdentify;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -1242,21 +1421,57 @@ class _UserStateActions extends StatelessWidget {
       label: Text(played ? '已观看' : '标为已观看'),
     );
 
+    final downloadButton = OutlinedButton.icon(
+      key: const ValueKey('detail-download-button'),
+      onPressed: onDownload,
+      style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+        foregroundColor: AppColors.cyan,
+        side: BorderSide(
+          color: AppColors.cyan.withValues(alpha: 0.35),
+        ),
+      ),
+      icon: const Icon(Icons.downloading_rounded, size: 18),
+      label: const Text('离线缓存'),
+    );
+
+    final identifyButton = OutlinedButton.icon(
+      key: const ValueKey('detail-inline-identify-button'),
+      onPressed: onIdentify,
+      style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+        foregroundColor: Colors.white70,
+        side: BorderSide(
+          color: Colors.white.withValues(alpha: 0.2),
+        ),
+      ),
+      icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+      label: const Text('修正识别'),
+    );
+
     if (compact) {
-      return Row(
+      return Wrap(
+        spacing: 10,
+        runSpacing: 10,
         children: [
-          Expanded(child: favoriteButton),
-          if (canMarkPlayed) ...[
-            const SizedBox(width: 10),
-            Expanded(child: playedButton),
-          ],
+          favoriteButton,
+          if (canMarkPlayed) playedButton,
+          if (onDownload != null) downloadButton,
+          if (onIdentify != null) identifyButton,
         ],
       );
     }
     return Wrap(
       spacing: 12,
       runSpacing: 12,
-      children: [favoriteButton, if (canMarkPlayed) playedButton],
+      children: [
+        favoriteButton,
+        if (canMarkPlayed) playedButton,
+        if (onDownload != null) downloadButton,
+        if (onIdentify != null) identifyButton,
+      ],
     );
   }
 }
@@ -1535,9 +1750,15 @@ class _EpisodeCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _OverviewAndSpecsBento extends StatelessWidget {
-  const _OverviewAndSpecsBento({required this.item});
+  const _OverviewAndSpecsBento({
+    required this.item,
+    this.selectedMediaSourceId,
+    this.onSelectMediaSource,
+  });
 
   final MediaItem item;
+  final String? selectedMediaSourceId;
+  final ValueChanged<String>? onSelectMediaSource;
 
   @override
   Widget build(BuildContext context) {
@@ -1545,19 +1766,41 @@ class _OverviewAndSpecsBento extends StatelessWidget {
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 900;
         final overviewWidget = _OverviewCard(item: item);
-        final specsWidget = _MediaSpecsCard(item: item);
+        final specsWidget = _MediaSpecsCard(
+          item: item,
+          selectedMediaSourceId: selectedMediaSourceId,
+          onSelectMediaSource: onSelectMediaSource,
+        );
+
+        final bangumiCard = BangumiSummaryCard(
+          mediaName: item.seriesName ?? item.name,
+        );
 
         if (!isWide) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [overviewWidget, const SizedBox(height: 20), specsWidget],
+            children: [
+              overviewWidget,
+              bangumiCard,
+              const SizedBox(height: 20),
+              specsWidget,
+            ],
           );
         }
 
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(flex: 3, child: overviewWidget),
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  overviewWidget,
+                  bangumiCard,
+                ],
+              ),
+            ),
             const SizedBox(width: 20),
             Expanded(flex: 2, child: specsWidget),
           ],
@@ -1653,6 +1896,7 @@ class _OverviewCardState extends State<_OverviewCard> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const SizedBox(width: 4),
                     Icon(
                       _expanded
                           ? Icons.keyboard_arrow_up_rounded
@@ -1672,49 +1916,80 @@ class _OverviewCardState extends State<_OverviewCard> {
 }
 
 class _MediaSpecsCard extends StatelessWidget {
-  const _MediaSpecsCard({required this.item});
+  const _MediaSpecsCard({
+    required this.item,
+    this.selectedMediaSourceId,
+    this.onSelectMediaSource,
+  });
 
   final MediaItem item;
+  final String? selectedMediaSourceId;
+  final ValueChanged<String>? onSelectMediaSource;
 
   @override
   Widget build(BuildContext context) {
+    final activeSource = item.mediaSources.firstWhere(
+      (s) => s.id == selectedMediaSourceId,
+      orElse: () => item.mediaSources.isNotEmpty
+          ? item.mediaSources.first
+          : const MediaSourceInfo(id: '', name: ''),
+    );
+    final hasActive = activeSource.id.isNotEmpty;
+
+    final width = hasActive ? (activeSource.width ?? item.width) : item.width;
+    final height = hasActive ? (activeSource.height ?? item.height) : item.height;
+    final videoCodec = hasActive ? (activeSource.videoCodec ?? item.videoCodec) : item.videoCodec;
+    final videoRange = hasActive ? activeSource.videoRange : null;
+    final audioCodec = hasActive ? activeSource.audioCodec : null;
+    final bitrate = hasActive ? (activeSource.bitrate ?? item.bitrate) : item.bitrate;
+    final container = hasActive ? (activeSource.container ?? item.container) : item.container;
+    final fileSize = hasActive ? (activeSource.fileSize ?? item.fileSize) : item.fileSize;
+    final path = hasActive ? (activeSource.path ?? item.sourcePath) : item.sourcePath;
+
     final entries = <_SpecEntry>[
-      if (item.width != null && item.height != null)
+      if (width != null && height != null)
         _SpecEntry(
           icon: Icons.hd_rounded,
           label: '画面分辨率',
           value:
-              '${item.width} × ${item.height}${item.width! >= 3800 ? " (4K UHD)" : ""}',
+              '$width × $height${width >= 3800 ? " (4K UHD)" : ""}',
         ),
-      if (item.videoCodec != null && item.videoCodec!.isNotEmpty)
+      if (videoCodec != null && videoCodec.isNotEmpty)
         _SpecEntry(
           icon: Icons.movie_filter_rounded,
           label: '视频编码',
-          value: item.videoCodec!.toUpperCase(),
+          value: videoCodec.toUpperCase() +
+              (videoRange != null && videoRange.isNotEmpty ? ' · $videoRange' : ''),
         ),
-      if (item.bitrate != null && item.bitrate! > 0)
+      if (audioCodec != null && audioCodec.isNotEmpty)
+        _SpecEntry(
+          icon: Icons.audiotrack_rounded,
+          label: '音频编码',
+          value: audioCodec.toUpperCase(),
+        ),
+      if (bitrate != null && bitrate > 0)
         _SpecEntry(
           icon: Icons.speed_rounded,
           label: '总码率',
-          value: '${(item.bitrate! / (1000 * 1000)).toStringAsFixed(1)} Mbps',
+          value: '${(bitrate / (1000 * 1000)).toStringAsFixed(1)} Mbps',
         ),
-      if (item.container != null && item.container!.isNotEmpty)
+      if (container != null && container.isNotEmpty)
         _SpecEntry(
           icon: Icons.folder_zip_rounded,
           label: '封装格式',
-          value: item.container!.toUpperCase(),
+          value: container.toUpperCase(),
         ),
-      if (item.isLocal && item.fileSize != null)
+      if (fileSize != null)
         _SpecEntry(
           icon: Icons.storage_rounded,
           label: '文件大小',
-          value: _formatBytes(item.fileSize!),
+          value: _formatBytes(fileSize),
         ),
-      if (item.isLocal && item.sourcePath != null)
+      if (path != null && path.isNotEmpty)
         _SpecEntry(
           icon: Icons.insert_drive_file_rounded,
-          label: '本地路径',
-          value: item.sourcePath!,
+          label: item.isLocal ? '本地路径' : '服务端路径',
+          value: path,
         ),
     ];
 
@@ -1756,6 +2031,51 @@ class _MediaSpecsCard extends StatelessWidget {
               ),
             ],
           ),
+          if (item.mediaSources.length > 1) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(
+                  Icons.layers_rounded,
+                  size: 15,
+                  color: AppColors.spotlight,
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  '版本切换',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '(${item.mediaSources.length} 个规格源)',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final src in item.mediaSources)
+                  _buildVersionCapsule(
+                    src,
+                    isSelected: src.id ==
+                        (selectedMediaSourceId ?? item.mediaSources.first.id),
+                    onTap: () => onSelectMediaSource?.call(src.id),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Colors.white12),
+          ],
           const SizedBox(height: 16),
           for (var i = 0; i < entries.length; i++) ...[
             if (i > 0) const Divider(height: 18, color: Colors.white10),
@@ -1787,6 +2107,83 @@ class _MediaSpecsCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildVersionCapsule(
+    MediaSourceInfo source, {
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final labelParts = <String>[];
+    if (source.resolutionLabel.isNotEmpty) labelParts.add(source.resolutionLabel);
+    if (source.videoCodec != null && source.videoCodec!.isNotEmpty) {
+      labelParts.add(source.videoCodec!.toUpperCase());
+    }
+    if (source.formattedFileSize.isNotEmpty) {
+      labelParts.add(source.formattedFileSize);
+    }
+    final detail = labelParts.join(' · ');
+
+    return InkWell(
+      key: ValueKey('version-source-${source.id}'),
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.spotlight.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.spotlight
+                : Colors.white.withValues(alpha: 0.15),
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isSelected) ...[
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 13,
+                    color: AppColors.spotlight,
+                  ),
+                  const SizedBox(width: 5),
+                ],
+                Text(
+                  source.name,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? AppColors.spotlight : Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            if (detail.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                detail,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isSelected
+                      ? AppColors.spotlight.withValues(alpha: 0.85)
+                      : AppColors.textTertiary,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -2046,6 +2443,242 @@ class _SimilarCard extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Collection Section Widgets
+// ---------------------------------------------------------------------------
+
+class _CollectionSection extends StatelessWidget {
+  const _CollectionSection({
+    super.key,
+    required this.currentItem,
+    required this.collection,
+    required this.items,
+    required this.onOpenItem,
+  });
+
+  final MediaItem currentItem;
+  final MediaItem collection;
+  final List<MediaItem> items;
+  final ValueChanged<MediaItem> onOpenItem;
+
+  @override
+  Widget build(BuildContext context) {
+    final countLabel = items.isNotEmpty ? '共 ${items.length} 部作品' : '';
+    final title = countLabel.isNotEmpty
+        ? '所属合集 · ${collection.name}（$countLabel）'
+        : '所属合集 · ${collection.name}';
+
+    return _DetailPanel(
+      eyebrow: 'COLLECTION',
+      title: title,
+      icon: Icons.auto_awesome_motion_rounded,
+      child: items.isEmpty
+          ? _CollectionBannerCard(collection: collection)
+          : PeekHorizontalRail(
+              railId: 'detail-collection-${collection.id}',
+              semanticLabel: '所属合集作品',
+              height: 290,
+              itemCount: items.length,
+              itemExtent: 144,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final isCurrent = item.id == currentItem.id;
+                return _CollectionItemCard(
+                  item: item,
+                  isCurrent: isCurrent,
+                  onOpen: () => onOpenItem(item),
+                );
+              },
+            ),
+    );
+  }
+}
+
+class _CollectionItemCard extends StatelessWidget {
+  const _CollectionItemCard({
+    required this.item,
+    required this.isCurrent,
+    required this.onOpen,
+  });
+
+  final MediaItem item;
+  final bool isCurrent;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 144,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isCurrent ? null : onOpen,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AspectRatio(
+                  aspectRatio: 2 / 3,
+                  child: Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceHigh,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isCurrent
+                            ? AppColors.spotlight
+                            : Colors.white.withValues(alpha: 0.12),
+                        width: isCurrent ? 2 : 1,
+                      ),
+                      boxShadow: isCurrent
+                          ? [
+                              BoxShadow(
+                                color: AppColors.spotlight.withValues(alpha: 0.35),
+                                blurRadius: 12,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        PeekMediaImage(
+                          uri: item.imageUri,
+                          headers: item.imageHeaders,
+                          kind: PeekMediaImageKind.poster,
+                        ),
+                        if (isCurrent)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.75),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: AppColors.spotlight.withValues(alpha: 0.6),
+                                  width: 1,
+                                ),
+                              ),
+                              child: const Text(
+                                '当前',
+                                style: TextStyle(
+                                  color: AppColors.spotlight,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w600,
+                    color: isCurrent ? AppColors.spotlight : null,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.productionYear?.toString() ?? _kindLabel(item.kind),
+                  style: const TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CollectionBannerCard extends StatelessWidget {
+  const _CollectionBannerCard({required this.collection});
+
+  final MediaItem collection;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceHigh.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (collection.imageUri != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: 60,
+                height: 90,
+                child: PeekMediaImage(
+                  uri: collection.imageUri,
+                  headers: collection.imageHeaders,
+                  kind: PeekMediaImageKind.poster,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  collection.name,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (collection.overview != null &&
+                    collection.overview!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    collection.overview!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 class _DetailPanel extends StatelessWidget {
   const _DetailPanel({

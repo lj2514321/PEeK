@@ -125,7 +125,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('keeps search context when switching between main destinations', (
+  testWidgets('opens search dropdown and searches from top search bar', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1280, 800);
@@ -155,25 +155,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(library.libraryRequests, 1);
 
-    await tester.tap(find.text('搜索电影、剧集与人物'));
+    final searchField = find.byKey(const ValueKey('top-search-field'));
+    expect(searchField, findsOneWidget);
+
+    await tester.tap(searchField);
     await tester.pumpAndSettle();
-    final searchField = find.byKey(const ValueKey('media-search-field'));
+    expect(find.byKey(const ValueKey('search-dropdown-panel')), findsOneWidget);
+
     await tester.enterText(searchField, '保留现场');
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
 
-    expect(find.text('保留现场的结果'), findsOneWidget);
-    expect(library.searchRequests, 1);
-
-    await tester.tap(find.text('设置').first);
-    await tester.pumpAndSettle();
-    expect(searchField, findsNothing);
-
-    await tester.tap(find.text('搜索').first);
-    await tester.pumpAndSettle();
-
-    final restoredField = tester.widget<TextField>(searchField);
-    expect(restoredField.controller?.text, '保留现场');
     expect(find.text('保留现场的结果'), findsOneWidget);
     expect(library.searchRequests, 1);
     expect(tester.takeException(), isNull);
@@ -225,7 +217,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('switches to actors with Ctrl+6', (tester) async {
+  testWidgets('switches to actors with Ctrl+5', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -253,7 +245,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.digit6);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.digit5);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
 

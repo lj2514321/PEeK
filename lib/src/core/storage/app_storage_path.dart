@@ -70,6 +70,13 @@ abstract final class AppStoragePath {
     );
   }
 
+  /// Returns the shaders subdirectory.
+  static Directory get shadersDirectory {
+    return Directory(
+      '${defaultDirectory.path}${Platform.pathSeparator}Shaders',
+    );
+  }
+
   static Directory _fallbackDirectory() {
     final localAppData = Platform.environment['LOCALAPPDATA'];
     final root = localAppData == null || localAppData.isEmpty

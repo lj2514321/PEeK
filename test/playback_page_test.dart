@@ -299,6 +299,9 @@ class _FakePlaybackRuntime implements PlaybackRuntime {
   Future<void> setToneMapping(String algorithm) async {}
 
   @override
+  Future<void> setGlslShaders(List<String> shaderPaths) async {}
+
+  @override
   Future<void> dispose() async {
     disposeCount++;
   }

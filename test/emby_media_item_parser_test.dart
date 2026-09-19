@@ -82,4 +82,72 @@ void main() {
     expect(item.name, 'Actor Collection');
     expect(item.kind, MediaItemKind.folder);
   });
+
+  test('EmbyMediaItemParser parses multiple MediaSources for version switching', () {
+    final rawItem = {
+      'Id': 'movie-multi-version',
+      'Name': 'Dune 2',
+      'Type': 'Movie',
+      'MediaSources': [
+        {
+          'Id': 'source-4k',
+          'Name': '4K HDR Remux',
+          'Container': 'mkv',
+          'Size': 25000000000,
+          'Bitrate': 45000000,
+          'Path': '/media/dune2_4k.mkv',
+          'MediaStreams': [
+            {
+              'Type': 'Video',
+              'Codec': 'hevc',
+              'Width': 3840,
+              'Height': 2160,
+              'VideoRange': 'HDR',
+            },
+            {
+              'Type': 'Audio',
+              'Codec': 'truehd',
+            },
+          ],
+        },
+        {
+          'Id': 'source-1080p',
+          'Name': '1080P 高清',
+          'Container': 'mp4',
+          'Size': 4000000000,
+          'Bitrate': 8000000,
+          'Path': '/media/dune2_1080p.mp4',
+          'MediaStreams': [
+            {
+              'Type': 'Video',
+              'Codec': 'h264',
+              'Width': 1920,
+              'Height': 1080,
+            },
+            {
+              'Type': 'Audio',
+              'Codec': 'aac',
+            },
+          ],
+        },
+      ],
+    };
+
+    final item = EmbyMediaItemParser.parseItem(rawItem, account);
+
+    expect(item.mediaSources.length, 2);
+    expect(item.mediaSources[0].id, 'source-4k');
+    expect(item.mediaSources[0].name, '4K HDR Remux');
+    expect(item.mediaSources[0].resolutionLabel, '4K');
+    expect(item.mediaSources[0].videoCodec, 'hevc');
+    expect(item.mediaSources[0].videoRange, 'HDR');
+    expect(item.mediaSources[0].audioCodec, 'truehd');
+    expect(item.mediaSources[0].formattedFileSize, '23.3 GB');
+
+    expect(item.mediaSources[1].id, 'source-1080p');
+    expect(item.mediaSources[1].name, '1080P 高清');
+    expect(item.mediaSources[1].resolutionLabel, '1080P');
+    expect(item.mediaSources[1].videoCodec, 'h264');
+    expect(item.mediaSources[1].formattedFileSize, '3.7 GB');
+  });
 }

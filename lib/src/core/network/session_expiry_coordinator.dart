@@ -50,9 +50,17 @@ class SessionExpiryInterceptor extends Interceptor {
 
   String? _accessToken(RequestOptions request) {
     for (final entry in request.headers.entries) {
-      if (entry.key.toLowerCase() == 'x-emby-token') {
+      final key = entry.key.toLowerCase();
+      if (key == 'x-emby-token' || key == 'x-mediabrowser-token') {
         final value = entry.value?.toString() ?? '';
-        return value.isEmpty ? null : value;
+        if (value.isNotEmpty) return value;
+      }
+      if (key == 'authorization') {
+        final value = entry.value?.toString() ?? '';
+        final match = RegExp(r'Token="([^"]+)"').firstMatch(value);
+        if (match != null && match.group(1) != null && match.group(1)!.isNotEmpty) {
+          return match.group(1);
+        }
       }
     }
     return null;

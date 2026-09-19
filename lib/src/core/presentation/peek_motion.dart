@@ -243,10 +243,16 @@ Future<T?> peekShowSheet<T>({
   required WidgetBuilder builder,
   Color? backgroundColor,
   bool isScrollControlled = true,
+  ShapeBorder? shape,
+  double? elevation,
+  Clip? clipBehavior,
 }) {
   return showModalBottomSheet<T>(
     context: context,
     backgroundColor: backgroundColor ?? Colors.transparent,
+    elevation: elevation ?? 0,
+    shape: shape ?? const RoundedRectangleBorder(side: BorderSide.none),
+    clipBehavior: clipBehavior ?? Clip.none,
     isScrollControlled: isScrollControlled,
     builder: builder,
   );

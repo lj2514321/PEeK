@@ -268,17 +268,14 @@ abstract final class AppTheme {
           fontWeight: FontWeight.w600,
         ),
       ),
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: const Color(0xF00D0E18),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Color(0xF00D0E18),
         surfaceTintColor: Colors.transparent,
-        elevation: 24,
+        elevation: 0,
         modalBarrierColor: Colors.black54,
         shape: RoundedRectangleBorder(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          side: BorderSide(
-            color: Colors.white.withValues(alpha: 0.20),
-            width: 1.2,
-          ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          side: BorderSide.none,
         ),
       ),
       snackBarTheme: SnackBarThemeData(

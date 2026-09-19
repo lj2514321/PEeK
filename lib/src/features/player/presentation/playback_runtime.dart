@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:flutter/widgets.dart';
@@ -48,6 +50,7 @@ abstract interface class PlaybackRuntime {
   Future<void> setSubtitleDelay(Duration delay);
   Future<void> setAudioFilter(String af);
   Future<void> setToneMapping(String algorithm);
+  Future<void> setGlslShaders(List<String> shaderPaths);
   Future<void> dispose();
 }
 
@@ -179,21 +182,39 @@ class MediaKitPlaybackRuntime implements PlaybackRuntime {
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
     final seconds = delay.inMilliseconds / 1000;
-    await platform.setProperty('sub-delay', seconds.toStringAsFixed(3));
+    try {
+      await platform.setProperty('sub-delay', seconds.toStringAsFixed(3));
+    } catch (_) {}
   }
 
   @override
   Future<void> setAudioFilter(String af) async {
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
-    await platform.setProperty('af', af);
+    try {
+      await platform.setProperty('af', af);
+    } catch (_) {}
   }
 
   @override
   Future<void> setToneMapping(String algorithm) async {
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
-    await platform.setProperty('tone-mapping', algorithm);
+    try {
+      await platform.setProperty('tone-mapping', algorithm);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> setGlslShaders(List<String> shaderPaths) async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    final normalized = shaderPaths.map((p) => p.replaceAll(r'\', '/')).toList();
+    final separator = Platform.isWindows ? ';' : ':';
+    final value = normalized.isEmpty ? '' : normalized.join(separator);
+    try {
+      await platform.setProperty('glsl-shaders', value);
+    } catch (_) {}
   }
 
   @override

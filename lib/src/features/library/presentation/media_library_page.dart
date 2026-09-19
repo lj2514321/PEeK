@@ -1062,6 +1062,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
             subtitlePreferences: prepared.settings.subtitlePreferences,
             enableMiniPlayer: prepared.settings.enableMiniPlayer,
+            longPressSpeed: prepared.settings.longPressSpeed,
           ),
         ),
       );

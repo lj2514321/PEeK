@@ -48,6 +48,7 @@ class MediaItem {
     this.width,
     this.height,
     this.bitrate,
+    this.mediaSources = const [],
   });
 
   final String id;
@@ -85,6 +86,7 @@ class MediaItem {
   final int? width;
   final int? height;
   final int? bitrate;
+  final List<MediaSourceInfo> mediaSources;
 
   bool get isLocal => source == MediaItemSource.local;
 
@@ -99,6 +101,9 @@ class MediaItem {
     int? height,
     int? bitrate,
     int? fileSize,
+    List<MediaSourceInfo>? mediaSources,
+    MediaItemSource? source,
+    String? sourcePath,
   }) {
     return MediaItem(
       id: id,
@@ -123,8 +128,8 @@ class MediaItem {
       parentId: parentId,
       seriesId: seriesId,
       collectionType: collectionType,
-      source: source,
-      sourcePath: sourcePath,
+      source: source ?? this.source,
+      sourcePath: sourcePath ?? this.sourcePath,
       fileSize: fileSize ?? this.fileSize,
       dateModified: dateModified,
       played: played ?? this.played,
@@ -136,7 +141,55 @@ class MediaItem {
       width: width ?? this.width,
       height: height ?? this.height,
       bitrate: bitrate ?? this.bitrate,
+      mediaSources: mediaSources ?? this.mediaSources,
     );
+  }
+}
+
+class MediaSourceInfo {
+  const MediaSourceInfo({
+    required this.id,
+    required this.name,
+    this.container,
+    this.fileSize,
+    this.bitrate,
+    this.width,
+    this.height,
+    this.videoCodec,
+    this.videoRange,
+    this.audioCodec,
+    this.path,
+  });
+
+  final String id;
+  final String name;
+  final String? container;
+  final int? fileSize;
+  final int? bitrate;
+  final int? width;
+  final int? height;
+  final String? videoCodec;
+  final String? videoRange;
+  final String? audioCodec;
+  final String? path;
+
+  String get resolutionLabel {
+    if (width != null && height != null) {
+      if (width! >= 3840 || height! >= 2160) return '4K';
+      if (width! >= 1920 || height! >= 1080) return '1080P';
+      if (width! >= 1280 || height! >= 720) return '720P';
+      return '${height}P';
+    }
+    return '';
+  }
+
+  String get formattedFileSize {
+    final size = fileSize;
+    if (size == null || size <= 0) return '';
+    if (size >= 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+    return '${(size / (1024 * 1024)).toStringAsFixed(0)} MB';
   }
 }
 

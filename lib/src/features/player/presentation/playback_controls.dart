@@ -49,6 +49,8 @@ class PlaybackControls extends StatelessWidget {
     required this.onDiagnostics,
     required this.onQuality,
     required this.onFullScreen,
+    this.danmakuEnabled = true,
+    this.onDanmaku,
     this.isPip = false,
     this.backTooltip,
     this.onPip,
@@ -98,6 +100,8 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onDiagnostics;
   final VoidCallback? onQuality;
   final VoidCallback onFullScreen;
+  final bool danmakuEnabled;
+  final VoidCallback? onDanmaku;
   final VoidCallback? onPip;
   final VoidCallback? onAudioEnhancement;
   final VoidCallback? onOpenExternalPlayer;
@@ -182,6 +186,8 @@ class PlaybackControls extends StatelessWidget {
                   onNext: onNext,
                   onEpisodes: onEpisodes,
                   onFullScreen: onFullScreen,
+                  danmakuEnabled: danmakuEnabled,
+                  onDanmaku: onDanmaku,
                   isPip: isPip,
                   onPip: onPip,
                 ),
@@ -412,6 +418,8 @@ class _PlaybackBottomBar extends StatelessWidget {
     required this.onNext,
     required this.onEpisodes,
     required this.onFullScreen,
+    this.danmakuEnabled = true,
+    this.onDanmaku,
     this.isPip = false,
     this.onPip,
   });
@@ -424,6 +432,8 @@ class _PlaybackBottomBar extends StatelessWidget {
   final double rate;
   final bool fullScreen;
   final bool isPip;
+  final bool danmakuEnabled;
+  final VoidCallback? onDanmaku;
   final String audioLabel;
   final String subtitleLabel;
   final List<MediaChapter> chapters;
@@ -588,6 +598,15 @@ class _PlaybackBottomBar extends StatelessWidget {
                           : Icons.subtitles_rounded,
                       onPressed: onSubtitle,
                     ),
+                    if (onDanmaku != null)
+                      _ControlIconButton(
+                        key: const ValueKey('player-danmaku'),
+                        tooltip: danmakuEnabled ? '弹幕设置' : '弹幕（已关闭）',
+                        icon: danmakuEnabled
+                            ? Icons.comment_rounded
+                            : Icons.comments_disabled_rounded,
+                        onPressed: onDanmaku,
+                      ),
                     if (!veryCompact)
                       _RateButton(rate: rate, onChanged: onRateChanged),
                     if (onPip != null)

@@ -155,6 +155,56 @@ void main() {
     expect(find.text('第 1 季'), findsOneWidget);
     expect(find.text('第 2 季'), findsOneWidget);
   });
+
+  testWidgets('displays collection badge and section when item belongs to a collection', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakeDetailService()
+      ..collections = const [
+        MediaItem(
+          id: 'boxset-matrix',
+          name: '黑客帝国（系列）',
+          kind: MediaItemKind.folder,
+        ),
+      ]
+      ..collectionItems = const [
+        MediaItem(
+          id: 'movie-id',
+          name: '示例电影',
+          kind: MediaItemKind.movie,
+          productionYear: 2026,
+        ),
+        MediaItem(
+          id: 'movie-2',
+          name: '黑客帝国 2',
+          kind: MediaItemKind.movie,
+          productionYear: 2003,
+        ),
+      ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaLibraryProvider.overrideWithValue(service)],
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: MediaDetailPage(account: account, initialItem: item),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Check collection badge in hero
+    expect(find.text('所属合集 · 黑客帝国（系列）'), findsOneWidget);
+
+    // Check collection section header and item
+    expect(find.textContaining('黑客帝国（系列）'), findsWidgets);
+    expect(find.text('黑客帝国 2'), findsOneWidget);
+    expect(find.text('当前'), findsOneWidget);
+  });
 }
 
 class _FakeDetailService extends MediaLibraryService {
@@ -163,6 +213,27 @@ class _FakeDetailService extends MediaLibraryService {
   bool? favoriteValue;
   bool? playedValue;
   final requestedPersonIds = <String>[];
+  List<MediaItem> collections = const [];
+  List<MediaItem> collectionItems = const [];
+
+  @override
+  Future<List<MediaItem>> getCollectionsForItem(
+    AuthenticatedServer account,
+    String itemId, {
+    bool forceRefresh = false,
+  }) async {
+    return collections;
+  }
+
+  @override
+  Future<List<MediaItem>> getCollectionItems(
+    AuthenticatedServer account,
+    String collectionId, {
+    int limit = 50,
+    bool forceRefresh = false,
+  }) async {
+    return collectionItems;
+  }
 
   @override
   Future<MediaItem> getItem(

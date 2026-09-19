@@ -9,25 +9,50 @@ class SecureTokenStore {
     : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
+  final Map<String, String> _memoryFallback = {};
 
   static const _legacyActiveSessionKey = 'active_server_session_v1';
   static const _accountDirectoryKey = 'server_account_directory_v2';
   static const _activeProfileKey = 'active_server_profile_v2';
+
+  Future<String?> _safeRead(String key) async {
+    try {
+      final value = await _storage.read(key: key);
+      if (value != null) _memoryFallback[key] = value;
+      return value ?? _memoryFallback[key];
+    } catch (_) {
+      return _memoryFallback[key];
+    }
+  }
+
+  Future<void> _safeWrite(String key, String value) async {
+    _memoryFallback[key] = value;
+    try {
+      await _storage.write(key: key, value: value);
+    } catch (_) {}
+  }
+
+  Future<void> _safeDelete(String key) async {
+    _memoryFallback.remove(key);
+    try {
+      await _storage.delete(key: key);
+    } catch (_) {}
+  }
 
   Future<void> write({
     required String serverId,
     required String userId,
     required String token,
   }) {
-    return _storage.write(key: _tokenKey(serverId, userId), value: token);
+    return _safeWrite(_tokenKey(serverId, userId), token);
   }
 
   Future<String?> read({required String serverId, required String userId}) {
-    return _storage.read(key: _tokenKey(serverId, userId));
+    return _safeRead(_tokenKey(serverId, userId));
   }
 
   Future<void> delete({required String serverId, required String userId}) {
-    return _storage.delete(key: _tokenKey(serverId, userId));
+    return _safeDelete(_tokenKey(serverId, userId));
   }
 
   Future<void> writeSession(AuthenticatedServer account) async {
@@ -45,14 +70,14 @@ class SecureTokenStore {
       profiles[index] = profile;
     }
     await _writeProfiles(profiles);
-    await _storage.write(key: _activeProfileKey, value: profile.id);
-    await _storage.delete(key: _legacyActiveSessionKey);
+    await _safeWrite(_activeProfileKey, profile.id);
+    await _safeDelete(_legacyActiveSessionKey);
   }
 
   Future<ServerAccountState> readSessionState() async {
     try {
       final profiles = await _readProfilesWithMigration();
-      final activeProfileId = await _storage.read(key: _activeProfileKey);
+      final activeProfileId = await _safeRead(_activeProfileKey);
       final accounts = <ServerAccountEntry>[];
       AuthenticatedServer? activeSession;
 
@@ -113,7 +138,7 @@ class SecureTokenStore {
       profiles[index] = profile;
       await _writeProfiles(profiles);
     }
-    await _storage.write(key: _activeProfileKey, value: profile.id);
+    await _safeWrite(_activeProfileKey, profile.id);
   }
 
   Future<void> signOut(AuthenticatedServer account) async {
@@ -121,11 +146,11 @@ class SecureTokenStore {
     try {
       await delete(serverId: account.server.serverId, userId: account.userId);
     } finally {
-      final activeProfileId = await _storage.read(key: _activeProfileKey);
+      final activeProfileId = await _safeRead(_activeProfileKey);
       if (activeProfileId == account.profileId) {
-        await _storage.delete(key: _activeProfileKey);
+        await _safeDelete(_activeProfileKey);
       }
-      await _storage.delete(key: _legacyActiveSessionKey);
+      await _safeDelete(_legacyActiveSessionKey);
     }
   }
 
@@ -136,18 +161,18 @@ class SecureTokenStore {
       await delete(serverId: profile.serverId, userId: profile.userId);
     } finally {
       await _writeProfiles(profiles);
-      final activeProfileId = await _storage.read(key: _activeProfileKey);
+      final activeProfileId = await _safeRead(_activeProfileKey);
       if (activeProfileId == profile.id) {
-        await _storage.delete(key: _activeProfileKey);
+        await _safeDelete(_activeProfileKey);
       }
-      await _storage.delete(key: _legacyActiveSessionKey);
+      await _safeDelete(_legacyActiveSessionKey);
     }
   }
 
   Future<void> clearSession({AuthenticatedServer? account}) async {
     if (account == null) {
-      await _storage.delete(key: _activeProfileKey);
-      await _storage.delete(key: _legacyActiveSessionKey);
+      await _safeDelete(_activeProfileKey);
+      await _safeDelete(_legacyActiveSessionKey);
       return;
     }
     await signOut(account);
@@ -155,7 +180,7 @@ class SecureTokenStore {
 
   Future<String> getOrCreateDeviceId() async {
     const key = 'client_device_id';
-    final existing = await _storage.read(key: key);
+    final existing = await _safeRead(key);
     if (existing != null && existing.isNotEmpty) return existing;
 
     final random = Random.secure();
@@ -163,16 +188,18 @@ class SecureTokenStore {
       16,
       (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
     ).join();
-    await _storage.write(key: key, value: id);
+    await _safeWrite(key, id);
     return id;
   }
 
   Future<List<ServerProfile>> _readProfilesWithMigration() async {
-    final raw = await _storage.read(key: _accountDirectoryKey);
+    final raw = await _safeRead(_accountDirectoryKey);
     if (raw != null && raw.isNotEmpty) {
       try {
         return _decodeProfiles(raw);
       } on FormatException {
+        return <ServerProfile>[];
+      } catch (_) {
         return <ServerProfile>[];
       }
     }
@@ -180,29 +207,37 @@ class SecureTokenStore {
     final legacy = await _readLegacyProfile();
     if (legacy == null) return <ServerProfile>[];
     await _writeProfiles([legacy]);
-    await _storage.write(key: _activeProfileKey, value: legacy.id);
-    await _storage.delete(key: _legacyActiveSessionKey);
+    await _safeWrite(_activeProfileKey, legacy.id);
+    await _safeDelete(_legacyActiveSessionKey);
     return [legacy];
   }
 
   Future<ServerProfile?> _readLegacyProfile() async {
-    final raw = await _storage.read(key: _legacyActiveSessionKey);
+    final raw = await _safeRead(_legacyActiveSessionKey);
     if (raw == null || raw.isEmpty) return null;
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) return null;
-    final deviceId = _string(decoded['deviceId'], await getOrCreateDeviceId());
-    return _profileFromJson({...decoded, 'deviceId': deviceId});
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      final deviceId = _string(decoded['deviceId'], await getOrCreateDeviceId());
+      return _profileFromJson({...decoded, 'deviceId': deviceId});
+    } catch (_) {
+      return null;
+    }
   }
 
   List<ServerProfile> _decodeProfiles(String raw) {
-    final decoded = jsonDecode(raw);
-    final values = decoded is Map<String, dynamic> ? decoded['profiles'] : null;
-    if (values is! List) return <ServerProfile>[];
-    return values
-        .whereType<Map<String, dynamic>>()
-        .map(_profileFromJson)
-        .whereType<ServerProfile>()
-        .toList(growable: true);
+    try {
+      final decoded = jsonDecode(raw);
+      final values = decoded is Map<String, dynamic> ? decoded['profiles'] : null;
+      if (values is! List) return <ServerProfile>[];
+      return values
+          .whereType<Map<String, dynamic>>()
+          .map(_profileFromJson)
+          .whereType<ServerProfile>()
+          .toList(growable: true);
+    } catch (_) {
+      return <ServerProfile>[];
+    }
   }
 
   ServerProfile? _profileFromJson(Map<String, dynamic> data) {
@@ -233,9 +268,9 @@ class SecureTokenStore {
   }
 
   Future<void> _writeProfiles(List<ServerProfile> profiles) {
-    return _storage.write(
-      key: _accountDirectoryKey,
-      value: jsonEncode({
+    return _safeWrite(
+      _accountDirectoryKey,
+      jsonEncode({
         'version': 2,
         'profiles': [for (final profile in profiles) _profileJson(profile)],
       }),

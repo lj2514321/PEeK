@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:embyplayer/src/features/download/data/download_manager_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_settings_store.dart';
@@ -39,6 +42,7 @@ class PlaybackPreparationService {
     AuthenticatedServer? account,
     MediaItem item, {
     bool fromBeginning = false,
+    String? mediaSourceId,
   }) async {
     if (item.isLocal) {
       final localLibrary = _localLibrary;
@@ -53,6 +57,39 @@ class PlaybackPreparationService {
         settings: await settingsFuture,
       );
     }
+
+    // Check if downloaded offline
+    final completedTask = DownloadManagerService.instance.getCompletedTask(
+      item.id,
+      mediaSourceId: mediaSourceId,
+    );
+    if (completedTask != null) {
+      final file = File(completedTask.savePath);
+      if (file.existsSync()) {
+        final localItem = item.copyWith(
+          source: MediaItemSource.local,
+          sourcePath: completedTask.savePath,
+        );
+        final settingsFuture = _readSettings();
+        final queueFuture = account != null ? _buildQueue(account, item) : null;
+        final plan = PlaybackPlan(
+          itemId: item.id,
+          mediaSourceId: completedTask.mediaSourceId ?? 'local',
+          playSessionId: 'offline-${DateTime.now().microsecondsSinceEpoch}',
+          streamUri: Uri.file(file.absolute.path, windows: Platform.isWindows),
+          method: PlaybackMethod.directPlay,
+          duration: item.runTime,
+          startPosition: fromBeginning ? Duration.zero : item.resumePosition,
+        );
+        return PreparedPlayback(
+          item: localItem,
+          plan: plan,
+          settings: await settingsFuture,
+          queue: await queueFuture,
+        );
+      }
+    }
+
     if (account == null) {
       throw const PlaybackServiceException('请先登录媒体服务器。');
     }
@@ -62,6 +99,7 @@ class PlaybackPreparationService {
       account,
       item,
       startPosition: fromBeginning ? Duration.zero : null,
+      mediaSourceId: mediaSourceId,
     );
     return PreparedPlayback(
       item: item,

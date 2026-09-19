@@ -9,6 +9,7 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/network/session_expiry_coordinator.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/analytics/presentation/analytics_dashboard_page.dart';
+import 'package:embyplayer/src/features/download/presentation/downloads_page.dart';
 import 'package:embyplayer/src/features/favorites/presentation/favorites_page.dart';
 import 'package:embyplayer/src/features/home/presentation/connection_dialogs.dart';
 import 'package:embyplayer/src/features/home/presentation/authenticated_home_page.dart';
@@ -17,7 +18,7 @@ import 'package:embyplayer/src/features/local_library/data/local_media_library_s
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/people/presentation/actors_page.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
-import 'package:embyplayer/src/features/search/presentation/media_search_page.dart';
+import 'package:embyplayer/src/features/search/presentation/top_search_bar.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:embyplayer/src/features/servers/presentation/server_accounts_page.dart';
 import 'package:flutter/foundation.dart';
@@ -38,7 +39,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   final _mediaHomePageKey = GlobalKey<AuthenticatedHomePageState>();
   final _libraryPageKey = GlobalKey<MediaLibraryPageState>();
   final _favoritesPageKey = GlobalKey<FavoritesPageState>();
-  final _searchPageKey = GlobalKey<MediaSearchPageState>();
+  final _topSearchBarKey = GlobalKey<TopSearchBarState>();
   final _actorsPageKey = GlobalKey<ActorsPageState>();
   final _visitedDestinations = <int>{0};
   int _selectedIndex = 0;
@@ -69,10 +70,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       Icons.favorite_border_rounded,
       Icons.favorite_rounded,
     ),
-    _AppDestination('搜索', Icons.search_rounded, Icons.search_rounded),
     _AppDestination('设置', Icons.tune_outlined, Icons.tune_rounded),
     _AppDestination('演员', Icons.people_outline_rounded, Icons.people_rounded),
     _AppDestination('仪表盘', Icons.analytics_outlined, Icons.analytics_rounded),
+    _AppDestination('下载', Icons.downloading_outlined, Icons.downloading_rounded),
   ];
 
   @override
@@ -227,6 +228,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         externalPlayerPath: path,
         clearExternalPlayerPath: path == null,
       ),
+    );
+  }
+
+  Future<void> _changeLongPressSpeed(double speed) async {
+    await _savePlaybackSettings(
+      _playbackSettings.copyWith(longPressSpeed: speed),
     );
   }
 
@@ -394,11 +401,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   void _selectDestination(int index) {
-    if (index == 3) {
-      _openSearch();
-      return;
-    }
-    _searchPageKey.currentState?.unfocusSearch();
+    _topSearchBarKey.currentState?.unfocus();
     if (_selectedIndex == index) {
       switch (index) {
         case 0:
@@ -410,7 +413,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         case 2:
           _favoritesPageKey.currentState?.scrollToTop();
           return;
-        case 5:
+        case 4:
           _actorsPageKey.currentState?.scrollToTop();
           return;
         default:
@@ -424,15 +427,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   void _openSearch() {
-    if (_selectedIndex != 3) {
-      setState(() {
-        _visitedDestinations.add(3);
-        _selectedIndex = 3;
-      });
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _searchPageKey.currentState?.focusSearch();
-    });
+    _topSearchBarKey.currentState?.focus();
   }
 
   void _toggleSidebar() {
@@ -511,6 +506,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         const SingleActivator(LogicalKeyboardKey.digit6, control: true): () {
           _selectDestination(5);
         },
+        const SingleActivator(LogicalKeyboardKey.digit7, control: true): () {
+          _selectDestination(6);
+        },
       },
       child: Listener(
         onPointerDown: (event) {
@@ -560,8 +558,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                 destination: _destinations[_selectedIndex],
                                 server: _discoveredServer,
                                 account: _authenticatedServer,
-                                onSearch: _openSearch,
-                                onAccount: () => _selectDestination(4),
+                                searchBarKey: _topSearchBarKey,
+                                onAccount: () => _selectDestination(3),
                               ),
                               Expanded(
                                 child: PeekIndexedTransitionStack(
@@ -628,19 +626,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                     _KeepAliveDestination(
                                       active: _selectedIndex == 3,
                                       child: _visitedDestinations.contains(3)
-                                          ? MediaSearchPage(
-                                              key: _searchPageKey,
-                                              account: _authenticatedServer,
-                                              onGoHome: () =>
-                                                  _selectDestination(0),
-                                              onSessionExpired:
-                                                  _handleSessionExpired,
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
-                                    _KeepAliveDestination(
-                                      active: _selectedIndex == 4,
-                                      child: _visitedDestinations.contains(4)
                                           ? ServerAccountsPage(
                                               key: const ValueKey(
                                                 'server-accounts',
@@ -701,12 +686,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                                       mode,
                                                     ),
                                                   ),
+                                              onLongPressSpeedChanged:
+                                                  (speed) => unawaited(
+                                                    _changeLongPressSpeed(
+                                                      speed,
+                                                    ),
+                                                  ),
                                             )
                                           : const SizedBox.shrink(),
                                     ),
                                     _KeepAliveDestination(
-                                      active: _selectedIndex == 5,
-                                      child: _visitedDestinations.contains(5)
+                                      active: _selectedIndex == 4,
+                                      child: _visitedDestinations.contains(4)
                                           ? ActorsPage(
                                               key: _actorsPageKey,
                                               account: _authenticatedServer,
@@ -718,9 +709,15 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                                           : const SizedBox.shrink(),
                                     ),
                                     _KeepAliveDestination(
+                                      active: _selectedIndex == 5,
+                                      child: _visitedDestinations.contains(5)
+                                          ? const AnalyticsDashboardPage()
+                                          : const SizedBox.shrink(),
+                                    ),
+                                    _KeepAliveDestination(
                                       active: _selectedIndex == 6,
                                       child: _visitedDestinations.contains(6)
-                                          ? const AnalyticsDashboardPage()
+                                          ? const DownloadsPage()
                                           : const SizedBox.shrink(),
                                     ),
                                   ],
@@ -1279,7 +1276,7 @@ class _TopCommandBar extends StatelessWidget {
     required this.destination,
     required this.server,
     required this.account,
-    required this.onSearch,
+    required this.searchBarKey,
     required this.onAccount,
   });
 
@@ -1287,7 +1284,7 @@ class _TopCommandBar extends StatelessWidget {
   final _AppDestination destination;
   final DiscoveredServer? server;
   final AuthenticatedServer? account;
-  final VoidCallback onSearch;
+  final GlobalKey<TopSearchBarState> searchBarKey;
   final VoidCallback onAccount;
 
   @override
@@ -1320,27 +1317,12 @@ class _TopCommandBar extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(child: _TopDestinationHeading(destination: destination)),
-                  if (!compact) ...[
-                    _SearchCommand(onTap: onSearch),
-                    const SizedBox(width: 12),
-                  ] else ...[
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.10),
-                        ),
-                      ),
-                      child: IconButton(
-                        tooltip: '搜索媒体库（Ctrl+K）',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: onSearch,
-                        icon: const Icon(Icons.search_rounded, size: 18),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
+                  TopSearchBar(
+                    key: searchBarKey,
+                    account: account,
+                    compact: compact,
+                  ),
+                  SizedBox(width: compact ? 8 : 12),
                   _AccountStatus(
                     server: server,
                     account: account,
@@ -1423,90 +1405,6 @@ class _TopDestinationHeading extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchCommand extends StatelessWidget {
-  const _SearchCommand({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: '搜索媒体库，快捷键 Control K',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
-          child: Container(
-            width: 270,
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
-                width: 1,
-              ),
-            ),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.search_rounded,
-                  size: 16,
-                  color: AppColors.textTertiary,
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '搜索电影、剧集与人物',
-                    style: TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                _ShortcutBadge(label: 'Ctrl K'),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ShortcutBadge extends StatelessWidget {
-  const _ShortcutBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.10),
-          width: 0.8,
-        ),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.textTertiary,
-          fontFamily: 'Cascadia Mono',
-          fontSize: 9.5,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

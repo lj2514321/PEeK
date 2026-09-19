@@ -37,16 +37,74 @@ class EmbyMediaItemParser {
     }
 
     final mediaSources = data['MediaSources'];
-    final firstSource = (mediaSources is List && mediaSources.isNotEmpty && mediaSources.first is Map)
+    final parsedSources = <MediaSourceInfo>[];
+    if (mediaSources is List) {
+      for (final s in mediaSources) {
+        if (s is Map) {
+          final sMap = Map<dynamic, dynamic>.from(s);
+          final sId = readString(sMap, 'Id');
+          if (sId.isEmpty) continue;
+          final sName = readString(sMap, 'Name', fallback: '默认版本');
+          final sContainer = readNullableString(sMap, 'Container');
+          final sSize = readInt(sMap['Size']);
+          final sBitrate = readInt(sMap['Bitrate']);
+          final sPath = readNullableString(sMap, 'Path');
+
+          Map<dynamic, dynamic>? vStream;
+          Map<dynamic, dynamic>? aStream;
+          if (sMap['MediaStreams'] is List) {
+            for (final st in (sMap['MediaStreams'] as List)) {
+              if (st is Map) {
+                if (vStream == null && st['Type'] == 'Video') {
+                  vStream = Map<dynamic, dynamic>.from(st);
+                } else if (aStream == null && st['Type'] == 'Audio') {
+                  aStream = Map<dynamic, dynamic>.from(st);
+                }
+              }
+            }
+          }
+
+          final sWidth = readInt(vStream?['Width']);
+          final sHeight = readInt(vStream?['Height']);
+          final sCodec = readNullableString(vStream, 'Codec');
+          final sRange = readNullableString(vStream, 'VideoRange');
+          final sAudioCodec = readNullableString(aStream, 'Codec');
+
+          parsedSources.add(
+            MediaSourceInfo(
+              id: sId,
+              name: sName,
+              container: sContainer,
+              fileSize: sSize,
+              bitrate: sBitrate,
+              width: sWidth,
+              height: sHeight,
+              videoCodec: sCodec,
+              videoRange: sRange,
+              audioCodec: sAudioCodec,
+              path: sPath,
+            ),
+          );
+        }
+      }
+    }
+
+    final firstSource = (mediaSources is List &&
+            mediaSources.isNotEmpty &&
+            mediaSources.first is Map)
         ? mediaSources.first as Map<String, dynamic>
         : null;
-    final mediaStreams = (firstSource != null && firstSource['MediaStreams'] is List)
+    final mediaStreams = (firstSource != null &&
+            firstSource['MediaStreams'] is List)
         ? firstSource['MediaStreams'] as List
         : (data['MediaStreams'] is List ? data['MediaStreams'] as List : const []);
-    final videoStream = mediaStreams.firstWhere(
-      (s) => s is Map && s['Type'] == 'Video',
-      orElse: () => null,
-    ) as Map<String, dynamic>?;
+    Map<String, dynamic>? videoStream;
+    for (final s in mediaStreams) {
+      if (s is Map && s['Type'] == 'Video') {
+        videoStream = Map<String, dynamic>.from(s);
+        break;
+      }
+    }
 
     final width = readInt(videoStream?['Width']) ?? readInt(data['Width']);
     final height = readInt(videoStream?['Height']) ?? readInt(data['Height']);
@@ -105,6 +163,7 @@ class EmbyMediaItemParser {
       width: width,
       height: height,
       bitrate: bitrate,
+      mediaSources: parsedSources,
     );
   }
 
@@ -182,7 +241,12 @@ class EmbyMediaItemParser {
   }
 
   static Map<String, String> authHeaders(String token) {
-    return {'X-Emby-Token': token, 'Accept': 'application/json'};
+    return {
+      'Authorization': 'MediaBrowser Token="$token"',
+      'X-Emby-Token': token,
+      'X-MediaBrowser-Token': token,
+      'Accept': 'application/json',
+    };
   }
 
   static List<MediaChapter> readChapters(Object? value) {

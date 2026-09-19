@@ -112,6 +112,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('selects a long press playback speed', (tester) async {
+    double? selected;
+    await tester.pumpWidget(
+      _app(
+        state: _state(),
+        playbackSettings: const PlaybackSettings(
+          longPressSpeed: 2.0,
+        ),
+        onLongPressSpeedChanged: (value) => selected = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final option = find.byKey(const ValueKey('long-press-speed-2.5'));
+    await tester.ensureVisible(option);
+    await tester.tap(option);
+    await tester.pump();
+
+    expect(selected, 2.5);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows and removes a saved local media library', (tester) async {
     final library = LocalMediaLibrary(
       id: 'local-library',
@@ -150,6 +172,7 @@ Widget _app({
   PlaybackSettings playbackSettings = const PlaybackSettings(),
   ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged,
   ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged,
+  ValueChanged<double>? onLongPressSpeedChanged,
   List<LocalMediaLibrary> localLibraries = const [],
   Future<void> Function(LocalMediaLibrary)? onRemoveLocalLibrary,
 }) {
@@ -167,6 +190,7 @@ Widget _app({
         playbackSettings: playbackSettings,
         onPlaybackBitrateChanged: onPlaybackBitrateChanged,
         onHardwareDecodingModeChanged: onHardwareDecodingModeChanged,
+        onLongPressSpeedChanged: onLongPressSpeedChanged,
         localLibraries: localLibraries,
         onRemoveLocalLibrary: onRemoveLocalLibrary,
       ),

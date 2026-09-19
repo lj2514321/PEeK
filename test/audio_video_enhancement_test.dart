@@ -6,22 +6,24 @@ void main() {
     expect(AudioEnhancementMode.off.mpvFilter, '');
     expect(
       AudioEnhancementMode.nightMode.mpvFilter,
-      contains('lavfi=[dynaudnorm=f=75:g=15:p=0.95]'),
+      'lavfi=[dynaudnorm=f=75:g=15:p=0.95]',
     );
     expect(
       AudioEnhancementMode.vocalBoost.mpvFilter,
-      contains('equalizer=g=3:f=1000:w=200'),
+      'lavfi=[equalizer=f=1000:width_type=h:w=200:g=3]',
     );
     expect(
       AudioEnhancementMode.bassBoost.mpvFilter,
-      contains('equalizer=g=5:f=60:w=100'),
+      'lavfi=[equalizer=f=60:width_type=h:w=100:g=5]',
     );
   });
 
   test('Audio/Video Matrix: ToneMappingAlgorithm maps mpv tone-mapping parameters', () {
-    expect(ToneMappingAlgorithm.auto.mpvValue, 'auto');
+    expect(ToneMappingAlgorithm.auto.mpvValue, 'mobius');
     expect(ToneMappingAlgorithm.mobius.mpvValue, 'mobius');
     expect(ToneMappingAlgorithm.hable.mpvValue, 'hable');
     expect(ToneMappingAlgorithm.reinhard.mpvValue, 'reinhard');
+    expect(ToneMappingAlgorithm.spline.mpvValue, 'spline');
+    expect(ToneMappingAlgorithm.bt2390.mpvValue, 'bt.2390');
   });
 }

@@ -112,6 +112,181 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
     }
   }
 
+  int get _totalSelectedDeleteCount {
+    return _groups.fold<int>(0, (sum, g) => sum + g.selectedDeleteIds.length);
+  }
+
+  int get _totalSelectedDeleteBytes {
+    var total = 0;
+    for (final g in _groups) {
+      for (final it in g.items) {
+        if (g.selectedDeleteIds.contains(it.item.id) && it.item.fileSize != null) {
+          total += it.item.fileSize!;
+        }
+      }
+    }
+    return total;
+  }
+
+  String get _formattedSelectedDeleteBytes {
+    final bytes = _totalSelectedDeleteBytes;
+    if (bytes >= 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} MB';
+  }
+
+  void _selectAllRecommendedDelete() {
+    setState(() {
+      for (var i = 0; i < _groups.length; i++) {
+        final g = _groups[i];
+        final keepId = g.recommendedKeepId;
+        final deleteIds = g.items
+            .where((it) => it.item.id != keepId)
+            .map((it) => it.item.id)
+            .toSet();
+        _groups[i] = g.copyWith(selectedDeleteIds: deleteIds);
+      }
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 2),
+            content: Text(
+              '已智能预选所有低画质冗余版本（共 $_totalSelectedDeleteCount 项，释放 $_formattedSelectedDeleteBytes）',
+            ),
+          ),
+        );
+    }
+  }
+
+  void _clearAllDeleteSelection() {
+    setState(() {
+      for (var i = 0; i < _groups.length; i++) {
+        _groups[i] = _groups[i].copyWith(selectedDeleteIds: const {});
+      }
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            duration: Duration(seconds: 2),
+            content: Text('已取消全部清理勾选'),
+          ),
+        );
+    }
+  }
+
+  Future<void> _batchDeleteSelected() async {
+    final count = _totalSelectedDeleteCount;
+    if (count == 0) return;
+
+    final formattedSize = _formattedSelectedDeleteBytes;
+
+    final confirm = await peekShowDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('批量清理确认'),
+        content: Text(
+          '即将删除 $count 个选中的冗余媒体条目，预计释放 $formattedSize 空间。\n\n'
+          '算法推荐保留的最高画质版本和未勾选条目均不会受到任何影响。\n'
+          '此操作不可逆，是否立即执行？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认清理'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final itemsToDelete = <MediaItem>[];
+    for (final g in _groups) {
+      for (final it in g.items) {
+        if (g.selectedDeleteIds.contains(it.item.id)) {
+          itemsToDelete.add(it.item);
+        }
+      }
+    }
+
+    var successCount = 0;
+    var failCount = 0;
+    final deletedIds = <String>{};
+
+    for (final item in itemsToDelete) {
+      try {
+        if (item.isLocal && item.sourcePath != null) {
+          final file = File(item.sourcePath!);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } else if (widget.account != null) {
+          final libraryService = ref.read(mediaLibraryProvider);
+          await libraryService.deleteItem(widget.account!, item.id);
+        }
+        deletedIds.add(item.id);
+        successCount++;
+      } catch (_) {
+        failCount++;
+      }
+    }
+
+    setState(() {
+      for (var i = 0; i < _groups.length; i++) {
+        final g = _groups[i];
+        final updatedItems =
+            g.items.where((it) => !deletedIds.contains(it.item.id)).toList();
+        if (updatedItems.length < 2) {
+          _groups.removeAt(i);
+          i--;
+        } else {
+          _groups[i] = DuplicateMediaGroup(
+            id: g.id,
+            title: g.title,
+            productionYear: g.productionYear,
+            matchReason: g.matchReason,
+            matchDetail: g.matchDetail,
+            items: updatedItems,
+            recommendedKeepId: deletedIds.contains(g.recommendedKeepId)
+                ? updatedItems.first.item.id
+                : g.recommendedKeepId,
+            selectedDeleteIds: g.selectedDeleteIds
+                .where((id) => !deletedIds.contains(id))
+                .toSet(),
+          );
+        }
+      }
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              failCount == 0
+                  ? '已成功批量清理 $successCount 项冗余版本'
+                  : '批量清理完成：成功 $successCount 项，失败 $failCount 项',
+            ),
+          ),
+        );
+    }
+  }
+
   void _toggleDeleteSelection(String groupId, String itemId) {
     setState(() {
       final index = _groups.indexWhere((g) => g.id == groupId);
@@ -260,6 +435,7 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
             maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
             subtitlePreferences: prepared.settings.subtitlePreferences,
             enableMiniPlayer: prepared.settings.enableMiniPlayer,
+            longPressSpeed: prepared.settings.longPressSpeed,
           ),
         ),
       );
@@ -407,6 +583,35 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
             ],
           ),
           const Spacer(),
+          if (_totalSelectedDeleteCount > 0) ...[
+            TextButton(
+              onPressed: _clearAllDeleteSelection,
+              child: const Text('取消全选'),
+            ),
+            const SizedBox(width: 8),
+          ],
+          OutlinedButton.icon(
+            key: const ValueKey('dedupe-smart-preselect-btn'),
+            onPressed: _scanning || _groups.isEmpty
+                ? null
+                : _selectAllRecommendedDelete,
+            icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+            label: const Text('一键预选冗余'),
+          ),
+          const SizedBox(width: 10),
+          FilledButton.icon(
+            key: const ValueKey('dedupe-batch-delete-btn'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: _scanning || _totalSelectedDeleteCount == 0
+                ? null
+                : _batchDeleteSelected,
+            icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+            label: Text('批量清理 ($_totalSelectedDeleteCount 项)'),
+          ),
+          const SizedBox(width: 10),
           FilledButton.icon(
             onPressed: _scanning ? null : _initAndScan,
             icon: const Icon(Icons.refresh_rounded, size: 18),
@@ -442,6 +647,15 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
             icon: Icons.cleaning_services_rounded,
             color: AppColors.success,
           ),
+          const SizedBox(width: 14),
+          _buildMetricCard(
+            title: '已选待清理',
+            value: '$_totalSelectedDeleteCount 项 · $_formattedSelectedDeleteBytes',
+            icon: Icons.delete_sweep_rounded,
+            color: _totalSelectedDeleteCount > 0
+                ? AppColors.error
+                : AppColors.textTertiary,
+          ),
         ],
       ),
     );
@@ -455,37 +669,43 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: AppGlass.decoration(radius: 16, elevated: true),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: color, size: 18),
             ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -614,6 +834,12 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
     final isKeep = groupItem.isRecommendedKeep;
     final isSelectedDelete = group.selectedDeleteIds.contains(item.id);
 
+    final bestGroupItem = group.items.firstWhere(
+      (it) => it.isRecommendedKeep,
+      orElse: () => group.items.first,
+    );
+    final scoreDiff = bestGroupItem.metrics.qualityScore - metrics.qualityScore;
+
     return Container(
       width: 380,
       padding: const EdgeInsets.all(16),
@@ -694,13 +920,26 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                         ),
                       ),
                     const Spacer(),
-                    Text(
-                      '综合评分: ${metrics.qualityScore}',
-                      style: const TextStyle(
-                        fontFamily: 'Cascadia Mono',
-                        fontSize: 11,
-                        color: AppColors.textTertiary,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '综合评分: ${metrics.qualityScore}',
+                          style: const TextStyle(
+                            fontFamily: 'Cascadia Mono',
+                            fontSize: 11,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                        if (!isKeep && scoreDiff > 0)
+                          Text(
+                            '比保留版本低 $scoreDiff 分',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.orangeAccent,
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),

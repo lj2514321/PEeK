@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:animations/animations.dart';
 import 'package:embyplayer/src/app/app_chrome.dart';
@@ -25,12 +26,21 @@ import 'package:embyplayer/src/features/player/presentation/playback_runtime.dar
 import 'package:embyplayer/src/features/player/presentation/online_subtitle_dialog.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_drop_target.dart';
 import 'package:embyplayer/src/features/player/domain/audio_enhancement_settings.dart';
+import 'package:embyplayer/src/features/player/domain/audio_equalizer_settings.dart';
+import 'package:embyplayer/src/features/player/domain/video_shader_preset.dart';
+import 'package:embyplayer/src/features/player/data/shader_manager_service.dart';
 import 'package:embyplayer/src/features/player/presentation/audio_enhancement_sheet.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_pip_controller.dart';
 import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
 import 'package:embyplayer/src/features/danmaku/data/dandanplay_service.dart';
 import 'package:embyplayer/src/features/danmaku/presentation/danmaku_overlay.dart';
+import 'package:embyplayer/src/features/danmaku/presentation/danmaku_settings_sheet.dart';
+import 'package:embyplayer/src/features/scrobble/data/bangumi_scrobble_service.dart';
+import 'package:embyplayer/src/features/scrobble/data/bangumi_store.dart';
+import 'package:embyplayer/src/features/scrobble/domain/bangumi_profile.dart';
+import 'package:embyplayer/src/features/player/domain/smart_intro_skipper.dart';
+import 'package:embyplayer/src/features/player/presentation/skip_intro_overlay.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -52,9 +62,12 @@ class PlaybackPage extends ConsumerStatefulWidget {
     this.hardwareDecodingMode = HardwareDecodingMode.automatic,
     this.maxStreamingBitrate = PlaybackBitrate.original,
     this.subtitlePreferences = const SubtitlePreferences(),
+    this.skipIntroPreferences = const SkipIntroPreferences(),
+    this.danmakuPreferences = const DanmakuPreferences(),
     this.runtime,
     this.isResumingFromMini = false,
     this.enableMiniPlayer = true,
+    this.longPressSpeed = 2.0,
   });
 
   final AuthenticatedServer? account;
@@ -64,9 +77,12 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final HardwareDecodingMode hardwareDecodingMode;
   final PlaybackBitrate maxStreamingBitrate;
   final SubtitlePreferences subtitlePreferences;
+  final SkipIntroPreferences skipIntroPreferences;
+  final DanmakuPreferences danmakuPreferences;
   final PlaybackRuntime? runtime;
   final bool isResumingFromMini;
   final bool enableMiniPlayer;
+  final double longPressSpeed;
 
   @override
   ConsumerState<PlaybackPage> createState() => _PlaybackPageState();
@@ -129,7 +145,21 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   int _systemVolumeBindAttempts = 0;
   late PlaybackBitrate _maxStreamingBitrate = widget.maxStreamingBitrate;
   late SubtitlePreferences _subtitlePreferences = widget.subtitlePreferences;
+  late SkipIntroPreferences _skipIntroPreferences = widget.skipIntroPreferences;
+  late DanmakuPreferences _danmakuPreferences = widget.danmakuPreferences;
   late bool _enableMiniPlayer = widget.enableMiniPlayer;
+  late double _longPressSpeed = widget.longPressSpeed;
+  IntroOutroRange? _currentIntroOutro;
+  IntroOutroKind? _dismissedKindForCurrentEpisode;
+  Timer? _autoSkipTimer;
+  int? _autoSkipCountdown;
+  Timer? _danmakuSettingsTimer;
+  bool _speedModeActive = false;
+  bool _speedForward = true;
+  double _savedNormalRate = 1.0;
+  Timer? _keyHoldTimer;
+  Timer? _rewindTimer;
+  LogicalKeyboardKey? _holdingKey;
   late final FocusNode _pageFocusNode = FocusNode(
     debugLabel: 'PlaybackPageFocus',
   );
@@ -160,6 +190,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _systemMediaSession = ref.read(windowsMediaSessionProvider)();
     AppChrome.enterImmersive();
     unawaited(_fetchDanmaku());
+    unawaited(_initBangumi());
     _duration = widget.plan.duration ?? Duration.zero;
     _position = widget.isResumingFromMini && widget.runtime != null && widget.runtime!.position > Duration.zero
         ? widget.runtime!.position
@@ -215,6 +246,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       if (mounted) {
         setState(() {
           _enableMiniPlayer = settings.enableMiniPlayer;
+          _skipIntroPreferences = settings.skipIntroPreferences;
+          _danmakuPreferences = settings.danmakuPreferences;
+          _longPressSpeed = settings.longPressSpeed;
         });
       }
     } catch (_) {}
@@ -230,6 +264,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           }
           _publishTimeline();
           _scheduleSystemTimelineSync();
+          _checkIntroOutro(_position);
+          _checkBangumiScrobble(_position);
         }
       }),
       _runtime.durationStream.listen((value) {
@@ -490,6 +526,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }) async {
     await _runtime.open(plan, play: play, startPosition: startPosition);
     await _applySubtitleDelay();
+    await _applyCombinedAudioFilters();
+    await _runtime.setToneMapping(_toneMappingAlgorithm.mpvValue);
+    if (_videoShaderPreset != VideoShaderPreset.off) {
+      await _applyShaderPreset(_videoShaderPreset);
+    }
   }
 
   void _playingChanged(bool playing) {
@@ -606,6 +647,81 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     await _runtime.setRate(value);
     await _safeReportProgress('PlaybackRateChange');
     _scheduleSystemTimelineSync(immediate: true);
+  }
+
+  void _startSpeedPlayback({required bool forward}) {
+    if (_speedModeActive) return;
+    _savedNormalRate = _rate;
+    setState(() {
+      _speedModeActive = true;
+      _speedForward = forward;
+    });
+
+    if (forward) {
+      _runtime.setRate(_longPressSpeed);
+    } else {
+      _rewindTimer?.cancel();
+      _rewindTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (!_speedModeActive || !mounted) {
+          _rewindTimer?.cancel();
+          return;
+        }
+        unawaited(_seekRelative(const Duration(seconds: -3)));
+      });
+    }
+  }
+
+  void _stopSpeedPlayback() {
+    if (!_speedModeActive) return;
+    _rewindTimer?.cancel();
+    _rewindTimer = null;
+    final restoreRate = _savedNormalRate;
+    setState(() {
+      _speedModeActive = false;
+    });
+    _runtime.setRate(restoreRate);
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+    final isRight = key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.keyL;
+    final isLeft = key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyJ;
+
+    if (!isRight && !isLeft) {
+      return KeyEventResult.ignored;
+    }
+
+    if (event is KeyDownEvent) {
+      if (_holdingKey != key) {
+        _holdingKey = key;
+        _keyHoldTimer?.cancel();
+        _keyHoldTimer = Timer(const Duration(milliseconds: 300), () {
+          _startSpeedPlayback(forward: isRight);
+        });
+      }
+      return KeyEventResult.handled;
+    } else if (event is KeyRepeatEvent) {
+      if (_holdingKey == key && !_speedModeActive && (_keyHoldTimer == null || !_keyHoldTimer!.isActive)) {
+        _startSpeedPlayback(forward: isRight);
+      }
+      return KeyEventResult.handled;
+    } else if (event is KeyUpEvent) {
+      if (_holdingKey == key) {
+        _holdingKey = null;
+        final timerWasPending = _keyHoldTimer?.isActive ?? false;
+        _keyHoldTimer?.cancel();
+        _keyHoldTimer = null;
+
+        if (_speedModeActive) {
+          _stopSpeedPlayback();
+        } else if (timerWasPending) {
+          unawaited(_seekRelative(Duration(seconds: isRight ? 10 : -10)));
+        }
+      }
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
   }
 
   Future<void> _toggleFullScreen() async {
@@ -775,11 +891,143 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   bool _isPip = false;
-  final bool _danmakuEnabled = true;
   final _dandanService = DandanPlayService();
   List<DanmakuItem> _danmakuItems = const [];
   AudioEnhancementMode _audioEnhancementMode = AudioEnhancementMode.off;
   ToneMappingAlgorithm _toneMappingAlgorithm = ToneMappingAlgorithm.auto;
+  VideoShaderPreset _videoShaderPreset = VideoShaderPreset.off;
+  AudioEqualizerSettings _equalizerSettings = AudioEqualizerSettings.initial();
+  final _shaderManagerService = ShaderManagerService();
+  bool _bangumiScrobbled = false;
+  BangumiProfile? _bangumiProfile;
+  int? _bangumiSubjectId;
+  final _bangumiService = BangumiScrobbleService();
+  final _bangumiStore = BangumiStore();
+
+  Future<void> _initBangumi() async {
+    try {
+      _bangumiProfile = await _bangumiStore.readProfile();
+      if (_bangumiProfile != null && _bangumiProfile!.autoScrobble) {
+        final query = _item.seriesName ?? _item.name;
+        _bangumiSubjectId = await _bangumiService.searchSubjectId(query);
+      }
+    } catch (_) {}
+  }
+
+  void _checkBangumiScrobble(Duration position) {
+    if (_bangumiScrobbled ||
+        _bangumiProfile == null ||
+        !_bangumiProfile!.autoScrobble) {
+      return;
+    }
+    if (_bangumiSubjectId == null || _duration <= Duration.zero) return;
+
+    final progress = position.inMilliseconds / _duration.inMilliseconds;
+    if (progress >= 0.8) {
+      _bangumiScrobbled = true;
+      final epNumber = _item.indexNumber ?? 1;
+      _bangumiService
+          .scrobbleEpisode(
+            subjectId: _bangumiSubjectId!,
+            episodeNumber: epNumber,
+            accessToken: _bangumiProfile!.accessToken,
+          )
+          .then((ok) {
+            if (ok && mounted) {
+              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                SnackBar(
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: const Color(
+                    0xFFF09199,
+                  ).withValues(alpha: 0.95),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  content: Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '已在 Bangumi 同步打卡第 $epNumber 话 🎉',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          });
+    }
+  }
+
+  void _sendDanmaku(String text, {int color = 16777215, int type = 1}) {
+    if (text.trim().isEmpty) return;
+    final item = DanmakuItem(
+      timeSeconds: _position.inMilliseconds / 1000.0,
+      type: type,
+      color: color,
+      text: text.trim(),
+    );
+    setState(() {
+      _danmakuItems = [..._danmakuItems, item];
+    });
+  }
+
+  static String _combineAudioFilters(List<String> rawFilters) {
+    if (rawFilters.isEmpty) return '';
+    final inner = <String>[];
+    for (final f in rawFilters) {
+      if (f.startsWith('lavfi=[') && f.endsWith(']')) {
+        inner.add(f.substring(7, f.length - 1));
+      } else if (f.isNotEmpty) {
+        inner.add(f);
+      }
+    }
+    if (inner.isEmpty) return '';
+    return 'lavfi=[${inner.join(',')}]';
+  }
+
+  Future<void> _applyCombinedAudioFilters() async {
+    final filters = <String>[];
+    if (_audioEnhancementMode != AudioEnhancementMode.off &&
+        _audioEnhancementMode.mpvFilter.isNotEmpty) {
+      filters.add(_audioEnhancementMode.mpvFilter);
+    }
+    final eqFilter = _equalizerSettings.toMpvFilter();
+    if (eqFilter.isNotEmpty) {
+      filters.add(eqFilter);
+    }
+    final afString = _combineAudioFilters(filters);
+    try {
+      await _runtime.setAudioFilter(afString);
+    } catch (error) {
+      _writeDiagnosticLog(
+        'audio_filters_failed',
+        fields: {'error': error.toString(), 'af': afString},
+      );
+    }
+  }
+
+  Future<void> _applyShaderPreset(VideoShaderPreset preset) async {
+    setState(() => _videoShaderPreset = preset);
+    try {
+      final paths = await _shaderManagerService.getShaderPaths(preset);
+      await _runtime.setGlslShaders(paths);
+    } catch (error) {
+      _writeDiagnosticLog(
+        'shader_preset_failed',
+        fields: {'preset': preset.id, 'error': error.toString()},
+      );
+    }
+  }
 
   Future<void> _showAudioEnhancementSheet() async {
     await showModal<void>(
@@ -792,21 +1040,35 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         child: AudioEnhancementSheet(
           currentAudioMode: _audioEnhancementMode,
           currentToneMapping: _toneMappingAlgorithm,
+          currentShaderPreset: _videoShaderPreset,
+          currentEqualizerSettings: _equalizerSettings,
           onAudioModeChanged: (mode) {
             setState(() => _audioEnhancementMode = mode);
-            unawaited(_runtime.setAudioFilter(mode.mpvFilter));
+            unawaited(_applyCombinedAudioFilters());
           },
           onToneMappingChanged: (algorithm) {
             setState(() => _toneMappingAlgorithm = algorithm);
             unawaited(_runtime.setToneMapping(algorithm.mpvValue));
+          },
+          onShaderPresetChanged: (preset) {
+            unawaited(_applyShaderPreset(preset));
+          },
+          onEqualizerSettingsChanged: (settings) {
+            setState(() => _equalizerSettings = settings);
+            unawaited(_applyCombinedAudioFilters());
           },
         ),
       ),
     );
   }
 
-  Future<void> _fetchDanmaku() async {
-    final epId = await _dandanService.searchEpisodeId(widget.item.name);
+  Future<void> _fetchDanmaku([String? customKeyword]) async {
+    final searchName = customKeyword ??
+        (_item.seriesName != null
+            ? '${_item.seriesName} ${_item.name}'
+            : _item.name);
+    final epId = await _dandanService.searchEpisodeId(searchName) ??
+        await _dandanService.searchEpisodeId(_item.name);
     if (epId != null) {
       final items = await _dandanService.fetchComments(epId);
       if (mounted) {
@@ -815,6 +1077,148 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         });
       }
     }
+  }
+
+  Future<void> _showDanmakuSettings() async {
+    final searchHint = _item.seriesName ?? _item.name;
+    await showModal<void>(
+      context: context,
+      configuration: const FadeScaleTransitionConfiguration(
+        barrierColor: Color(0x94000000),
+      ),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: DanmakuSettingsSheet(
+          preferences: _danmakuPreferences,
+          initialSearchKeyword: searchHint,
+          onSendDanmaku: _sendDanmaku,
+          onPreferencesChanged: (next) {
+            setState(() => _danmakuPreferences = next);
+            _danmakuSettingsTimer?.cancel();
+            _danmakuSettingsTimer = Timer(
+              const Duration(milliseconds: 350),
+              () => unawaited(_persistPlaybackPreferences()),
+            );
+          },
+          onEpisodeSelected: (match) async {
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            final items = await _dandanService.fetchComments(match.episodeId);
+            if (mounted) {
+              setState(() {
+                _danmakuItems = items;
+              });
+              messenger?.showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '已绑定弹幕源：${match.animeTitle} - ${match.episodeTitle} (${items.length}条弹幕)',
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  void _checkIntroOutro(Duration pos) {
+    if (!_skipIntroPreferences.enabled || _closing || _changingSource) return;
+
+    final intro = SmartIntroSkipper.detectIntro(
+      _plan.chapters,
+      duration: _effectiveDuration,
+      fallbackSeconds: _skipIntroPreferences.fallbackIntroSeconds,
+      allowFallback: _item.kind == MediaItemKind.episode,
+    );
+    final outro = SmartIntroSkipper.detectOutro(
+      _plan.chapters,
+      _effectiveDuration,
+      fallbackSeconds: _skipIntroPreferences.fallbackOutroSeconds,
+      allowFallback: _item.kind == MediaItemKind.episode,
+    );
+
+    if (intro != null && intro.contains(pos)) {
+      if (_dismissedKindForCurrentEpisode != IntroOutroKind.intro) {
+        if (_currentIntroOutro?.kind != IntroOutroKind.intro) {
+          setState(() {
+            _currentIntroOutro = intro;
+          });
+          if (_skipIntroPreferences.autoSkip) {
+            _startAutoSkipCountdown(intro);
+          }
+        }
+      }
+    } else if (outro != null && outro.contains(pos)) {
+      if (_dismissedKindForCurrentEpisode != IntroOutroKind.outro) {
+        if (_currentIntroOutro?.kind != IntroOutroKind.outro) {
+          setState(() {
+            _currentIntroOutro = outro;
+          });
+          if (_skipIntroPreferences.autoSkip) {
+            _startAutoSkipCountdown(outro);
+          }
+        }
+      }
+    } else {
+      if (_currentIntroOutro != null) {
+        _autoSkipTimer?.cancel();
+        setState(() {
+          _currentIntroOutro = null;
+          _autoSkipCountdown = null;
+        });
+      }
+    }
+  }
+
+  void _startAutoSkipCountdown(IntroOutroRange range) {
+    _autoSkipTimer?.cancel();
+    setState(() {
+      _autoSkipCountdown = _skipIntroPreferences.countdownSeconds;
+    });
+    _autoSkipTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _closing) {
+        timer.cancel();
+        return;
+      }
+      final remaining = (_autoSkipCountdown ?? 1) - 1;
+      if (remaining <= 0) {
+        timer.cancel();
+        unawaited(_performSkipIntroOutro(range));
+      } else {
+        setState(() {
+          _autoSkipCountdown = remaining;
+        });
+      }
+    });
+  }
+
+  Future<void> _performSkipIntroOutro(IntroOutroRange range) async {
+    _autoSkipTimer?.cancel();
+    setState(() {
+      _currentIntroOutro = null;
+      _autoSkipCountdown = null;
+    });
+
+    if (range.kind == IntroOutroKind.intro) {
+      await _seek(range.endPosition);
+    } else {
+      final queue = _queue;
+      if (queue != null && queue.hasNext) {
+        await _playQueueIndex(queue.currentIndex + 1);
+      } else {
+        await _seek(range.endPosition);
+      }
+    }
+  }
+
+  void _dismissCurrentIntroOutro() {
+    _autoSkipTimer?.cancel();
+    setState(() {
+      _dismissedKindForCurrentEpisode = _currentIntroOutro?.kind;
+      _currentIntroOutro = null;
+      _autoSkipCountdown = null;
+    });
   }
 
   Future<void> _togglePip() async {
@@ -835,6 +1239,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         settings.copyWith(
           maxStreamingBitrate: _maxStreamingBitrate,
           subtitlePreferences: _subtitlePreferences,
+          skipIntroPreferences: _skipIntroPreferences,
+          danmakuPreferences: _danmakuPreferences,
         ),
       );
     } on Object {
@@ -846,9 +1252,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     try {
       await _runtime.pause();
       final currentPos = _position;
+      final settings = await ref.read(playbackSettingsStoreProvider).read();
       final service = ref.read(externalPlayerServiceProvider);
       final launched = await service.launch(
         _plan,
+        executablePath: settings.externalPlayerPath,
         seekPosition: currentPos,
         title: widget.item.name,
       );
@@ -1845,6 +2253,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       unawaited(_bindSystemVolume(resetAttempts: true));
       await _safeReportStarted();
       _startProgressTimer();
+      _dismissedKindForCurrentEpisode = null;
+      _currentIntroOutro = null;
+      _autoSkipCountdown = null;
+      _autoSkipTimer?.cancel();
+      _danmakuItems = const [];
+      unawaited(_fetchDanmaku());
     } on PlaybackServiceException catch (error) {
       _writeDiagnosticLog(
         'queue_item_open_failed',
@@ -2030,8 +2444,12 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _nextEpisodeTimer?.cancel();
     _diagnosticsTimer?.cancel();
     _subtitleSettingsTimer?.cancel();
+    _danmakuSettingsTimer?.cancel();
+    _autoSkipTimer?.cancel();
     _systemTimelineTimer?.cancel();
     _systemVolumeRetryTimer?.cancel();
+    _keyHoldTimer?.cancel();
+    _rewindTimer?.cancel();
     _interactions.dispose();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
@@ -2070,18 +2488,6 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
             const SingleActivator(LogicalKeyboardKey.keyK): () {
               unawaited(_togglePlayPause());
             },
-            const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
-              unawaited(_seekRelative(const Duration(seconds: -10)));
-            },
-            const SingleActivator(LogicalKeyboardKey.keyJ): () {
-              unawaited(_seekRelative(const Duration(seconds: -10)));
-            },
-            const SingleActivator(LogicalKeyboardKey.arrowRight): () {
-              unawaited(_seekRelative(const Duration(seconds: 10)));
-            },
-            const SingleActivator(LogicalKeyboardKey.keyL): () {
-              unawaited(_seekRelative(const Duration(seconds: 10)));
-            },
             const SingleActivator(LogicalKeyboardKey.arrowUp): () {
               unawaited(_adjustVolume(5));
             },
@@ -2116,6 +2522,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
             focusNode: _pageFocusNode,
             autofocus: true,
             canRequestFocus: true,
+            onKeyEvent: _handleKeyEvent,
             onFocusChange: (focused) {
               if (!focused && mounted && !_closing) {
                 Future.microtask(_ensureFocused);
@@ -2145,6 +2552,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                   _ensureFocused();
                   unawaited(_toggleFullScreen());
                 },
+                onLongPressStart: (details) {
+                  _ensureFocused();
+                  final width = MediaQuery.sizeOf(context).width;
+                  final isRight = details.globalPosition.dx >= width / 2;
+                  _startSpeedPlayback(forward: isRight);
+                },
+                onLongPressEnd: (_) => _stopSpeedPlayback(),
+                onLongPressCancel: () => _stopSpeedPlayback(),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -2179,7 +2594,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                     DanmakuOverlay(
                       items: _danmakuItems,
                       position: _position,
-                      enabled: _danmakuEnabled,
+                      preferences: _danmakuPreferences,
                     ),
                     ValueListenableBuilder<_PlaybackTimeline>(
                       valueListenable: _timelineNotifier,
@@ -2202,6 +2617,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                             volume: _volume,
                             rate: _rate,
                             fullScreen: _fullScreen,
+                            danmakuEnabled: _danmakuPreferences.enabled,
+                            onDanmaku: () => unawaited(_showDanmakuSettings()),
                             audioLabel: _currentAudioLabel,
                             subtitleLabel: _currentSubtitleLabel,
                             chapters: _plan.chapters,
@@ -2266,6 +2683,23 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                         );
                       },
                     ),
+                    if (_currentIntroOutro != null)
+                      Positioned(
+                        bottom: _controlsVisible ? 120 : 36,
+                        right: 28,
+                        child: SkipIntroOverlay(
+                          label: _currentIntroOutro!.kind == IntroOutroKind.intro
+                              ? (_currentIntroOutro!.label ?? '跳过片头')
+                              : (_queue?.hasNext ?? false
+                                  ? '跳过片尾 (下一集)'
+                                  : (_currentIntroOutro!.label ?? '跳过片尾')),
+                          countdownSeconds: _autoSkipCountdown,
+                          onSkip: () => unawaited(
+                            _performSkipIntroOutro(_currentIntroOutro!),
+                          ),
+                          onClose: _dismissCurrentIntroOutro,
+                        ),
+                      ),
                     Center(
                       child: ValueListenableBuilder<PlaybackSeekFeedbackState?>(
                         valueListenable: _interactions.seekFeedback,
@@ -2294,6 +2728,16 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                         },
                       ),
                     ),
+                    if (_speedModeActive)
+                      SafeArea(
+                        child: Align(
+                          alignment: const Alignment(0.0, -0.72),
+                          child: _SpeedPlaybackIndicator(
+                            forward: _speedForward,
+                            speed: _longPressSpeed,
+                          ),
+                        ),
+                      ),
                     if (_diagnosticsVisible)
                       Positioned.fill(
                         child: SafeArea(
@@ -3416,6 +3860,82 @@ class _PlaybackError extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeedPlaybackIndicator extends StatelessWidget {
+  const _SpeedPlaybackIndicator({
+    required this.forward,
+    this.speed = 2.0,
+  });
+
+  final bool forward;
+  final double speed;
+
+  @override
+  Widget build(BuildContext context) {
+    final themeColor = forward ? AppColors.spotlight : AppColors.cyan;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.42),
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.16),
+                Colors.white.withValues(alpha: 0.04),
+                Colors.black.withValues(alpha: 0.38),
+              ],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.22),
+              width: 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: themeColor.withValues(alpha: 0.22),
+                blurRadius: 18,
+                spreadRadius: 1,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                forward
+                    ? Icons.fast_forward_rounded
+                    : Icons.fast_rewind_rounded,
+                color: themeColor,
+                size: 15,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                forward ? '${speed.toStringAsFixed(1)}X 倍速播放中' : '快速倒退中',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -4,6 +4,9 @@ import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/settings/presentation/playback_settings_section.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
+import 'package:embyplayer/src/features/scrobble/data/bangumi_store.dart';
+import 'package:embyplayer/src/features/scrobble/domain/bangumi_profile.dart';
+import 'package:embyplayer/src/features/scrobble/presentation/bangumi_binding_sheet.dart';
 import 'package:flutter/material.dart';
 
 class ServerAccountsPage extends StatelessWidget {
@@ -22,6 +25,7 @@ class ServerAccountsPage extends StatelessWidget {
     this.playbackSettingsError,
     this.onPlaybackBitrateChanged,
     this.onHardwareDecodingModeChanged,
+    this.onLongPressSpeedChanged,
     this.onEnableMiniPlayerChanged,
     this.onUseExternalPlayerChanged,
     this.onExternalPlayerPathChanged,
@@ -46,6 +50,7 @@ class ServerAccountsPage extends StatelessWidget {
   final String? playbackSettingsError;
   final ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged;
   final ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged;
+  final ValueChanged<double>? onLongPressSpeedChanged;
   final ValueChanged<bool>? onEnableMiniPlayerChanged;
   final ValueChanged<bool>? onUseExternalPlayerChanged;
   final ValueChanged<String?>? onExternalPlayerPathChanged;
@@ -92,6 +97,7 @@ class ServerAccountsPage extends StatelessWidget {
                     onBitrateChanged: onPlaybackBitrateChanged,
                     onHardwareDecodingModeChanged:
                         onHardwareDecodingModeChanged,
+                    onLongPressSpeedChanged: onLongPressSpeedChanged,
                     onEnableMiniPlayerChanged: onEnableMiniPlayerChanged,
                     onUseExternalPlayerChanged: onUseExternalPlayerChanged,
                     onExternalPlayerPathChanged: onExternalPlayerPathChanged,
@@ -104,6 +110,8 @@ class ServerAccountsPage extends StatelessWidget {
                     onAdd: onAddLocalLibrary,
                     onRemove: onRemoveLocalLibrary,
                   ),
+                  const SizedBox(height: 32),
+                  const _BangumiSettingsSection(),
                   const SizedBox(height: 32),
                   Text('服务器与账户', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 14),
@@ -923,3 +931,145 @@ class _SecurityNote extends StatelessWidget {
 }
 
 enum _AccountMenuAction { logout, remove }
+
+class _BangumiSettingsSection extends StatefulWidget {
+  const _BangumiSettingsSection();
+
+  @override
+  State<_BangumiSettingsSection> createState() => _BangumiSettingsSectionState();
+}
+
+class _BangumiSettingsSectionState extends State<_BangumiSettingsSection> {
+  final _store = BangumiStore();
+  BangumiProfile? _profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await _store.readProfile();
+    if (mounted) {
+      setState(() {
+        _profile = profile;
+      });
+    }
+  }
+
+  Future<void> _openBindingDialog() async {
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => const Dialog(
+        backgroundColor: Colors.transparent,
+        child: BangumiBindingSheet(),
+      ),
+    );
+    _loadProfile();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Bangumi 番组计划联动',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            if (_profile != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF09199).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  '已授权联动',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFFF09199),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: AppGlass.decoration(radius: 20, elevated: false),
+          child: Row(
+            children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF09199).withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.tv_rounded,
+                        color: Color(0xFFF09199),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _profile != null
+                                ? '${_profile!.nickname} (@${_profile!.username})'
+                                : '番组计划账号绑定',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _profile != null
+                                ? '自动打卡已${_profile!.autoScrobble ? '开启' : '关闭'} · 播放进度达到 80% 自动上报标记已看'
+                                : '绑定 Bangumi 开发者访问令牌后，可在播放完动画时自动打卡，并在媒体详情页同步番组评分与排名。',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary.withValues(alpha: 0.85),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF09199),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                      ),
+                      onPressed: _openBindingDialog,
+                      child: Text(
+                        _profile != null ? '管理联动' : '绑定账号',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+}

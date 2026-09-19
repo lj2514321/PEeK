@@ -82,6 +82,8 @@ class _FakeMiniRuntime implements PlaybackRuntime {
   Future<void> setAudioFilter(String af) async {}
   @override
   Future<void> setToneMapping(String algorithm) async {}
+  @override
+  Future<void> setGlslShaders(List<String> shaderPaths) async {}
 
   @override
   Future<void> dispose() async {

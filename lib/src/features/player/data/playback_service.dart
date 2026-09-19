@@ -535,14 +535,19 @@ class PlaybackService {
         uri.scheme == base.scheme &&
         uri.host == base.host &&
         uri.port == base.port;
-    if (!sameServer ||
-        uri.queryParameters.containsKey('api_key') ||
-        uri.queryParameters.containsKey('X-Emby-Token')) {
+    if (!sameServer) {
       return uri;
     }
-    return uri.replace(
-      queryParameters: {...uri.queryParameters, 'api_key': account.accessToken},
-    );
+    final token = account.accessToken.trim();
+    if (token.isEmpty) {
+      return uri;
+    }
+    final params = Map<String, String>.from(uri.queryParameters);
+    params.putIfAbsent('api_key', () => token);
+    params.putIfAbsent('X-Emby-Token', () => token);
+    params.putIfAbsent('X-MediaBrowser-Token', () => token);
+    params.putIfAbsent('token', () => token);
+    return uri.replace(queryParameters: params);
   }
 
   Uri? _externalUri(Map<String, dynamic> source) {
@@ -560,8 +565,8 @@ class PlaybackService {
   Uri _resolveServerUri(Uri base, String value) {
     final uri = Uri.parse(value);
     if (uri.hasScheme) return uri;
-    final baseSegments = base.pathSegments;
-    final valueSegments = uri.pathSegments;
+    final baseSegments = base.pathSegments.where((s) => s.isNotEmpty).toList();
+    final valueSegments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
     final alreadyPrefixed =
         baseSegments.isNotEmpty &&
         valueSegments.length >= baseSegments.length &&
@@ -583,13 +588,25 @@ class PlaybackService {
   }
 
   Uri _appendPath(Uri base, String path) {
+    final baseSegments = base.pathSegments.where((s) => s.isNotEmpty);
+    final additionalSegments = path.split('/').where((s) => s.isNotEmpty);
     return base.replace(
-      pathSegments: [...base.pathSegments, ...path.split('/')],
+      pathSegments: [...baseSegments, ...additionalSegments],
     );
   }
 
   Map<String, String> _serverHeaders(AuthenticatedServer account) {
-    return {'X-Emby-Token': account.accessToken};
+    final token = account.accessToken;
+    final deviceId = account.deviceId;
+    final scheme = account.server.kind == ServerKind.emby ? 'Emby' : 'MediaBrowser';
+    final authValue = deviceId.isNotEmpty
+        ? '$scheme Client="PEeK", Device="Windows", DeviceId="$deviceId", Version="0.1.0", Token="$token"'
+        : 'MediaBrowser Token="$token"';
+    return {
+      'Authorization': authValue,
+      'X-Emby-Token': token,
+      'X-MediaBrowser-Token': token,
+    };
   }
 
   Map<String, String> _readHeaders(Object? value) {

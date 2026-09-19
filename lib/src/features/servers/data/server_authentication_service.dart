@@ -21,13 +21,17 @@ class ServerAuthenticationService {
     final deviceId = await _tokenStore.getOrCreateDeviceId();
 
     try {
+      final authHeader = _authorizationHeader(server.kind, deviceId);
+      final mediaBrowserHeader = _authorizationHeader(ServerKind.jellyfin, deviceId);
       final response = await _dio.postUri<Map<String, dynamic>>(
         _appendPath(server.apiBaseUri, 'Users/AuthenticateByName'),
         data: {'Username': normalizedUsername, 'Pw': password},
         options: Options(
           contentType: Headers.jsonContentType,
           headers: {
-            'X-Emby-Authorization': _authorizationHeader(server.kind, deviceId),
+            'Authorization': authHeader,
+            'X-Emby-Authorization': authHeader,
+            'X-MediaBrowser-Authorization': mediaBrowserHeader,
           },
         ),
       );
@@ -36,14 +40,14 @@ class ServerAuthenticationService {
       final user = data?['User'];
       final token = data?['AccessToken'];
       if (data == null ||
-          user is! Map<String, dynamic> ||
+          user is! Map ||
           token is! String ||
           token.isEmpty) {
         throw const ServerAuthenticationException('服务器返回了无法识别的登录结果。');
       }
 
-      final userId = user['Id'];
-      if (userId is! String || userId.isEmpty) {
+      final userId = user['Id']?.toString();
+      if (userId == null || userId.isEmpty) {
         throw const ServerAuthenticationException('登录结果中缺少用户标识。');
       }
 
@@ -74,10 +78,42 @@ class ServerAuthenticationService {
       return account;
     } on DioException catch (error) {
       final statusCode = error.response?.statusCode;
-      if (statusCode == 400 || statusCode == 401 || statusCode == 403) {
-        throw const ServerAuthenticationException('用户名或密码不正确。');
+      final responseData = error.response?.data;
+      String? detail;
+      if (responseData is Map && responseData['Message'] is String) {
+        detail = (responseData['Message'] as String).trim();
+      } else if (responseData is String && responseData.trim().isNotEmpty) {
+        detail = responseData.trim();
       }
-      throw const ServerAuthenticationException('无法完成登录。请检查服务器状态和网络连接。');
+
+      if (statusCode == 401) {
+        if (detail != null && detail.isNotEmpty) {
+          throw ServerAuthenticationException('登录认证失败（401）：$detail');
+        }
+        throw const ServerAuthenticationException(
+          '用户名或密码不正确（401）。若确认凭据无误，请检查服务端是否触发了防暴力破解临时锁定（可稍候15分钟后重试）。',
+        );
+      }
+      if (statusCode == 403) {
+        if (detail != null && detail.isNotEmpty) {
+          throw ServerAuthenticationException('登录受限（403）：$detail');
+        }
+        throw const ServerAuthenticationException('账号访问受限（403），请检查服务器用户登录权限。');
+      }
+      if (statusCode == 400) {
+        if (detail != null && detail.isNotEmpty) {
+          throw ServerAuthenticationException('登录请求错误（400）：$detail');
+        }
+        throw const ServerAuthenticationException('登录请求参数错误（400），请核对用户名。');
+      }
+      final msg = error.message ?? error.toString();
+      throw ServerAuthenticationException(
+        '无法完成登录${statusCode != null ? "（HTTP $statusCode）" : ""}。请检查服务器状态和网络连接：$msg',
+      );
+    } on ServerAuthenticationException {
+      rethrow;
+    } catch (error) {
+      throw ServerAuthenticationException('登录过程发生异常：$error');
     }
   }
 

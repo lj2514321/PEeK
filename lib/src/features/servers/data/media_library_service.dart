@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:embyplayer/src/core/storage/media_cache_store.dart';
 import 'package:embyplayer/src/core/utils/pinyin_matcher.dart';
 import 'package:embyplayer/src/features/servers/data/emby_media_item_parser.dart';
+import 'package:embyplayer/src/features/servers/domain/external_id_info.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
+import 'package:embyplayer/src/features/servers/domain/remote_search_result.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 
 class MediaLibraryService {
@@ -390,7 +392,7 @@ class MediaLibraryService {
     try {
       await _dio.post(
         uri.toString(),
-        options: Options(headers: {'X-Emby-Token': account.accessToken}),
+        options: Options(headers: _authHeaders(account.accessToken, account)),
       );
       return true;
     } catch (_) {
@@ -401,7 +403,17 @@ class MediaLibraryService {
   Future<QuickConnectInitResult?> initiateQuickConnect(Uri serverUri) async {
     final uri = _appendPath(serverUri, 'QuickConnect/Initiate');
     try {
-      final response = await _dio.post<Map<String, dynamic>>(uri.toString());
+      final response = await _dio.post<Map<String, dynamic>>(
+        uri.toString(),
+        options: Options(
+          headers: const {
+            'Authorization':
+                'MediaBrowser Client="PEeK", Device="Windows", DeviceId="quickconnect-client", Version="0.1.0"',
+            'X-Emby-Authorization':
+                'MediaBrowser Client="PEeK", Device="Windows", DeviceId="quickconnect-client", Version="0.1.0"',
+          },
+        ),
+      );
       if (response.data is Map<String, dynamic>) {
         return QuickConnectInitResult.fromJson(response.data!);
       }
@@ -420,6 +432,14 @@ class MediaLibraryService {
       final response = await _dio.get<Map<String, dynamic>>(
         uri.toString(),
         queryParameters: {'secret': secret},
+        options: Options(
+          headers: const {
+            'Authorization':
+                'MediaBrowser Client="PEeK", Device="Windows", DeviceId="quickconnect-client", Version="0.1.0"',
+            'X-Emby-Authorization':
+                'MediaBrowser Client="PEeK", Device="Windows", DeviceId="quickconnect-client", Version="0.1.0"',
+          },
+        ),
       );
       if (response.data is Map<String, dynamic>) {
         return QuickConnectStateResult.fromJson(response.data!);
@@ -738,6 +758,93 @@ class MediaLibraryService {
     )).items;
   }
 
+  Future<List<MediaItem>> getCollectionsForItem(
+    AuthenticatedServer account,
+    String itemId, {
+    bool forceRefresh = false,
+  }) async {
+    // 1. Primary endpoint: GET /Items/{itemId}/Collections?userId={userId} (Jellyfin standard)
+    final collectionsUri = _appendPath(
+      account.server.apiBaseUri,
+      'Items/$itemId/Collections',
+    ).replace(
+      queryParameters: {
+        'UserId': account.userId,
+        'Fields':
+            'Overview,PrimaryImageAspectRatio,ProductionYear,RunTimeTicks,UserData',
+      },
+    );
+
+    try {
+      final page = await _requestPage(
+        collectionsUri,
+        account,
+        cacheAge: _detailCacheAge,
+        forceRefresh: forceRefresh,
+      );
+      if (page.items.isNotEmpty) {
+        return page.items;
+      }
+    } on Object {
+      // Fall through to Ancestors fallback
+    }
+
+    // 2. Fallback endpoint: GET /Items/{itemId}/Ancestors?userId={userId} (Emby / compatibility)
+    try {
+      final ancestorsUri = _appendPath(
+        account.server.apiBaseUri,
+        'Items/$itemId/Ancestors',
+      ).replace(
+        queryParameters: {
+          'UserId': account.userId,
+        },
+      );
+      final data = await _requestJson(
+        ancestorsUri,
+        account,
+        cacheAge: _detailCacheAge,
+        forceRefresh: forceRefresh,
+        allowListResponse: true,
+      );
+      final rawItems = data['Items'];
+      if (rawItems is List) {
+        final boxSets = rawItems
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .where((m) {
+              final type = m['Type']?.toString().toLowerCase();
+              final collType = m['CollectionType']?.toString().toLowerCase();
+              return type == 'boxset' || collType == 'boxsets';
+            })
+            .map((m) => _parseItem(m, account))
+            .where((it) => it.id.isNotEmpty && it.name.isNotEmpty)
+            .toList(growable: false);
+        if (boxSets.isNotEmpty) {
+          return boxSets;
+        }
+      }
+    } on Object {
+      // Ignore fallback failures
+    }
+
+    return const [];
+  }
+
+  Future<List<MediaItem>> getCollectionItems(
+    AuthenticatedServer account,
+    String collectionId, {
+    int limit = 50,
+    bool forceRefresh = false,
+  }) async {
+    final page = await getItems(
+      account,
+      parentId: collectionId,
+      limit: limit,
+      forceRefresh: forceRefresh,
+    );
+    return page.items;
+  }
+
   Future<void> setFavorite(
     AuthenticatedServer account,
     String itemId, {
@@ -797,7 +904,7 @@ class MediaLibraryService {
               account.server.apiBaseUri,
               'Users/${account.userId}/$pathSegment/$itemId',
             );
-            final options = Options(headers: _authHeaders(account.accessToken));
+            final options = Options(headers: _authHeaders(account.accessToken, account));
             if (enabled) {
               await _dio.postUri<void>(uri, options: options);
             } else {
@@ -825,12 +932,127 @@ class MediaLibraryService {
     try {
       await _dio.deleteUri<void>(
         uri,
-        options: Options(headers: _authHeaders(account.accessToken)),
+        options: Options(headers: _authHeaders(account.accessToken, account)),
       );
       try {
         await _cache.clear();
       } on Object {
         // Ignore cache clear error
+      }
+    } on DioException catch (error) {
+      throw _mapDioException(error);
+    }
+  }
+
+  Future<List<ExternalIdInfo>> getExternalIdInfos(
+    AuthenticatedServer account, {
+    required String itemId,
+  }) async {
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Items/$itemId/ExternalIdInfos',
+    );
+    try {
+      final response = await _dio.getUri<Object?>(
+        uri,
+        options: Options(headers: _authHeaders(account.accessToken, account)),
+      );
+      final payload = response.data;
+      final List<dynamic>? list = switch (payload) {
+        List<dynamic>() => payload,
+        Map<String, dynamic>() when payload['Items'] is List =>
+          payload['Items'] as List<dynamic>,
+        _ => null,
+      };
+      if (list == null) return const [];
+      return list
+          .whereType<Map>()
+          .map((m) => ExternalIdInfo.fromJson(Map<String, dynamic>.from(m)))
+          .where((info) => info.key.isNotEmpty)
+          .toList(growable: false);
+    } on Object {
+      return const [];
+    }
+  }
+
+  Future<List<RemoteSearchResult>> searchRemoteMetadata(
+    AuthenticatedServer account, {
+    required String itemId,
+    required MediaItemKind kind,
+    required String name,
+    int? year,
+    Map<String, String>? providerIds,
+  }) async {
+    final typeSegment = switch (kind) {
+      MediaItemKind.movie => 'Movie',
+      MediaItemKind.series => 'Series',
+      MediaItemKind.episode => 'Episode',
+      MediaItemKind.season => 'Season',
+      MediaItemKind.folder => 'BoxSet',
+      _ => 'Movie',
+    };
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Items/RemoteSearch/$typeSegment',
+    );
+    final searchInfo = <String, dynamic>{
+      'Name': name.trim(),
+      if (year != null && year > 0) 'Year': year,
+      if (providerIds != null && providerIds.isNotEmpty)
+        'ProviderIds': providerIds,
+    };
+    final requestBody = <String, dynamic>{
+      'SearchInfo': searchInfo,
+      'ItemId': itemId,
+    };
+
+    try {
+      final response = await _dio.postUri<Object?>(
+        uri,
+        data: requestBody,
+        options: Options(headers: _authHeaders(account.accessToken, account)),
+      );
+      final payload = response.data;
+      final List<dynamic>? list = switch (payload) {
+        List<dynamic>() => payload,
+        Map<String, dynamic>() when payload['Items'] is List =>
+          payload['Items'] as List<dynamic>,
+        _ => null,
+      };
+      if (list == null) return const [];
+      return list
+          .whereType<Map>()
+          .map((m) => RemoteSearchResult.fromJson(Map<String, dynamic>.from(m)))
+          .toList(growable: false);
+    } on DioException catch (error) {
+      throw _mapDioException(error);
+    }
+  }
+
+  Future<void> applyRemoteMetadata(
+    AuthenticatedServer account, {
+    required String itemId,
+    required RemoteSearchResult result,
+    bool replaceAllImages = true,
+  }) async {
+    final query = <String, String>{
+      'ReplaceAllImages': replaceAllImages ? 'true' : 'false',
+    };
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Items/RemoteSearch/Apply/$itemId',
+    ).replace(queryParameters: query);
+
+    try {
+      await _dio.postUri<void>(
+        uri,
+        data: result.rawPayload,
+        options: Options(headers: _authHeaders(account.accessToken, account)),
+      );
+      try {
+        await _cache.clear();
+      } on Object {
+        // Cache cleanup must not block on error.
       }
     } on DioException catch (error) {
       throw _mapDioException(error);
@@ -934,7 +1156,7 @@ class MediaLibraryService {
   }) async {
     final response = await _dio.getUri<Object?>(
       uri,
-      options: Options(headers: _authHeaders(account.accessToken)),
+      options: Options(headers: _authHeaders(account.accessToken, account)),
     );
     final payload = response.data;
     final Map<String, dynamic>? data = switch (payload) {
@@ -1022,8 +1244,18 @@ class MediaLibraryService {
     );
   }
 
-  Map<String, String> _authHeaders(String token) {
-    return {'X-Emby-Token': token};
+  Map<String, String> _authHeaders(String token, [AuthenticatedServer? account]) {
+    final deviceId = account?.deviceId ?? '';
+    final kind = account?.server.kind;
+    final scheme = kind == ServerKind.emby ? 'Emby' : 'MediaBrowser';
+    final authValue = deviceId.isNotEmpty
+        ? '$scheme Client="PEeK", Device="Windows", DeviceId="$deviceId", Version="0.1.0", Token="$token"'
+        : 'MediaBrowser Token="$token"';
+    return {
+      'Authorization': authValue,
+      'X-Emby-Token': token,
+      'X-MediaBrowser-Token': token,
+    };
   }
 
   Uri _appendPath(Uri base, String path) {
