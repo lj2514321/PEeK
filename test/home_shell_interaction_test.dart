@@ -337,7 +337,7 @@ class _ShellLibraryService extends MediaLibraryService {
   @override
   Future<MediaPage> getItems(
     AuthenticatedServer account, {
-    required String parentId,
+    String? parentId,
     String? collectionType,
     int startIndex = 0,
     int limit = 60,
@@ -347,6 +347,8 @@ class _ShellLibraryService extends MediaLibraryService {
     MediaResolutionFilter resolution = MediaResolutionFilter.all,
     double? minCommunityRating,
     int? productionYear,
+    String? tag,
+    List<String>? tags,
     bool collapseBoxSets = false,
     bool forceRefresh = false,
   }) async {

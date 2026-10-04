@@ -72,6 +72,15 @@
 - [x] 个人观影统计与时长分析仪表盘
 - [x] Jellyfin Quick Connect 扫码快速登录
 
+## M9：架构解耦与整洁分层 (Architecture Decoupling & Modularization)
+
+- [x] 核心领域公共层抽取（`MediaItem`、`ServerAccount`、`PlaybackPlan`、`PlaybackSettings` 统一归位 `src/core/domain/`）
+- [x] 跨特性双向循环依赖全面清零（`player ⟷ servers`、`danmaku ⟷ player`、`details ⟷ people`）
+- [x] 中心化类型安全路由门面（`AppRoutes` 封装 `Peek3DPageRoute`，消除 UI 页面跨特性强引用）
+- [x] 依赖倒置与顶层装配中心（`AppProviders` 承载业务装配，底层 `core/network` 净化）
+- [x] 物理动力学平滑滚动引擎（`PeekSmoothScroll` 全局弹簧与反向零黏滞算法覆盖所有滚动视口）
+- [x] 全工程 308 项自动化测试 100% 通过与 Windows Release 安装包构建验证
+
 ## 持续体验优化
 
 - [x] 可收纳桌面侧栏、五项响应式导航、页面保活与 Ctrl+1–5/Ctrl+B 快捷切换
@@ -82,3 +91,4 @@
 - [x] 收藏、已观看状态与批量操作
 - [x] 跨媒体库收藏页、分页浏览、快捷移除与撤销
 - [x] 跨媒体库全量演员检索与 ParentId 独立分类过滤
+

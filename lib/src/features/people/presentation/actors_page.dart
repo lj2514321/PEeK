@@ -4,10 +4,8 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
-import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
-import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
-import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
+import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
@@ -262,31 +260,27 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
   Future<void> _openActor(MediaItem item) async {
     final account = widget.account;
     if (account == null) return;
-    await Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) => PersonWorksPage(
-          account: account,
-          person: MediaPerson(
-            id: item.id,
-            name: item.name,
-            type: 'Actor',
-            imageUri: item.imageUri,
-            imageHeaders: item.imageHeaders,
-          ),
-          onOpen: _openWork,
-        ),
+    await AppRoutes.openPersonWorks(
+      context,
+      account: account,
+      person: MediaPerson(
+        id: item.id,
+        name: item.name,
+        type: 'Actor',
+        imageUri: item.imageUri,
+        imageHeaders: item.imageHeaders,
       ),
+      onOpen: _openWork,
     );
   }
 
   void _openWork(MediaItem item) {
     final account = widget.account;
     if (account == null) return;
-    Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) =>
-            MediaDetailPage(account: account, initialItem: item),
-      ),
+    AppRoutes.openMediaDetail(
+      context,
+      account: account,
+      item: item,
     );
   }
 

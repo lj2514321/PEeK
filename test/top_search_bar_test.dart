@@ -2,6 +2,10 @@ import 'package:dio/dio.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/storage/search_history_store.dart';
+import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
+import 'package:embyplayer/src/features/people/data/actor_favorites_store.dart';
+import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
+import 'package:embyplayer/src/features/people/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/search/presentation/top_search_bar.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
@@ -75,6 +79,58 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('tapping a person in search results opens PersonWorksPage instead of MediaDetailPage', (
+    tester,
+  ) async {
+    final service = _FakeSearchService();
+    await tester.pumpWidget(_testApp(account: account, service: service));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('top-search-field')),
+      '示例',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.text('示例演员'), findsOneWidget);
+
+    // Tap on person item
+    await tester.tap(find.text('示例演员'));
+    await tester.pumpAndSettle();
+
+    // Verify PersonWorksPage is opened, and MediaDetailPage is NOT opened
+    expect(find.byType(PersonWorksPage), findsOneWidget);
+    expect(find.byType(MediaDetailPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tapping a movie in search results opens MediaDetailPage', (
+    tester,
+  ) async {
+    final service = _FakeSearchService();
+    await tester.pumpWidget(_testApp(account: account, service: service));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('top-search-field')),
+      '示例',
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.text('示例电影'), findsOneWidget);
+
+    // Tap on movie item
+    await tester.tap(find.text('示例电影'));
+    await tester.pumpAndSettle();
+
+    // Verify MediaDetailPage is opened
+    expect(find.byType(MediaDetailPage), findsOneWidget);
+    expect(find.byType(PersonWorksPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows guidance when server is not connected', (tester) async {
     await tester.pumpWidget(
       _testApp(account: null, service: _FakeSearchService()),
@@ -93,12 +149,16 @@ Widget _testApp({
   required AuthenticatedServer? account,
   required MediaLibraryService service,
   SearchHistoryStore? historyStore,
+  ActorFavoritesStore? actorStore,
 }) {
   return ProviderScope(
     overrides: [
       mediaLibraryProvider.overrideWithValue(service),
       searchHistoryStoreProvider.overrideWithValue(
         historyStore ?? MemorySearchHistoryStore(),
+      ),
+      actorFavoritesStoreProvider.overrideWithValue(
+        actorStore ?? MemoryActorFavoritesStore(),
       ),
     ],
     child: MaterialApp(
@@ -140,6 +200,51 @@ class _FakeSearchService extends MediaLibraryService {
       items: items,
       totalRecordCount: 2,
       nextStartIndex: 2,
+    );
+  }
+
+  @override
+  Future<MediaItem> getItem(
+    AuthenticatedServer account,
+    String itemId, {
+    bool forceRefresh = false,
+  }) async {
+    return const MediaItem(
+      id: 'movie-id',
+      name: '示例电影',
+      kind: MediaItemKind.movie,
+      productionYear: 2026,
+    );
+  }
+
+  @override
+  Future<List<MediaItem>> getSimilar(
+    AuthenticatedServer account,
+    String itemId, {
+    int limit = 12,
+    bool forceRefresh = false,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<MediaPage> getItemsForPerson(
+    AuthenticatedServer account, {
+    required String personId,
+    int startIndex = 0,
+    int limit = 40,
+    bool forceRefresh = false,
+  }) async {
+    return const MediaPage(
+      items: [
+        MediaItem(
+          id: 'work-1',
+          name: '参演代表作',
+          kind: MediaItemKind.movie,
+        ),
+      ],
+      totalRecordCount: 1,
+      nextStartIndex: 1,
     );
   }
 }

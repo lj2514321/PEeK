@@ -1,5 +1,6 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/player/domain/playback_diagnostics.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:flutter/material.dart';
@@ -45,8 +46,9 @@ class PlaybackDiagnosticsPanel extends StatelessWidget {
             Flexible(
               child: data == null
                   ? const _DiagnosticsLoading()
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+                  : PeekSmoothScroll(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -137,6 +139,7 @@ class PlaybackDiagnosticsPanel extends StatelessWidget {
                           ),
                         ],
                       ),
+                    ),
                     ),
             ),
           ],

@@ -1,5 +1,5 @@
 import 'package:embyplayer/src/features/danmaku/data/dandanplay_service.dart';
-import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
+import 'package:embyplayer/src/core/domain/playback_settings.dart';
 import 'package:flutter/material.dart';
 
 class DanmakuOverlay extends StatelessWidget {

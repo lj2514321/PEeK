@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:animations/animations.dart';
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
+import 'package:embyplayer/src/core/presentation/peek_border_beam.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostic_log.dart';
 import 'package:embyplayer/src/features/player/data/playback_diagnostics_service.dart';
@@ -45,6 +47,7 @@ import 'package:embyplayer/src/features/servers/data/media_library_service.dart'
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -160,6 +163,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Timer? _keyHoldTimer;
   Timer? _rewindTimer;
   LogicalKeyboardKey? _holdingKey;
+  bool _wokeControlsOnPointerDown = false;
+  bool _cursorMoving = false;
+  Timer? _cursorHideTimer;
   late final FocusNode _pageFocusNode = FocusNode(
     debugLabel: 'PlaybackPageFocus',
   );
@@ -167,6 +173,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   static const _autoNextSeconds = 8;
 
   bool get _controlsVisible => _interactions.controlsVisible;
+
+  bool get _effectiveCursorVisible =>
+      _controlsVisible || _diagnosticsVisible || _cursorMoving;
 
   bool get _remotePlayback => widget.account != null && !_item.isLocal;
 
@@ -192,10 +201,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     unawaited(_fetchDanmaku());
     unawaited(_initBangumi());
     _duration = widget.plan.duration ?? Duration.zero;
-    _position = widget.isResumingFromMini && widget.runtime != null && widget.runtime!.position > Duration.zero
+    _position =
+        widget.isResumingFromMini &&
+            widget.runtime != null &&
+            widget.runtime!.position > Duration.zero
         ? widget.runtime!.position
         : widget.plan.startPosition;
-    _playing = widget.isResumingFromMini ? (widget.runtime?.playing ?? false) : false;
+    _playing = widget.isResumingFromMini
+        ? (widget.runtime?.playing ?? false)
+        : false;
     _reportedStarted = widget.isResumingFromMini;
     _timelineNotifier = ValueNotifier(
       _PlaybackTimeline(
@@ -218,6 +232,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       onControlsShown: () => _publishTimeline(force: true),
       onControlsVisibilityChanged: () {
         if (mounted) {
+          if (!_interactions.controlsVisible) {
+            _cursorMoving = false;
+            _cursorHideTimer?.cancel();
+          }
           setState(() {});
           _ensureFocused();
         }
@@ -229,13 +247,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     Future<void>.microtask(_openInitialMedia);
     Future<void>.microtask(() {
       if (mounted) {
-        ref.read(globalPlaybackCoordinatorProvider.notifier).registerActivePlayback(
-          account: widget.account,
-          item: widget.item,
-          plan: widget.plan,
-          queue: widget.queue,
-          runtime: _runtime,
-        );
+        ref
+            .read(globalPlaybackCoordinatorProvider.notifier)
+            .registerActivePlayback(
+              account: widget.account,
+              item: widget.item,
+              plan: widget.plan,
+              queue: widget.queue,
+              runtime: _runtime,
+            );
       }
     });
   }
@@ -549,6 +569,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   void _showControls() {
+    _cursorHideTimer?.cancel();
+    _cursorMoving = false;
     _interactions.showControls();
   }
 
@@ -558,6 +580,85 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   void _scheduleControlsHide() {
     _interactions.scheduleControlsHide();
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (event.buttons == kPrimaryMouseButton) {
+      if (!_controlsVisible && !_diagnosticsVisible) {
+        _wokeControlsOnPointerDown = true;
+        _ensureFocused();
+        _showControls();
+      } else {
+        _wokeControlsOnPointerDown = false;
+      }
+    }
+  }
+
+  void _onPointerEnter(PointerEnterEvent event) {
+    _ensureFocused();
+    _cursorHideTimer?.cancel();
+    if (!_cursorMoving) {
+      setState(() {
+        _cursorMoving = true;
+      });
+    }
+    if (!_controlsVisible && !_diagnosticsVisible) {
+      _scheduleCursorHide();
+    }
+    if (_controlsVisible && !_diagnosticsVisible) {
+      _scheduleControlsHide();
+    }
+  }
+
+  void _onPointerHover(PointerHoverEvent event) {
+    _ensureFocused();
+    if (_diagnosticsVisible) return;
+
+    // 鼠标指针在鼠标移动时取消隐身
+    if (event.delta.distance > 0.5) {
+      _cursorHideTimer?.cancel();
+      if (!_cursorMoving) {
+        setState(() {
+          _cursorMoving = true;
+        });
+      }
+      if (!_controlsVisible) {
+        _scheduleCursorHide();
+      }
+    }
+
+    if (!_controlsVisible) {
+      // 移动鼠标不唤醒 UI 控制栏，仅左键单击唤醒
+      return;
+    }
+
+    // 控制栏已处于显示状态时，指针移动正常维持显示（刷新自动隐藏计时器）
+    if (event.delta.distance > 1.5) {
+      _scheduleControlsHide();
+    }
+  }
+
+  void _scheduleCursorHide() {
+    _cursorHideTimer?.cancel();
+    final delay = AppMotion.isTest
+        ? const Duration(milliseconds: 100)
+        : const Duration(milliseconds: 2500);
+    _cursorHideTimer = Timer(delay, () {
+      if (mounted && !_controlsVisible && !_diagnosticsVisible) {
+        setState(() {
+          _cursorMoving = false;
+        });
+      }
+    });
+  }
+
+  void _onPointerExit(PointerExitEvent event) {
+    _cursorHideTimer?.cancel();
+    if (_cursorMoving) {
+      setState(() {
+        _cursorMoving = false;
+      });
+    }
   }
 
   Future<void> _togglePlayPause() async {
@@ -684,8 +785,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final key = event.logicalKey;
-    final isRight = key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.keyL;
-    final isLeft = key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyJ;
+    final isRight =
+        key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.keyL;
+    final isLeft =
+        key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyJ;
 
     if (!isRight && !isLeft) {
       return KeyEventResult.ignored;
@@ -701,7 +804,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       }
       return KeyEventResult.handled;
     } else if (event is KeyRepeatEvent) {
-      if (_holdingKey == key && !_speedModeActive && (_keyHoldTimer == null || !_keyHoldTimer!.isActive)) {
+      if (_holdingKey == key &&
+          !_speedModeActive &&
+          (_keyHoldTimer == null || !_keyHoldTimer!.isActive)) {
         _startSpeedPlayback(forward: isRight);
       }
       return KeyEventResult.handled;
@@ -1030,11 +1135,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _showAudioEnhancementSheet() async {
-    await showModal<void>(
+    await peekShow3DDialog<void>(
       context: context,
-      configuration: const FadeScaleTransitionConfiguration(
-        barrierColor: Color(0x94000000),
-      ),
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         child: AudioEnhancementSheet(
@@ -1063,11 +1165,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _fetchDanmaku([String? customKeyword]) async {
-    final searchName = customKeyword ??
+    final searchName =
+        customKeyword ??
         (_item.seriesName != null
             ? '${_item.seriesName} ${_item.name}'
             : _item.name);
-    final epId = await _dandanService.searchEpisodeId(searchName) ??
+    final epId =
+        await _dandanService.searchEpisodeId(searchName) ??
         await _dandanService.searchEpisodeId(_item.name);
     if (epId != null) {
       final items = await _dandanService.fetchComments(epId);
@@ -1081,11 +1185,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Future<void> _showDanmakuSettings() async {
     final searchHint = _item.seriesName ?? _item.name;
-    await showModal<void>(
+    await peekShow3DDialog<void>(
       context: context,
-      configuration: const FadeScaleTransitionConfiguration(
-        barrierColor: Color(0x94000000),
-      ),
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         child: DanmakuSettingsSheet(
@@ -1276,9 +1377,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       }
     } on Object catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('调用外部播放器出错：$error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('调用外部播放器出错：$error')));
       }
     }
   }
@@ -1388,8 +1489,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         options: _subtitleOptions(),
         onPreferencesChanged: _updateSubtitlePreferences,
         onPickLocalSubtitle: _pickLocalSubtitleFile,
-        onOpenOnlineSubtitles:
-            _remotePlayback ? _openOnlineSubtitleDialog : null,
+        onOpenOnlineSubtitles: _remotePlayback
+            ? _openOnlineSubtitleDialog
+            : null,
       ),
     ).whenComplete(() {
       if (mounted) {
@@ -1429,9 +1531,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       label: '字幕文件',
       extensions: <String>['srt', 'ass', 'vtt', 'sub', 'lrc'],
     );
-    final file = await openFile(
-      acceptedTypeGroups: <XTypeGroup>[typeGroup],
-    );
+    final file = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
     if (file != null) {
       await _loadLocalSubtitleFile(File(file.path));
     }
@@ -1442,11 +1542,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (account == null || _item.isLocal) return;
     _interactions.cancelControlsHide();
     _showControls();
-    final result = await showModal<RemoteSubtitleInfo>(
+    final result = await peekShow3DDialog<RemoteSubtitleInfo>(
       context: context,
-      configuration: const FadeScaleTransitionConfiguration(
-        barrierColor: Color(0x94000000),
-      ),
       builder: (context) => OnlineSubtitleDialog(
         account: account,
         itemId: _item.id,
@@ -1454,9 +1551,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       ),
     );
     if (result != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('字幕“${result.name}”挂载成功')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('字幕“${result.name}”挂载成功')));
     }
     if (mounted) {
       _ensureFocused();
@@ -1474,7 +1571,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _error = null;
     });
 
-    _writeDiagnosticLog('auto_reconnect_start', fields: {'error': error.toString()});
+    _writeDiagnosticLog(
+      'auto_reconnect_start',
+      fields: {'error': error.toString()},
+    );
     final currentPos = _position;
 
     try {
@@ -1483,25 +1583,27 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         await sessionStore.readSession();
       }
 
-      final newPlan = await ref.read(playbackServiceProvider).createPlan(
-        account,
-        _item,
-        startPosition: currentPos,
-        audioStreamIndex: _selectedAudioStreamIndex,
-        subtitleStreamIndex: _subtitlesDisabled
-            ? -1
-            : _selectedSubtitleStreamIndex,
-        maxStreamingBitrate: _maxStreamingBitrate,
-      );
+      final newPlan = await ref
+          .read(playbackServiceProvider)
+          .createPlan(
+            account,
+            _item,
+            startPosition: currentPos,
+            audioStreamIndex: _selectedAudioStreamIndex,
+            subtitleStreamIndex: _subtitlesDisabled
+                ? -1
+                : _selectedSubtitleStreamIndex,
+            maxStreamingBitrate: _maxStreamingBitrate,
+          );
 
       if (!mounted || _closing) return;
       _plan = newPlan;
       await _openMedia(newPlan, play: true, startPosition: currentPos);
       if (mounted) {
         setState(() => _reconnecting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('网络连接已恢复，正在自动断点续播')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('网络连接已恢复，正在自动断点续播')));
       }
     } catch (retryError) {
       if (mounted) {
@@ -2294,7 +2396,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     // and removing them from "Continue Watching".
     final duration = _effectiveDuration;
     final isActuallyFinished = duration > const Duration(seconds: 30)
-        ? (_position >= duration * 0.90 || (duration - _position).inSeconds <= 30)
+        ? (_position >= duration * 0.90 ||
+              (duration - _position).inSeconds <= 30)
         : _position > Duration.zero;
 
     if (!isActuallyFinished) {
@@ -2315,7 +2418,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   PlaybackSessionSnapshot _snapshot() {
-    final effectivePosition = _position > _runtime.position ? _position : _runtime.position;
+    final effectivePosition = _position > _runtime.position
+        ? _position
+        : _runtime.position;
     return PlaybackSessionSnapshot(
       plan: _plan,
       position: effectivePosition,
@@ -2359,13 +2464,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _systemVolumeRetryTimer?.cancel();
     _interactions.cancelPendingSeek();
 
-    ref.read(globalPlaybackCoordinatorProvider.notifier).registerActivePlayback(
-      account: widget.account,
-      item: _item,
-      plan: _plan,
-      queue: _queue,
-      runtime: _runtime,
-    );
+    ref
+        .read(globalPlaybackCoordinatorProvider.notifier)
+        .registerActivePlayback(
+          account: widget.account,
+          item: _item,
+          plan: _plan,
+          queue: _queue,
+          runtime: _runtime,
+        );
     ref.read(globalPlaybackCoordinatorProvider.notifier).minimize();
     if (_remotePlayback) {
       await _safeReportProgress('TimeUpdate');
@@ -2378,7 +2485,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _close() async {
     if (_closing) return;
     setState(() => _closing = true);
-    unawaited(ref.read(globalPlaybackCoordinatorProvider.notifier).close(disposeRuntime: false));
+    unawaited(
+      ref
+          .read(globalPlaybackCoordinatorProvider.notifier)
+          .close(disposeRuntime: false),
+    );
     _progressTimer?.cancel();
     _interactions.cancelControlsHide();
     _nextEpisodeTimer?.cancel();
@@ -2439,6 +2550,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   @override
   void dispose() {
+    _cursorHideTimer?.cancel();
     AppChrome.leaveImmersive();
     _progressTimer?.cancel();
     _nextEpisodeTimer?.cancel();
@@ -2531,333 +2643,354 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
             child: PlaybackDropTarget(
               onSubtitleDropped: _loadLocalSubtitleFile,
               child: MouseRegion(
-              cursor: _controlsVisible || _diagnosticsVisible
-                  ? SystemMouseCursors.basic
-                  : SystemMouseCursors.none,
-              onEnter: (_) {
-                _ensureFocused();
-                if (!_diagnosticsVisible) _showControls();
-              },
-              onHover: (_) {
-                _ensureFocused();
-                if (!_diagnosticsVisible) _showControls();
-              },
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  _ensureFocused();
-                  _toggleControlsVisibility();
-                },
-                onDoubleTap: () {
-                  _ensureFocused();
-                  unawaited(_toggleFullScreen());
-                },
-                onLongPressStart: (details) {
-                  _ensureFocused();
-                  final width = MediaQuery.sizeOf(context).width;
-                  final isRight = details.globalPosition.dx >= width / 2;
-                  _startSpeedPlayback(forward: isRight);
-                },
-                onLongPressEnd: (_) => _stopSpeedPlayback(),
-                onLongPressCancel: () => _stopSpeedPlayback(),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    RepaintBoundary(
-                      child: _minimized
-                          ? const ColoredBox(color: Colors.black)
-                          : _runtime.buildVideoSurface(
-                        subtitleConfiguration: SubtitleViewConfiguration(
-                          style: TextStyle(
-                            height: 1.35,
-                            fontSize: _subtitlePreferences.fontSize,
-                            color: _subtitleForeground(
-                              _subtitlePreferences.appearance,
-                            ),
-                            backgroundColor: _subtitleBackground(
-                              _subtitlePreferences.appearance,
-                            ),
-                            fontWeight: FontWeight.w600,
-                            shadows: _subtitleShadows(
-                              _subtitlePreferences.appearance,
+                key: const ValueKey('playback-page-mouse-region'),
+                cursor: _effectiveCursorVisible
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.none,
+                onEnter: _onPointerEnter,
+                onHover: _onPointerHover,
+                onExit: _onPointerExit,
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: _onPointerDown,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      _ensureFocused();
+                      if (_wokeControlsOnPointerDown) {
+                        _wokeControlsOnPointerDown = false;
+                        return;
+                      }
+                      _toggleControlsVisibility();
+                    },
+                    onDoubleTap: () {
+                      _ensureFocused();
+                      unawaited(_toggleFullScreen());
+                    },
+                    onLongPressStart: (details) {
+                      _ensureFocused();
+                      final width = MediaQuery.sizeOf(context).width;
+                      final isRight = details.globalPosition.dx >= width / 2;
+                      _startSpeedPlayback(forward: isRight);
+                    },
+                    onLongPressEnd: (_) => _stopSpeedPlayback(),
+                    onLongPressCancel: () => _stopSpeedPlayback(),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        RepaintBoundary(
+                          child: _minimized
+                              ? const ColoredBox(color: Colors.black)
+                              : _runtime.buildVideoSurface(
+                                  subtitleConfiguration:
+                                      SubtitleViewConfiguration(
+                                        style: TextStyle(
+                                          height: 1.35,
+                                          fontSize:
+                                              _subtitlePreferences.fontSize,
+                                          color: _subtitleForeground(
+                                            _subtitlePreferences.appearance,
+                                          ),
+                                          backgroundColor: _subtitleBackground(
+                                            _subtitlePreferences.appearance,
+                                          ),
+                                          fontWeight: FontWeight.w600,
+                                          shadows: _subtitleShadows(
+                                            _subtitlePreferences.appearance,
+                                          ),
+                                        ),
+                                        padding: EdgeInsets.fromLTRB(
+                                          32,
+                                          24,
+                                          32,
+                                          _subtitlePreferences.bottomPadding,
+                                        ),
+                                      ),
+                                ),
+                        ),
+                        DanmakuOverlay(
+                          items: _danmakuItems,
+                          position: _position,
+                          preferences: _danmakuPreferences,
+                        ),
+                        ValueListenableBuilder<_PlaybackTimeline>(
+                          valueListenable: _timelineNotifier,
+                          builder: (context, timeline, _) {
+                            return RepaintBoundary(
+                              child: PlaybackControls(
+                                title: _item.name,
+                                method: _plan.method,
+                                quality: _maxStreamingBitrate,
+                                visible:
+                                    (_controlsVisible || !_playing) &&
+                                    !_diagnosticsVisible,
+                                playing: _playing,
+                                buffering: _buffering,
+                                changingSource: _changingSource,
+                                sourceChangeLabel: _sourceChangeLabel,
+                                position: timeline.position,
+                                duration: timeline.duration,
+                                buffer: timeline.buffer,
+                                volume: _volume,
+                                rate: _rate,
+                                fullScreen: _fullScreen,
+                                danmakuEnabled: _danmakuPreferences.enabled,
+                                onDanmaku: () =>
+                                    unawaited(_showDanmakuSettings()),
+                                audioLabel: _currentAudioLabel,
+                                subtitleLabel: _currentSubtitleLabel,
+                                chapters: _plan.chapters,
+                                queueAvailable: (_queue?.items.length ?? 0) > 1,
+                                canPrevious: _queue?.hasPrevious ?? false,
+                                canNext: _queue?.hasNext ?? false,
+                                backTooltip: _enableMiniPlayer
+                                    ? '缩小为悬浮画中画（Esc）'
+                                    : '退出播放（Esc）',
+                                onBack: () => unawaited(
+                                  _enableMiniPlayer ? _minimize() : _close(),
+                                ),
+                                onClose: () => unawaited(_close()),
+                                onPlayPause: () =>
+                                    unawaited(_togglePlayPause()),
+                                onSeekPreview: _previewSeek,
+                                onSeek: (value) => unawaited(_seek(value)),
+                                onSeekBack: () => unawaited(
+                                  _seekRelative(const Duration(seconds: -10)),
+                                ),
+                                onSeekForward: () => unawaited(
+                                  _seekRelative(const Duration(seconds: 10)),
+                                ),
+                                onVolumeChanged: (value) =>
+                                    unawaited(_setVolume(value)),
+                                onMute: () => unawaited(_toggleMute()),
+                                onRateChanged: (value) =>
+                                    unawaited(_setRate(value)),
+                                onAudio: () => unawaited(_showAudioTracks()),
+                                onSubtitle: () =>
+                                    unawaited(_showSubtitleTracks()),
+                                onChapters: () => unawaited(_showChapters()),
+                                onPrevious: () {
+                                  final queue = _queue;
+                                  if (queue != null && queue.hasPrevious) {
+                                    unawaited(
+                                      _playQueueIndex(queue.currentIndex - 1),
+                                    );
+                                  }
+                                },
+                                onNext: () {
+                                  final queue = _queue;
+                                  if (queue != null && queue.hasNext) {
+                                    unawaited(
+                                      _playQueueIndex(queue.currentIndex + 1),
+                                    );
+                                  }
+                                },
+                                onEpisodes: () => unawaited(_showEpisodes()),
+                                onDiagnostics: _toggleDiagnostics,
+                                onQuality: _remotePlayback
+                                    ? () => unawaited(_showQualityOptions())
+                                    : null,
+                                onFullScreen: () =>
+                                    unawaited(_toggleFullScreen()),
+                                isPip: _isPip,
+                                onPip: Platform.isWindows
+                                    ? () => unawaited(_togglePip())
+                                    : null,
+                                onAudioEnhancement: () =>
+                                    unawaited(_showAudioEnhancementSheet()),
+                                onOpenExternalPlayer: () =>
+                                    unawaited(_openInExternalPlayer()),
+                              ),
+                            );
+                          },
+                        ),
+                        if (_currentIntroOutro != null)
+                          Positioned(
+                            bottom: _controlsVisible ? 120 : 36,
+                            right: 28,
+                            child: SkipIntroOverlay(
+                              label:
+                                  _currentIntroOutro!.kind ==
+                                      IntroOutroKind.intro
+                                  ? (_currentIntroOutro!.label ?? '跳过片头')
+                                  : (_queue?.hasNext ?? false
+                                        ? '跳过片尾 (下一集)'
+                                        : (_currentIntroOutro!.label ??
+                                              '跳过片尾')),
+                              countdownSeconds: _autoSkipCountdown,
+                              onSkip: () => unawaited(
+                                _performSkipIntroOutro(_currentIntroOutro!),
+                              ),
+                              onClose: _dismissCurrentIntroOutro,
                             ),
                           ),
-                          padding: EdgeInsets.fromLTRB(
-                            32,
-                            24,
-                            32,
-                            _subtitlePreferences.bottomPadding,
+                        SafeArea(
+                          child: Align(
+                            alignment: const Alignment(0.0, -0.72),
+                            child:
+                                ValueListenableBuilder<
+                                  PlaybackSeekFeedbackState?
+                                >(
+                                  valueListenable: _interactions.seekFeedback,
+                                  builder: (context, feedback, _) {
+                                    return AnimatedSwitcher(
+                                      duration: AppMotion.responsive(
+                                        context,
+                                        const Duration(milliseconds: 140),
+                                      ),
+                                      reverseDuration: AppMotion.responsive(
+                                        context,
+                                        const Duration(milliseconds: 100),
+                                      ),
+                                      switchInCurve: const Cubic(0.16, 1.0, 0.3, 1.0),
+                                      switchOutCurve: Curves.easeInCubic,
+                                      child: feedback == null || _speedModeActive
+                                          ? const SizedBox.shrink(
+                                              key: ValueKey('seek-feedback-hidden'),
+                                            )
+                                          : PlaybackSeekFeedback(
+                                              key: const ValueKey('player-seek-feedback'),
+                                              deltaSeconds: feedback.deltaSeconds,
+                                              position: feedback.position,
+                                            ),
+                                    );
+                                  },
+                                ),
                           ),
                         ),
-                      ),
-                    ),
-                    DanmakuOverlay(
-                      items: _danmakuItems,
-                      position: _position,
-                      preferences: _danmakuPreferences,
-                    ),
-                    ValueListenableBuilder<_PlaybackTimeline>(
-                      valueListenable: _timelineNotifier,
-                      builder: (context, timeline, _) {
-                        return RepaintBoundary(
-                          child: PlaybackControls(
-                            title: _item.name,
-                            method: _plan.method,
-                            quality: _maxStreamingBitrate,
-                            visible:
-                                (_controlsVisible || !_playing) &&
-                                !_diagnosticsVisible,
-                            playing: _playing,
-                            buffering: _buffering,
-                            changingSource: _changingSource,
-                            sourceChangeLabel: _sourceChangeLabel,
-                            position: timeline.position,
-                            duration: timeline.duration,
-                            buffer: timeline.buffer,
-                            volume: _volume,
-                            rate: _rate,
-                            fullScreen: _fullScreen,
-                            danmakuEnabled: _danmakuPreferences.enabled,
-                            onDanmaku: () => unawaited(_showDanmakuSettings()),
-                            audioLabel: _currentAudioLabel,
-                            subtitleLabel: _currentSubtitleLabel,
-                            chapters: _plan.chapters,
-                            queueAvailable: (_queue?.items.length ?? 0) > 1,
-                            canPrevious: _queue?.hasPrevious ?? false,
-                            canNext: _queue?.hasNext ?? false,
-                            backTooltip: _enableMiniPlayer
-                                ? '缩小为悬浮画中画（Esc）'
-                                : '退出播放（Esc）',
-                            onBack: () => unawaited(
-                              _enableMiniPlayer ? _minimize() : _close(),
+                        if (_speedModeActive)
+                          SafeArea(
+                            child: Align(
+                              alignment: const Alignment(0.0, -0.72),
+                              child: _SpeedPlaybackIndicator(
+                                forward: _speedForward,
+                                speed: _longPressSpeed,
+                              ),
                             ),
-                            onClose: () => unawaited(_close()),
-                            onPlayPause: () => unawaited(_togglePlayPause()),
-                            onSeekPreview: _previewSeek,
-                            onSeek: (value) => unawaited(_seek(value)),
-                            onSeekBack: () => unawaited(
-                              _seekRelative(const Duration(seconds: -10)),
-                            ),
-                            onSeekForward: () => unawaited(
-                              _seekRelative(const Duration(seconds: 10)),
-                            ),
-                            onVolumeChanged: (value) =>
-                                unawaited(_setVolume(value)),
-                            onMute: () => unawaited(_toggleMute()),
-                            onRateChanged: (value) =>
-                                unawaited(_setRate(value)),
-                            onAudio: () => unawaited(_showAudioTracks()),
-                            onSubtitle: () => unawaited(_showSubtitleTracks()),
-                            onChapters: () => unawaited(_showChapters()),
-                            onPrevious: () {
-                              final queue = _queue;
-                              if (queue != null && queue.hasPrevious) {
-                                unawaited(
-                                  _playQueueIndex(queue.currentIndex - 1),
-                                );
-                              }
-                            },
-                            onNext: () {
-                              final queue = _queue;
-                              if (queue != null && queue.hasNext) {
-                                unawaited(
-                                  _playQueueIndex(queue.currentIndex + 1),
-                                );
-                              }
-                            },
-                            onEpisodes: () => unawaited(_showEpisodes()),
-                            onDiagnostics: _toggleDiagnostics,
-                            onQuality: _remotePlayback
-                                ? () => unawaited(_showQualityOptions())
-                                : null,
-                            onFullScreen: () => unawaited(_toggleFullScreen()),
-                            isPip: _isPip,
-                            onPip: Platform.isWindows
-                                ? () => unawaited(_togglePip())
-                                : null,
-                            onAudioEnhancement:
-                                () => unawaited(_showAudioEnhancementSheet()),
-                            onOpenExternalPlayer:
-                                () => unawaited(_openInExternalPlayer()),
                           ),
-                        );
-                      },
-                    ),
-                    if (_currentIntroOutro != null)
-                      Positioned(
-                        bottom: _controlsVisible ? 120 : 36,
-                        right: 28,
-                        child: SkipIntroOverlay(
-                          label: _currentIntroOutro!.kind == IntroOutroKind.intro
-                              ? (_currentIntroOutro!.label ?? '跳过片头')
-                              : (_queue?.hasNext ?? false
-                                  ? '跳过片尾 (下一集)'
-                                  : (_currentIntroOutro!.label ?? '跳过片尾')),
-                          countdownSeconds: _autoSkipCountdown,
-                          onSkip: () => unawaited(
-                            _performSkipIntroOutro(_currentIntroOutro!),
-                          ),
-                          onClose: _dismissCurrentIntroOutro,
-                        ),
-                      ),
-                    Center(
-                      child: ValueListenableBuilder<PlaybackSeekFeedbackState?>(
-                        valueListenable: _interactions.seekFeedback,
-                        builder: (context, feedback, _) {
-                          return AnimatedSwitcher(
-                            duration: AppMotion.responsive(
-                              context,
-                              const Duration(milliseconds: 160),
-                            ),
-                            reverseDuration: AppMotion.responsive(
-                              context,
-                              const Duration(milliseconds: 110),
-                            ),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeInCubic,
-                            child: feedback == null
-                                ? const SizedBox.shrink(
-                                    key: ValueKey('seek-feedback-hidden'),
-                                  )
-                                : PlaybackSeekFeedback(
-                                    key: const ValueKey('player-seek-feedback'),
-                                    deltaSeconds: feedback.deltaSeconds,
-                                    position: feedback.position,
-                                  ),
-                          );
-                        },
-                      ),
-                    ),
-                    if (_speedModeActive)
-                      SafeArea(
-                        child: Align(
-                          alignment: const Alignment(0.0, -0.72),
-                          child: _SpeedPlaybackIndicator(
-                            forward: _speedForward,
-                            speed: _longPressSpeed,
-                          ),
-                        ),
-                      ),
-                    if (_diagnosticsVisible)
-                      Positioned.fill(
-                        child: SafeArea(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final compact = constraints.maxWidth < 720;
-                              final maxHeight = (constraints.maxHeight - 24)
-                                  .clamp(220.0, 680.0)
-                                  .toDouble();
-                              return Align(
-                                alignment: Alignment.topRight,
-                                child: Padding(
-                                  padding: EdgeInsets.fromLTRB(
-                                    compact ? 12 : 24,
-                                    12,
-                                    compact ? 12 : 24,
-                                    12,
-                                  ),
-                                  child: ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxWidth: compact ? 520 : 470,
-                                      maxHeight: maxHeight,
-                                    ),
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () {},
-                                      onDoubleTap: () {},
-                                      child: PlaybackDiagnosticsPanel(
-                                        snapshot: _diagnostics,
-                                        loading: _diagnosticsLoading,
-                                        onCopy: () =>
-                                            unawaited(_copyDiagnostics()),
-                                        onRefresh: () =>
-                                            unawaited(_refreshDiagnostics()),
-                                        onClose: _closeDiagnostics,
+                        if (_diagnosticsVisible)
+                          Positioned.fill(
+                            child: SafeArea(
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final compact = constraints.maxWidth < 720;
+                                  final maxHeight = (constraints.maxHeight - 24)
+                                      .clamp(220.0, 680.0)
+                                      .toDouble();
+                                  return Align(
+                                    alignment: Alignment.topRight,
+                                    child: Padding(
+                                      padding: EdgeInsets.fromLTRB(
+                                        compact ? 12 : 24,
+                                        12,
+                                        compact ? 12 : 24,
+                                        12,
+                                      ),
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          maxWidth: compact ? 520 : 470,
+                                          maxHeight: maxHeight,
+                                        ),
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () {},
+                                          onDoubleTap: () {},
+                                          child: PlaybackDiagnosticsPanel(
+                                            snapshot: _diagnostics,
+                                            loading: _diagnosticsLoading,
+                                            onCopy: () =>
+                                                unawaited(_copyDiagnostics()),
+                                            onRefresh: () => unawaited(
+                                              _refreshDiagnostics(),
+                                            ),
+                                            onClose: _closeDiagnostics,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        if (_nextEpisodeCountdown != null &&
+                            _queue?.next != null)
+                          NextEpisodeCountdown(
+                            item: _queue!.next!,
+                            secondsRemaining: _nextEpisodeCountdown!,
+                            totalSeconds: _autoNextSeconds,
+                            onPlayNow: () {
+                              final queue = _queue;
+                              if (queue == null || !queue.hasNext) return;
+                              _cancelNextEpisodeCountdown(showControls: false);
+                              unawaited(
+                                _playQueueIndex(
+                                  queue.currentIndex + 1,
+                                  automatic: true,
                                 ),
                               );
                             },
+                            onCancel: _cancelNextEpisodeCountdown,
                           ),
-                        ),
-                      ),
-                    if (_nextEpisodeCountdown != null && _queue?.next != null)
-                      NextEpisodeCountdown(
-                        item: _queue!.next!,
-                        secondsRemaining: _nextEpisodeCountdown!,
-                        totalSeconds: _autoNextSeconds,
-                        onPlayNow: () {
-                          final queue = _queue;
-                          if (queue == null || !queue.hasNext) return;
-                          _cancelNextEpisodeCountdown(showControls: false);
-                          unawaited(
-                            _playQueueIndex(
-                              queue.currentIndex + 1,
-                              automatic: true,
-                            ),
-                          );
-                        },
-                        onCancel: _cancelNextEpisodeCountdown,
-                      ),
-                    if (_reconnecting)
-                      Positioned(
-                        top: 24,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 12,
-                            ),
-                            decoration: AppGlass.decoration(radius: 99),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.spotlight,
-                                  ),
+                        if (_reconnecting)
+                          Positioned(
+                            top: 24,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
                                 ),
-                                SizedBox(width: 10),
-                                Text(
-                                  '网络连接恢复中，正在无缝断点续播...',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                decoration: AppGlass.decoration(radius: 99),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.spotlight,
+                                      ),
+                                    ),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      '网络连接恢复中，正在无缝断点续播...',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    if (_error != null)
-                      Center(
-                        child: _PlaybackError(
-                          message: _error!,
-                          onBack: () => unawaited(_close()),
-                          onDismiss: () {
-                            setState(() => _error = null);
-                            _scheduleControlsHide();
-                          },
-                        ),
-                      ),
-                  ],
+                        if (_error != null)
+                          Center(
+                            child: _PlaybackError(
+                              message: _error!,
+                              onBack: () => unawaited(_close()),
+                              onDismiss: () {
+                                setState(() => _error = null);
+                                _scheduleControlsHide();
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _PlaybackTimeline {
@@ -2942,7 +3075,8 @@ class _EpisodeSheet extends StatelessWidget {
                     ),
                   ),
                   Flexible(
-                    child: ListView.builder(
+                    child: PeekSmoothScroll(
+                      child: ListView.builder(
                       shrinkWrap: true,
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
                       itemCount: queue.items.length,
@@ -3022,6 +3156,7 @@ class _EpisodeSheet extends StatelessWidget {
                       },
                     ),
                   ),
+                ),
                 ],
               ),
             ),
@@ -3230,7 +3365,8 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
                       ),
                     ),
                   Flexible(
-                    child: ListView(
+                    child: PeekSmoothScroll(
+                      child: ListView(
                       shrinkWrap: true,
                       padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
                       children: [
@@ -3433,6 +3569,7 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
                       ],
                     ),
                   ),
+                ),
                 ],
               ),
             ),
@@ -3583,7 +3720,8 @@ class _ChapterSheet extends StatelessWidget {
                     ),
                   ),
                   Flexible(
-                    child: ListView.builder(
+                    child: PeekSmoothScroll(
+                      child: ListView.builder(
                       shrinkWrap: true,
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
                       itemCount: chapters.length,
@@ -3657,6 +3795,7 @@ class _ChapterSheet extends StatelessWidget {
                       },
                     ),
                   ),
+                ),
                 ],
               ),
             ),
@@ -3729,7 +3868,8 @@ class _TrackSheet extends StatelessWidget {
                               ),
                             ),
                           )
-                        : ListView.builder(
+                        : PeekSmoothScroll(
+                            child: ListView.builder(
                             shrinkWrap: true,
                             padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
                             itemCount: options.length,
@@ -3797,6 +3937,7 @@ class _TrackSheet extends StatelessWidget {
                               );
                             },
                           ),
+                        ),
                   ),
                 ],
               ),
@@ -3867,10 +4008,7 @@ class _PlaybackError extends StatelessWidget {
 }
 
 class _SpeedPlaybackIndicator extends StatelessWidget {
-  const _SpeedPlaybackIndicator({
-    required this.forward,
-    this.speed = 2.0,
-  });
+  const _SpeedPlaybackIndicator({required this.forward, this.speed = 2.0});
 
   final bool forward;
   final double speed;
@@ -3879,10 +4017,10 @@ class _SpeedPlaybackIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeColor = forward ? AppColors.spotlight : AppColors.cyan;
 
-    return ClipRRect(
+    final indicator = ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
@@ -3939,5 +4077,23 @@ class _SpeedPlaybackIndicator extends StatelessWidget {
         ),
       ),
     );
+
+    if (AppMotion.isTest) return indicator;
+    final beamed = PeekBorderBeam(
+      borderRadius: BorderRadius.circular(20),
+      beamColor: themeColor,
+      secondaryColor: forward ? AppColors.spotlightLight : AppColors.cyanLight,
+      duration: const Duration(seconds: 3),
+      child: indicator,
+    );
+    return beamed
+        .animate()
+        .fadeIn(duration: const Duration(milliseconds: 140))
+        .slideY(
+          begin: -0.12,
+          end: 0,
+          duration: const Duration(milliseconds: 160),
+          curve: PeekCurves.spatialEnter,
+        );
   }
 }

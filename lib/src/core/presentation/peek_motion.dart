@@ -1,11 +1,17 @@
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
+import 'package:embyplayer/src/core/presentation/peek_spring.dart';
 import 'package:flutter/material.dart';
 
-/// Keeps every visited destination mounted while animating only opacity and a
-/// small composited translation between the active pages.
+export 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
+export 'package:embyplayer/src/core/presentation/peek_magnetic_button.dart';
+export 'package:embyplayer/src/core/presentation/peek_spring.dart';
+
+/// Keeps every visited destination mounted while animating opacity, subtle scale,
+/// and a small composited directional translation between the active pages.
 ///
 /// This avoids media-library reloads and layout animation jank while still
-/// giving top-level navigation a clear sense of direction.
+/// giving top-level navigation a clear sense of direction and physical depth.
 class PeekIndexedTransitionStack extends StatelessWidget {
   const PeekIndexedTransitionStack({
     super.key,
@@ -87,7 +93,9 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer> {
   @override
   Widget build(BuildContext context) {
     final duration = widget.active ? widget.enterDuration : widget.exitDuration;
-    final curve = widget.active ? AppMotion.enterCurve : AppMotion.exitCurve;
+    final curve = widget.active
+        ? PeekCurves.spatialEnter
+        : PeekCurves.depthRecess;
 
     return Offstage(
       offstage: _offstage,
@@ -96,7 +104,7 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer> {
         duration: duration,
         curve: curve,
         child: AnimatedScale(
-          scale: widget.active ? 1.0 : 0.94,
+          scale: widget.active ? 1.0 : 0.95,
           duration: duration,
           curve: curve,
           child: AnimatedOpacity(
@@ -105,7 +113,11 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer> {
             curve: curve,
             onEnd: () {
               if (!widget.active && mounted) {
-                setState(() => _offstage = true);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!widget.active && mounted) {
+                    setState(() => _offstage = true);
+                  }
+                });
               }
             },
             child: widget.child,
@@ -116,47 +128,73 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer> {
   }
 }
 
-/// Signature 3D Spatial Depth Page Route (for poster and artwork focal points).
-class Peek3DPageRoute<T> extends PageRouteBuilder<T> {
-  Peek3DPageRoute({
+/// Signature 3D Spatial Depth Page Route with dual-layer depth recess.
+///
+/// When pushed, the incoming route drops into place smoothly using [PeekCurves.spatialEnter]
+/// while the underlying route recedes into the background via [secondaryAnimation]
+/// (`scale: 1.0 -> 0.925` and subtle ambient dimming).
+/// On pop, the underlying page surfaces back to the foreground seamlessly.
+class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
+  PeekSpatialPageRoute({
     required WidgetBuilder builder,
     super.settings,
-    super.transitionDuration = const Duration(milliseconds: 360),
-    super.reverseTransitionDuration = const Duration(milliseconds: 280),
+    super.transitionDuration = const Duration(milliseconds: 340),
+    super.reverseTransitionDuration = const Duration(milliseconds: 260),
   }) : super(
-          pageBuilder: (context, animation, secondaryAnimation) => builder(context),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curvedAnimation = CurvedAnimation(
-              parent: animation,
-              curve: const Cubic(0.12, 0.88, 0.22, 1.0),
-              reverseCurve: Curves.easeInQuad,
-            );
+         pageBuilder: (context, animation, secondaryAnimation) =>
+             builder(context),
+         transitionsBuilder: (context, animation, secondaryAnimation, child) {
+           if (AppMotion.isTest) return child;
 
-            return AnimatedBuilder(
-              animation: curvedAnimation,
-              builder: (context, child) {
-                final value = curvedAnimation.value;
-                final scale = 0.94 + (value * 0.06);
-                final rotateY = (1.0 - value) * 0.06;
-                final opacity = value.clamp(0.0, 1.0);
+           final enterCurved = CurvedAnimation(
+             parent: animation,
+             curve: PeekCurves.spatialEnter,
+             reverseCurve: Curves.easeInQuad,
+           );
 
-                return Transform(
-                  transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.0007)
-                    ..scaleByDouble(scale, scale, 1.0, 1.0)
-                    ..rotateY(rotateY),
-                  alignment: Alignment.center,
-                  child: Opacity(
-                    opacity: opacity,
-                    child: child,
-                  ),
-                );
-              },
-              child: child,
-            );
-          },
-        );
+           final secCurved = CurvedAnimation(
+             parent: secondaryAnimation,
+             curve: PeekCurves.depthRecess,
+             reverseCurve: PeekCurves.spatialEnter,
+           );
+
+           final current = SlideTransition(
+             position: Tween<Offset>(
+               begin: const Offset(0.035, 0.0),
+               end: Offset.zero,
+             ).animate(enterCurved),
+             child: FadeTransition(
+               opacity: enterCurved,
+               child: RepaintBoundary(child: child),
+             ),
+           );
+
+           return AnimatedBuilder(
+             animation: secCurved,
+             builder: (context, currentChild) {
+               final secVal = secCurved.value;
+               if (secVal <= 0.001) return currentChild!;
+
+               return Stack(
+                 fit: StackFit.expand,
+                 children: [
+                   currentChild!,
+                   IgnorePointer(
+                     child: ColoredBox(
+                       color: Colors.black.withValues(alpha: secVal * 0.35),
+                     ),
+                   ),
+                 ],
+               );
+             },
+             child: current,
+           );
+         },
+       );
 }
+
+/// Backwards-compatible alias for [PeekSpatialPageRoute].
+typedef Peek3DPageRoute<T> = PeekSpatialPageRoute<T>;
 
 /// A smooth, high-fashion macOS/iOS Shared-Axis Scale & Slide Page Route.
 ///
@@ -168,37 +206,116 @@ class PeekPageRoute<T> extends PageRouteBuilder<T> {
     super.transitionDuration = const Duration(milliseconds: 320),
     super.reverseTransitionDuration = const Duration(milliseconds: 260),
   }) : super(
-          pageBuilder: (context, animation, secondaryAnimation) => builder(context),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curvedAnimation = CurvedAnimation(
-              parent: animation,
-              curve: const Cubic(0.12, 0.88, 0.22, 1.0),
-              reverseCurve: Curves.easeInQuad,
-            );
+         pageBuilder: (context, animation, secondaryAnimation) =>
+             builder(context),
+         transitionsBuilder: (context, animation, secondaryAnimation, child) {
+           if (AppMotion.isTest) return child;
 
-            return AnimatedBuilder(
-              animation: curvedAnimation,
-              builder: (context, child) {
-                final value = curvedAnimation.value;
-                final scale = 0.96 + (value * 0.04);
-                final slideX = (1.0 - value) * 20.0;
-                final opacity = value.clamp(0.0, 1.0);
+           final enterCurved = CurvedAnimation(
+             parent: animation,
+             curve: PeekCurves.spatialEnter,
+             reverseCurve: Curves.easeInQuad,
+           );
 
-                return Transform.translate(
-                  offset: Offset(slideX, 0),
-                  child: Transform.scale(
-                    scale: scale,
-                    child: Opacity(
-                      opacity: opacity,
-                      child: child,
-                    ),
-                  ),
-                );
-              },
-              child: child,
-            );
-          },
-        );
+           final secCurved = CurvedAnimation(
+             parent: secondaryAnimation,
+             curve: PeekCurves.depthRecess,
+             reverseCurve: PeekCurves.spatialEnter,
+           );
+
+           final current = SlideTransition(
+             position: Tween<Offset>(
+               begin: const Offset(0.03, 0.0),
+               end: Offset.zero,
+             ).animate(enterCurved),
+             child: FadeTransition(
+               opacity: enterCurved,
+               child: RepaintBoundary(child: child),
+             ),
+           );
+
+           return AnimatedBuilder(
+             animation: secCurved,
+             builder: (context, currentChild) {
+               final secVal = secCurved.value;
+               if (secVal <= 0.001) return currentChild!;
+
+               return Stack(
+                 fit: StackFit.expand,
+                 children: [
+                   currentChild!,
+                   IgnorePointer(
+                     child: ColoredBox(
+                       color: Colors.black.withValues(alpha: secVal * 0.30),
+                     ),
+                   ),
+                 ],
+               );
+             },
+             child: current,
+           );
+         },
+       );
+}
+
+/// Cinema Theater Mode Page Route for entering full-screen media playback.
+///
+/// Features a theatrical curtain dissolve into pitch black, gentle aperture expansion,
+/// and zero distracting chrome jumps.
+class TheatricalIrisPageRoute<T> extends PageRouteBuilder<T> {
+  TheatricalIrisPageRoute({
+    required WidgetBuilder builder,
+    super.settings,
+    super.transitionDuration = const Duration(milliseconds: 380),
+    super.reverseTransitionDuration = const Duration(milliseconds: 280),
+  }) : super(
+         pageBuilder: (context, animation, secondaryAnimation) =>
+             builder(context),
+         transitionsBuilder: (context, animation, secondaryAnimation, child) {
+           if (AppMotion.isTest) return child;
+
+           final enterCurved = CurvedAnimation(
+             parent: animation,
+             curve: PeekCurves.cinemaFade,
+             reverseCurve: Curves.easeInQuad,
+           );
+
+           final secCurved = CurvedAnimation(
+             parent: secondaryAnimation,
+             curve: PeekCurves.depthRecess,
+             reverseCurve: PeekCurves.spatialEnter,
+           );
+
+           final current = ColoredBox(
+             color: Colors.black,
+             child: FadeTransition(
+               opacity: enterCurved,
+               child: RepaintBoundary(child: child),
+             ),
+           );
+
+           return AnimatedBuilder(
+             animation: secCurved,
+             builder: (context, currentChild) {
+               final secVal = secCurved.value;
+               if (secVal <= 0.001) return currentChild!;
+
+               return Stack(
+                 fit: StackFit.expand,
+                 children: [
+                   currentChild!,
+                   IgnorePointer(
+                     child: ColoredBox(
+                       color: Colors.black.withValues(alpha: secVal * 0.5),
+                     ),
+                   ),
+                 ],
+               );
+             },
+             child: current,
+           );
+         },
+       );
 }
 
 /// Function aliases for smooth dialogs and sheets.
@@ -215,29 +332,27 @@ Future<T?> peekShowDialog<T>({
     context: context,
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black54,
-    transitionDuration: const Duration(milliseconds: 260),
+    barrierColor: const Color(0xB8000000),
+    transitionDuration: const Duration(milliseconds: 240),
     pageBuilder: (context, animation, secondaryAnimation) => builder(context),
     transitionBuilder: (context, animation, secondaryAnimation, child) {
+      if (AppMotion.isTest) return child;
       final curvedAnimation = CurvedAnimation(
         parent: animation,
-        curve: const Cubic(0.12, 0.88, 0.22, 1.0),
+        curve: PeekCurves.spatialEnter,
       );
       final scale = 0.94 + (curvedAnimation.value * 0.06);
       final opacity = curvedAnimation.value.clamp(0.0, 1.0);
 
       return Transform.scale(
         scale: scale,
-        child: Opacity(
-          opacity: opacity,
-          child: child,
-        ),
+        child: Opacity(opacity: opacity, child: child),
       );
     },
   );
 }
 
-/// Shows a bottom sheet panel with velvety spring slide transition.
+/// Shows a bottom sheet panel with velvety spring slide transition and cascading depth awareness.
 Future<T?> peekShowSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -246,14 +361,26 @@ Future<T?> peekShowSheet<T>({
   ShapeBorder? shape,
   double? elevation,
   Clip? clipBehavior,
+  bool barrierDismissible = true,
 }) {
-  return showModalBottomSheet<T>(
-    context: context,
-    backgroundColor: backgroundColor ?? Colors.transparent,
-    elevation: elevation ?? 0,
-    shape: shape ?? const RoundedRectangleBorder(side: BorderSide.none),
-    clipBehavior: clipBehavior ?? Clip.none,
-    isScrollControlled: isScrollControlled,
-    builder: builder,
+  if (AppMotion.isTest) {
+    return showModalBottomSheet<T>(
+      context: context,
+      backgroundColor: backgroundColor ?? Colors.transparent,
+      elevation: elevation ?? 0,
+      shape: shape ?? const RoundedRectangleBorder(side: BorderSide.none),
+      clipBehavior: clipBehavior ?? Clip.none,
+      isScrollControlled: isScrollControlled,
+      isDismissible: barrierDismissible,
+      builder: builder,
+    );
+  }
+
+  return Navigator.of(context).push<T>(
+    PeekCascadingSheetRoute<T>(
+      builder: builder,
+      barrierDismissible: barrierDismissible,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    ),
   );
 }

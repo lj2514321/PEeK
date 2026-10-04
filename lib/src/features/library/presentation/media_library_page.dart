@@ -11,12 +11,10 @@ import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
-import 'package:embyplayer/src/features/dedupe/presentation/media_dedupe_page.dart';
-import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
+import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
-import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -31,6 +29,7 @@ class MediaLibraryPage extends ConsumerStatefulWidget {
     this.localLibraries = const [],
     this.onAddLocalLibrary,
     this.onSessionExpired,
+    this.initialTag,
   });
 
   final AuthenticatedServer? account;
@@ -38,6 +37,7 @@ class MediaLibraryPage extends ConsumerStatefulWidget {
   final List<LocalMediaLibrary> localLibraries;
   final VoidCallback? onAddLocalLibrary;
   final VoidCallback? onSessionExpired;
+  final String? initialTag;
 
   @override
   ConsumerState<MediaLibraryPage> createState() => MediaLibraryPageState();
@@ -69,6 +69,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   MediaResolutionFilter _resolutionFilter = MediaResolutionFilter.all;
   double? _minCommunityRating;
   int? _productionYear;
+  String? _selectedTag;
+  List<String> _availableTags = const [];
   bool _collapseBoxSets = false;
   MediaGridDensity _density = MediaGridDensity.standard;
   Set<String> _selectedIds = {};
@@ -78,6 +80,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   @override
   void initState() {
     super.initState();
+    _selectedTag = widget.initialTag;
     _scrollController.addListener(_loadMoreNearEnd);
     Future<void>.microtask(_loadCatalog);
   }
@@ -169,16 +172,38 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     } finally {
       if (mounted && generation == _requestGeneration) {
         setState(() => _loadingCatalog = false);
+        unawaited(_loadTagsForSelectedLibrary());
       }
+    }
+  }
+
+  Future<void> _loadTagsForSelectedLibrary() async {
+    final account = widget.account;
+    final library = _selectedLibrary;
+    if (account == null || library == null || library.isLocal) {
+      if (mounted) setState(() => _availableTags = const []);
+      return;
+    }
+    try {
+      final tags = await ref
+          .read(mediaLibraryProvider)
+          .getTags(account, parentId: library.id);
+      if (mounted) setState(() => _availableTags = tags);
+    } catch (_) {
+      // Tags are an optional enhancement; failures should be silent.
     }
   }
 
   Future<void> _selectLibrary(MediaItem library) async {
     if (library.id == _selectedLibrary?.id && _path.length == 1) return;
-    setState(() => _selectedLibrary = library);
+    setState(() {
+      _selectedLibrary = library;
+      _selectedTag = null;
+    });
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
+    unawaited(_loadTagsForSelectedLibrary());
     await _loadNode(library, path: [library]);
   }
 
@@ -196,13 +221,10 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     final currentScrollOffset = _scrollController.hasClients
         ? _scrollController.offset
         : null;
-    final updatedItem = await Navigator.of(context).push<MediaItem>(
-      Peek3DPageRoute(
-        builder: (context) => MediaDetailPage(
-          account: item.isLocal ? null : widget.account,
-          initialItem: item,
-        ),
-      ),
+    final updatedItem = await AppRoutes.openMediaDetail(
+      context,
+      account: item.isLocal ? null : widget.account,
+      item: item,
     );
     if (!mounted) return;
     if (updatedItem != null) {
@@ -437,6 +459,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
           resolution: _resolutionFilter,
           minCommunityRating: _minCommunityRating,
           productionYear: _productionYear,
+          tag: _selectedTag,
           collapseBoxSets: _collapseBoxSets,
           forceRefresh: forceRefresh,
         );
@@ -583,6 +606,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                               MediaResolutionFilter.all;
                                           _minCommunityRating = null;
                                           _productionYear = null;
+                                          _selectedTag = null;
                                           _collapseBoxSets = false;
                                         });
                                         await _reloadCurrentNode();
@@ -678,9 +702,24 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   }
 
   Future<void> _showFilters() async {
+    final account = widget.account;
+    final library = _selectedLibrary;
+    if (_availableTags.isEmpty && account != null && library != null && !library.isLocal) {
+      try {
+        final tags = await ref
+            .read(mediaLibraryProvider)
+            .getTags(account, parentId: library.id);
+        if (mounted && tags.isNotEmpty) {
+          setState(() => _availableTags = tags);
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+
     final result = await peekShow3DDialog<_LibraryFilters>(
       context: context,
       builder: (context) => _LibraryFilterDialog(
+        availableTags: _availableTags,
         initialValue: _LibraryFilters(
           kind: _kindFilter,
           status: _statusFilter,
@@ -688,6 +727,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
           minCommunityRating: _minCommunityRating,
           productionYear: _productionYear,
           collapseBoxSets: _collapseBoxSets,
+          tag: _selectedTag,
         ),
       ),
     );
@@ -697,7 +737,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         result.resolution == _resolutionFilter &&
         result.minCommunityRating == _minCommunityRating &&
         result.productionYear == _productionYear &&
-        result.collapseBoxSets == _collapseBoxSets) {
+        result.collapseBoxSets == _collapseBoxSets &&
+        result.tag == _selectedTag) {
       return;
     }
     setState(() {
@@ -707,6 +748,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       _minCommunityRating = result.minCommunityRating;
       _productionYear = result.productionYear;
       _collapseBoxSets = result.collapseBoxSets;
+      _selectedTag = result.tag;
     });
     await _reloadCurrentNode();
   }
@@ -1051,20 +1093,17 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
 
       _exitSelectionMode();
 
-      await Navigator.of(context).push<void>(
-        Peek3DPageRoute(
-          builder: (context) => PlaybackPage(
-            account: widget.account,
-            item: prepared.item,
-            plan: prepared.plan,
-            queue: queue,
-            hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
-            maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
-            subtitlePreferences: prepared.settings.subtitlePreferences,
-            enableMiniPlayer: prepared.settings.enableMiniPlayer,
-            longPressSpeed: prepared.settings.longPressSpeed,
-          ),
-        ),
+      await AppRoutes.openPlayback(
+        context,
+        account: widget.account,
+        item: prepared.item,
+        plan: prepared.plan,
+        queue: queue,
+        hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
+        maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
+        subtitlePreferences: prepared.settings.subtitlePreferences,
+        enableMiniPlayer: prepared.settings.enableMiniPlayer,
+        longPressSpeed: prepared.settings.longPressSpeed,
       );
     } catch (e) {
       if (mounted) {
@@ -1081,18 +1120,16 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       (_resolutionFilter == MediaResolutionFilter.all ? 0 : 1) +
       (_minCommunityRating == null ? 0 : 1) +
       (_productionYear == null ? 0 : 1) +
-      (_collapseBoxSets ? 1 : 0);
+      (_collapseBoxSets ? 1 : 0) +
+      (_selectedTag == null ? 0 : 1);
 
   void _openDedupePage() {
-    Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) => MediaDedupePage(
-          account: widget.account,
-          libraryId: _selectedLibrary?.id,
-          libraryName: _selectedLibrary?.name,
-          initialItems: _items,
-        ),
-      ),
+    AppRoutes.openDedupe(
+      context,
+      account: widget.account,
+      libraryId: _selectedLibrary?.id,
+      libraryName: _selectedLibrary?.name,
+      initialItems: _items,
     );
   }
 
@@ -1555,6 +1592,7 @@ class _LibraryFilters {
     this.minCommunityRating,
     required this.productionYear,
     this.collapseBoxSets = false,
+    this.tag,
   });
 
   final MediaLibraryKindFilter kind;
@@ -1563,12 +1601,17 @@ class _LibraryFilters {
   final double? minCommunityRating;
   final int? productionYear;
   final bool collapseBoxSets;
+  final String? tag;
 }
 
 class _LibraryFilterDialog extends StatefulWidget {
-  const _LibraryFilterDialog({required this.initialValue});
+  const _LibraryFilterDialog({
+    required this.initialValue,
+    this.availableTags = const [],
+  });
 
   final _LibraryFilters initialValue;
+  final List<String> availableTags;
 
   @override
   State<_LibraryFilterDialog> createState() => _LibraryFilterDialogState();
@@ -1580,10 +1623,12 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
   late MediaResolutionFilter _resolution = widget.initialValue.resolution;
   late double? _minCommunityRating = widget.initialValue.minCommunityRating;
   late bool _collapseBoxSets = widget.initialValue.collapseBoxSets;
+  late String? _tag = widget.initialValue.tag;
   late final TextEditingController _yearController = TextEditingController(
     text: widget.initialValue.productionYear?.toString() ?? '',
   );
   String? _yearError;
+  String _tagSearchQuery = '';
 
   @override
   void dispose() {
@@ -1607,6 +1652,7 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
         minCommunityRating: _minCommunityRating,
         productionYear: year,
         collapseBoxSets: _collapseBoxSets,
+        tag: _tag,
       ),
     );
   }
@@ -1721,6 +1767,68 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
                   color: AppColors.textTertiary,
                 ),
               ),
+              if (widget.availableTags.isNotEmpty) ...[
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    const Text('标签分类', style: TextStyle(fontWeight: FontWeight.w600)),
+                    if (_tag != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '已选: #$_tag',
+                        style: const TextStyle(
+                          color: AppColors.spotlight,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (widget.availableTags.length > 8) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 36,
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: '搜索标签...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 16),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.15),
+                          ),
+                        ),
+                      ),
+                      style: const TextStyle(fontSize: 12),
+                      onChanged: (val) => setState(() => _tagSearchQuery = val.trim().toLowerCase()),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('全部标签'),
+                      selected: _tag == null,
+                      onSelected: (_) => setState(() => _tag = null),
+                    ),
+                    for (final tag in widget.availableTags.where(
+                      (t) => _tagSearchQuery.isEmpty || t.toLowerCase().contains(_tagSearchQuery),
+                    ))
+                      FilterChip(
+                        key: ValueKey('tag-filter-$tag'),
+                        label: Text('#$tag'),
+                        selected: _tag == tag,
+                        onSelected: (selected) => setState(() => _tag = selected ? tag : null),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -1734,6 +1842,8 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
               _resolution = MediaResolutionFilter.all;
               _minCommunityRating = null;
               _collapseBoxSets = false;
+              _tag = null;
+              _tagSearchQuery = '';
               _yearController.clear();
               _yearError = null;
             });
@@ -1967,6 +2077,7 @@ class _MediaGrid extends StatelessWidget {
           MediaGridDensity.compact => 10.0,
         };
         return GridView.builder(
+          primary: false,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: items.length,

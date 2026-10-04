@@ -46,9 +46,45 @@ class MediaLibraryService {
     )).items;
   }
 
+  Future<List<String>> getTags(
+    AuthenticatedServer account, {
+    String? parentId,
+    bool forceRefresh = false,
+  }) async {
+    final query = <String, String>{
+      'UserId': account.userId,
+      if (parentId != null && parentId.isNotEmpty) 'ParentId': parentId,
+      'EnableTotalRecordCount': 'true',
+    };
+    final uri = _appendPath(
+      account.server.apiBaseUri,
+      'Tags',
+    ).replace(queryParameters: query);
+
+    try {
+      final data = await _requestJson(
+        uri,
+        account,
+        cacheAge: const Duration(minutes: 10),
+        allowListResponse: true,
+        forceRefresh: forceRefresh,
+      );
+      final items = data['Items'];
+      if (items is! List) return const [];
+      return items
+          .map((item) => item is Map ? item['Name']?.toString() : item?.toString())
+          .whereType<String>()
+          .map((name) => name.trim())
+          .where((name) => name.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<MediaPage> getItems(
     AuthenticatedServer account, {
-    required String parentId,
+    String? parentId,
     String? collectionType,
     int startIndex = 0,
     int limit = 60,
@@ -58,18 +94,20 @@ class MediaLibraryService {
     MediaResolutionFilter resolution = MediaResolutionFilter.all,
     double? minCommunityRating,
     int? productionYear,
+    String? tag,
+    List<String>? tags,
     bool collapseBoxSets = false,
     bool forceRefresh = false,
   }) async {
     final isBoxSetLibrary = collectionType?.trim().toLowerCase() == 'boxsets';
     final query = <String, String>{
-      'ParentId': parentId,
+      if (parentId != null && parentId.isNotEmpty) 'ParentId': parentId,
       'Recursive': 'true',
       'SortBy': sort.apiSortBy,
       'SortOrder': sort.apiSortOrder,
       'Fields':
           'Overview,PrimaryImageAspectRatio,ProductionYear,'
-          'RunTimeTicks,UserData',
+          'RunTimeTicks,UserData,Tags,Genres',
       'ImageTypeLimit': '1',
       'EnableImageTypes': 'Primary',
       'EnableUserData': 'true',
@@ -88,6 +126,10 @@ class MediaLibraryService {
       if (resolution == MediaResolutionFilter.res1080p) 'MinWidth': '1920',
       if (resolution == MediaResolutionFilter.res720p) 'MinWidth': '1280',
       if (productionYear != null) 'Years': '$productionYear',
+      if (tag != null && tag.trim().isNotEmpty)
+        'Tags': tag.trim()
+      else if (tags != null && tags.isNotEmpty)
+        'Tags': tags.join('|'),
     };
     final uri = _appendPath(
       account.server.apiBaseUri,

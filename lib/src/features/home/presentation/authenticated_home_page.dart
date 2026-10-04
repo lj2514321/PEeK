@@ -6,13 +6,11 @@ import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_context_menu.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
-import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
-import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
+import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/home/domain/home_feed.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
-import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -183,11 +181,10 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     final targetOffset = _scrollController.hasClients
         ? _scrollController.offset
         : null;
-    await Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) =>
-            MediaDetailPage(account: widget.account, initialItem: item),
-      ),
+    await AppRoutes.openMediaDetail(
+      context,
+      account: widget.account,
+      item: item,
     );
     if (!mounted) return;
     await _refreshContinueWatching();
@@ -233,20 +230,17 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
         }
       }
 
-      await Navigator.of(context).push<void>(
-        Peek3DPageRoute(
-          builder: (context) => PlaybackPage(
-            account: widget.account,
-            item: prepared.item,
-            plan: prepared.plan,
-            queue: prepared.queue,
-            hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
-            maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
-            subtitlePreferences: prepared.settings.subtitlePreferences,
-            enableMiniPlayer: prepared.settings.enableMiniPlayer,
-            longPressSpeed: prepared.settings.longPressSpeed,
-          ),
-        ),
+      await AppRoutes.openPlayback(
+        context,
+        account: widget.account,
+        item: prepared.item,
+        plan: prepared.plan,
+        queue: prepared.queue,
+        hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
+        maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
+        subtitlePreferences: prepared.settings.subtitlePreferences,
+        enableMiniPlayer: prepared.settings.enableMiniPlayer,
+        longPressSpeed: prepared.settings.longPressSpeed,
       );
       if (mounted) await _refreshContinueWatching();
     } on PlaybackServiceException catch (error) {

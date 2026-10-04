@@ -150,4 +150,17 @@ void main() {
     expect(item.mediaSources[1].videoCodec, 'h264');
     expect(item.mediaSources[1].formattedFileSize, '3.7 GB');
   });
+
+  test('EmbyMediaItemParser parses Tags metadata correctly', () {
+    final rawItem = {
+      'Id': 'movie-tags',
+      'Name': 'Blade Runner 2049',
+      'Type': 'Movie',
+      'Tags': ['赛博朋克', '科幻', '4K HDR', '神作'],
+    };
+
+    final item = EmbyMediaItemParser.parseItem(rawItem, account);
+
+    expect(item.tags, ['赛博朋克', '科幻', '4K HDR', '神作']);
+  });
 }

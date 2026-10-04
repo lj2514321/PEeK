@@ -8,6 +8,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/network/session_expiry_coordinator.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/analytics/presentation/analytics_dashboard_page.dart';
 import 'package:embyplayer/src/features/download/presentation/downloads_page.dart';
 import 'package:embyplayer/src/features/favorites/presentation/favorites_page.dart';
@@ -945,25 +946,69 @@ class _AppRailContents extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: [
-              for (var index = 0; index < destinations.length; index++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _RailDestination(
-                    destination: destinations[index],
-                    extended: extended,
-                    revealProgress: _motionInterval(
-                      progress,
-                      0.22 + (index * 0.055),
-                      0.68 + (index * 0.055),
+          child: PeekSmoothScroll(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedPositioned(
+                      duration: AppMotion.responsive(
+                        context,
+                        const Duration(milliseconds: 260),
+                      ),
+                      curve: PeekCurves.spatialEnter,
+                      top: selectedIndex * 60.0,
+                      left: 0,
+                      right: 0,
+                      height: 52.0,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.glassSelected,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              width: 1.0,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.spotlight.withValues(
+                                  alpha: 0.08,
+                                ),
+                                blurRadius: 18,
+                                spreadRadius: -2,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    selected: index == selectedIndex,
-                    onTap: () => onSelected(index),
-                  ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var index = 0; index < destinations.length; index++)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _RailDestination(
+                              destination: destinations[index],
+                              extended: extended,
+                              revealProgress: _motionInterval(
+                                progress,
+                                0.22 + (index * 0.055),
+                                0.68 + (index * 0.055),
+                              ),
+                              selected: index == selectedIndex,
+                              onTap: () => onSelected(index),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -995,45 +1040,24 @@ class _RailDestination extends StatelessWidget {
       child: TweenAnimationBuilder<double>(
         tween: Tween(end: selected ? 1 : 0),
         duration: AppMotion.responsive(context, AppMotion.fast),
-        curve: AppMotion.enterCurve,
+        curve: PeekCurves.spatialEnter,
         builder: (context, selection, child) {
           final foreground = Color.lerp(
             AppColors.textTertiary,
             AppColors.spotlight,
             selection,
           );
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              color: Color.lerp(
-                Colors.transparent,
-                AppColors.glassSelected,
-                selection,
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.14 * selection),
-                width: 1.0,
-              ),
+          return Material(
+            key: ValueKey('sidebar-destination-${destination.label}'),
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.spotlight.withValues(
-                    alpha: 0.055 * selection,
-                  ),
-                  blurRadius: 18 * selection,
-                  spreadRadius: -4,
-                ),
-              ],
-            ),
-            child: Material(
-              key: ValueKey('sidebar-destination-${destination.label}'),
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  height: 52,
+              hoverColor: Colors.white.withValues(alpha: 0.04),
+              child: SizedBox(
+                height: 52,
                   child: Row(
                     children: [
                       SizedBox(
@@ -1098,9 +1122,8 @@ class _RailDestination extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
       ),
     );
     return extended ? item : Tooltip(message: destination.label, child: item);
@@ -1346,6 +1369,71 @@ class _TopDestinationHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (AppMotion.isTest) {
+      return Semantics(
+        header: true,
+        label: '当前页面：${destination.label}',
+        excludeSemantics: true,
+        child: RepaintBoundary(
+          child: Row(
+            key: const ValueKey('top-destination-heading'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.spotlight.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.spotlight.withValues(alpha: 0.28),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  destination.selectedIcon,
+                  size: 17,
+                  color: AppColors.spotlight,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'CURRENT VIEW',
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      destination.label,
+                      key: const ValueKey('top-destination-title'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Semantics(
       header: true,
       label: '当前页面：${destination.label}',
@@ -1366,10 +1454,20 @@ class _TopDestinationHeading extends StatelessWidget {
                   width: 1,
                 ),
               ),
-              child: Icon(
-                destination.selectedIcon,
-                size: 17,
-                color: AppColors.spotlight,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: PeekCurves.spatialEnter,
+                switchOutCurve: Curves.easeInQuad,
+                transitionBuilder: (child, animation) => ScaleTransition(
+                  scale: Tween<double>(begin: 0.82, end: 1.0).animate(animation),
+                  child: FadeTransition(opacity: animation, child: child),
+                ),
+                child: Icon(
+                  destination.selectedIcon,
+                  key: ValueKey('top-heading-icon-${destination.label}'),
+                  size: 17,
+                  color: AppColors.spotlight,
+                ),
               ),
             ),
             const SizedBox(width: 10),
@@ -1378,10 +1476,10 @@ class _TopDestinationHeading extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'CURRENT VIEW',
                     maxLines: 1,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.textTertiary,
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
@@ -1389,16 +1487,38 @@ class _TopDestinationHeading extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 1),
-                  Text(
-                    destination.label,
+                  KeyedSubtree(
                     key: const ValueKey('top-destination-title'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                      color: Colors.white,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 240),
+                      switchInCurve: PeekCurves.spatialEnter,
+                      switchOutCurve: Curves.easeInQuad,
+                      layoutBuilder: (currentChild, previousChildren) => Stack(
+                        alignment: Alignment.centerLeft,
+                        children: [
+                          ...previousChildren,
+                          ?currentChild,
+                        ],
+                      ),
+                      transitionBuilder: (child, animation) => SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.0, 0.25),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: FadeTransition(opacity: animation, child: child),
+                      ),
+                      child: Text(
+                        destination.label,
+                        key: ValueKey('heading-label-${destination.label}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1523,31 +1643,33 @@ class _HomePage extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final horizontalPadding = constraints.maxWidth < 720 ? 20.0 : 32.0;
-        return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
-            32,
-            horizontalPadding,
-            48,
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1280),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _HeroStage(
-                    server: server,
-                    account: account,
-                    onAddServer: onAddServer,
-                    onLogin: onLogin,
-                    onOpenLibrary: onOpenLibrary,
-                  ),
-                  const SizedBox(height: 24),
-                  _StatusGrid(server: server, account: account),
-                  const SizedBox(height: 28),
-                  const _CapabilityStrip(),
-                ],
+        return PeekSmoothScroll(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              32,
+              horizontalPadding,
+              48,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1280),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _HeroStage(
+                      server: server,
+                      account: account,
+                      onAddServer: onAddServer,
+                      onLogin: onLogin,
+                      onOpenLibrary: onOpenLibrary,
+                    ),
+                    const SizedBox(height: 24),
+                    _StatusGrid(server: server, account: account),
+                    const SizedBox(height: 28),
+                    const _CapabilityStrip(),
+                  ],
+                ),
               ),
             ),
           ),

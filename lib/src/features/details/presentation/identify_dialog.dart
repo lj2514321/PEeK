@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/external_id_info.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
@@ -564,15 +565,17 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemCount: _results.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final candidate = _results[index];
-        final isSelected = _selected == candidate;
-        return _buildCandidateTile(candidate, isSelected);
-      },
+    return PeekSmoothScroll(
+      child: ListView.separated(
+        padding: const EdgeInsets.all(20),
+        itemCount: _results.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final candidate = _results[index];
+          final isSelected = _selected == candidate;
+          return _buildCandidateTile(candidate, isSelected);
+        },
+      ),
     );
   }
 

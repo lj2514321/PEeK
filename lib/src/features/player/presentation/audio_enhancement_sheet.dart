@@ -1,5 +1,6 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/player/domain/audio_enhancement_settings.dart';
 import 'package:embyplayer/src/features/player/domain/audio_equalizer_settings.dart';
 import 'package:embyplayer/src/features/player/domain/video_shader_preset.dart';
@@ -195,7 +196,8 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
   }
 
   Widget _buildVideoShadersTab() {
-    return SingleChildScrollView(
+    return PeekSmoothScroll(
+      child: SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,6 +266,7 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
           ),
           const SizedBox(height: 12),
         ],
+      ),
       ),
     );
   }
@@ -366,7 +369,8 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
   }
 
   Widget _buildAudioEqualizerTab() {
-    return SingleChildScrollView(
+    return PeekSmoothScroll(
+      child: SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,8 +518,9 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
           const SizedBox(height: 12),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildBandSlider(int index, double width) {
     final band = _eqSettings.bands[index];

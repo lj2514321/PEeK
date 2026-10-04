@@ -370,6 +370,36 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'MediaLibraryPage supports filtering by initialTag and tag filter dialog',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final service = _FakeLibraryService();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [mediaLibraryProvider.overrideWithValue(service)],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: Scaffold(
+              body: MediaLibraryPage(
+                account: account,
+                initialTag: '科幻',
+                onGoHome: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(service.requestedTags, contains('科幻'));
+    },
+  );
 }
 
 void _noop() {}
@@ -425,6 +455,7 @@ class _FakeLibraryService extends MediaLibraryService {
   final requestedKinds = <MediaLibraryKindFilter>[];
   final requestedStatuses = <MediaLibraryStatusFilter>[];
   final requestedYears = <int?>[];
+  final requestedTags = <String?>[];
   Set<String> favoriteIds = {};
   bool? favoriteValue;
   Set<String> playedIds = {};
@@ -446,9 +477,18 @@ class _FakeLibraryService extends MediaLibraryService {
   }
 
   @override
+  Future<List<String>> getTags(
+    AuthenticatedServer account, {
+    String? parentId,
+    bool forceRefresh = false,
+  }) async {
+    return const ['4K', '科幻', '赛博朋克'];
+  }
+
+  @override
   Future<MediaPage> getItems(
     AuthenticatedServer account, {
-    required String parentId,
+    String? parentId,
     String? collectionType,
     int startIndex = 0,
     int limit = 60,
@@ -458,15 +498,18 @@ class _FakeLibraryService extends MediaLibraryService {
     MediaResolutionFilter resolution = MediaResolutionFilter.all,
     double? minCommunityRating,
     int? productionYear,
+    String? tag,
+    List<String>? tags,
     bool collapseBoxSets = false,
     bool forceRefresh = false,
   }) async {
     requestedStartIndexes.add(startIndex);
-    requestedParentIds.add(parentId);
+    if (parentId != null) requestedParentIds.add(parentId);
     requestedSorts.add(sort);
     requestedKinds.add(kind);
     requestedStatuses.add(status);
     requestedYears.add(productionYear);
+    requestedTags.add(tag);
     final allItems = parentId == 'series-id'
         ? const [
             MediaItem(

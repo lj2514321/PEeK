@@ -87,6 +87,15 @@ try {
     throw "Flutter release build failed with exit code $LASTEXITCODE."
   }
 
+  $exePath = Join-Path $releaseDirectory 'PEeK.exe'
+  if (Test-Path -LiteralPath $exePath -PathType Leaf) {
+    try {
+      (Get-Item -LiteralPath $exePath).LastWriteTime = Get-Date
+    } catch {
+      # Ignore if PEeK.exe is running in a local testing session
+    }
+  }
+
   & $dartCommand run tool\generate_third_party_notices.dart `
     --flutter-notices $flutterNoticesPath `
     --output $generatedNoticesPath

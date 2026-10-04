@@ -1,4 +1,5 @@
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/download/data/download_manager_service.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
@@ -24,6 +25,8 @@ class _DownloadsPageState extends State<DownloadsPage>
   late final DownloadManagerService _manager =
       widget.downloadManager ?? DownloadManagerService.instance;
   late final TabController _tabController;
+  final _downloadingController = SmoothScrollController();
+  final _completedController = SmoothScrollController();
 
   @override
   void initState() {
@@ -34,6 +37,8 @@ class _DownloadsPageState extends State<DownloadsPage>
 
   @override
   void dispose() {
+    _downloadingController.dispose();
+    _completedController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -324,6 +329,7 @@ class _DownloadsPageState extends State<DownloadsPage>
     }
 
     return ListView.separated(
+      controller: _downloadingController,
       itemCount: tasks.length,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
@@ -472,6 +478,7 @@ class _DownloadsPageState extends State<DownloadsPage>
     }
 
     return ListView.separated(
+      controller: _completedController,
       itemCount: tasks.length,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {

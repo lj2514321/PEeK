@@ -1,9 +1,10 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
-import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
+import 'package:embyplayer/src/core/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/settings/presentation/playback_settings_section.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/scrobble/data/bangumi_store.dart';
 import 'package:embyplayer/src/features/scrobble/domain/bangumi_profile.dart';
 import 'package:embyplayer/src/features/scrobble/presentation/bangumi_binding_sheet.dart';
@@ -78,8 +79,9 @@ class ServerAccountsPage extends StatelessWidget {
             return first.profile.name.compareTo(second.profile.name);
           });
 
-        return SingleChildScrollView(
-          key: const ValueKey('server-accounts-page'),
+        return PeekSmoothScroll(
+          child: SingleChildScrollView(
+            key: const ValueKey('server-accounts-page'),
           padding: EdgeInsets.fromLTRB(padding, 32, padding, 48),
           child: Center(
             child: ConstrainedBox(
@@ -162,10 +164,11 @@ class ServerAccountsPage extends StatelessWidget {
               ),
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Future<void> _confirmLogout(
     BuildContext context,

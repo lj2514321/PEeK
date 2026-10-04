@@ -1,5 +1,6 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:flutter/material.dart';
 
@@ -76,17 +77,19 @@ class PlaybackQualitySheet extends StatelessWidget {
                     ),
                   ),
                   Flexible(
-                    child: ListView(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                      children: [
-                        for (final bitrate in PlaybackBitrate.values)
-                          _QualityOption(
-                            bitrate: bitrate,
-                            selected: bitrate == selected,
-                            onPressed: () => Navigator.of(context).pop(bitrate),
-                          ),
-                      ],
+                    child: PeekSmoothScroll(
+                      child: ListView(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                        children: [
+                          for (final bitrate in PlaybackBitrate.values)
+                            _QualityOption(
+                              bitrate: bitrate,
+                              selected: bitrate == selected,
+                              onPressed: () => Navigator.of(context).pop(bitrate),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   Container(

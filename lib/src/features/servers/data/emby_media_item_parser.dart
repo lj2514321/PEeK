@@ -140,6 +140,7 @@ class EmbyMediaItemParser {
       chapters: readChapters(data['Chapters']),
       people: readPeople(data['People'], account),
       genres: readStringList(data['Genres']),
+      tags: readStringList(data['Tags']),
       communityRating: readDouble(data['CommunityRating']),
       officialRating: readNullableString(data, 'OfficialRating'),
       tagline:
@@ -212,6 +213,7 @@ class EmbyMediaItemParser {
       indexNumber: readInt(data['IndexNumber']),
       parentIndexNumber: readInt(data['ParentIndexNumber']),
       seriesId: readNullableString(data, 'SeriesId'),
+      tags: readStringList(data['Tags']),
     );
   }
 

@@ -10,8 +10,7 @@ import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/dedupe/data/duplicate_detector_service.dart';
 import 'package:embyplayer/src/features/dedupe/data/duplicate_ignored_store.dart';
 import 'package:embyplayer/src/features/dedupe/domain/duplicate_media_group.dart';
-import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
-import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
+import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
@@ -407,13 +406,10 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
 
   void _openDetail(MediaItem item) {
     if (widget.account == null) return;
-    Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) => MediaDetailPage(
-          account: widget.account!,
-          initialItem: item,
-        ),
-      ),
+    AppRoutes.openMediaDetail(
+      context,
+      account: widget.account,
+      item: item,
     );
   }
 
@@ -424,20 +420,17 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
           .read(playbackPreparationProvider)
           .prepare(widget.account, item);
       if (!mounted) return;
-      await Navigator.of(context).push<void>(
-        Peek3DPageRoute(
-          builder: (context) => PlaybackPage(
-            account: widget.account,
-            item: prepared.item,
-            plan: prepared.plan,
-            queue: prepared.queue,
-            hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
-            maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
-            subtitlePreferences: prepared.settings.subtitlePreferences,
-            enableMiniPlayer: prepared.settings.enableMiniPlayer,
-            longPressSpeed: prepared.settings.longPressSpeed,
-          ),
-        ),
+      await AppRoutes.openPlayback(
+        context,
+        account: widget.account,
+        item: prepared.item,
+        plan: prepared.plan,
+        queue: prepared.queue,
+        hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
+        maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
+        subtitlePreferences: prepared.settings.subtitlePreferences,
+        enableMiniPlayer: prepared.settings.enableMiniPlayer,
+        longPressSpeed: prepared.settings.longPressSpeed,
       );
     } catch (e) {
       if (mounted) {

@@ -1,5 +1,6 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/download/data/download_manager_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -207,45 +208,47 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.white10),
               ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _itemsToDisplay.length,
-                separatorBuilder: (_, _) => const Divider(color: Colors.white10, height: 1),
-                itemBuilder: (context, index) {
-                  final it = _itemsToDisplay[index];
-                  final isSelected = _selectedIds.contains(it.id);
-                  final size = (it.mediaSources.isNotEmpty ? it.mediaSources.first.fileSize : it.fileSize) ?? 0;
-                  final sizeStr = size > 0 ? DownloadTaskItem.formatBytes(size) : '约 800 MB';
+              child: PeekSmoothScroll(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: _itemsToDisplay.length,
+                  separatorBuilder: (_, _) => const Divider(color: Colors.white10, height: 1),
+                  itemBuilder: (context, index) {
+                    final it = _itemsToDisplay[index];
+                    final isSelected = _selectedIds.contains(it.id);
+                    final size = (it.mediaSources.isNotEmpty ? it.mediaSources.first.fileSize : it.fileSize) ?? 0;
+                    final sizeStr = size > 0 ? DownloadTaskItem.formatBytes(size) : '约 800 MB';
 
-                  return CheckboxListTile(
-                    value: isSelected,
-                    activeColor: AppColors.spotlight,
-                    checkColor: AppColors.onSpotlight,
-                    title: Text(
-                      it.indexNumber != null ? '第 ${it.indexNumber} 话 · ${it.name}' : it.name,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? Colors.white : AppColors.textSecondary,
+                    return CheckboxListTile(
+                      value: isSelected,
+                      activeColor: AppColors.spotlight,
+                      checkColor: AppColors.onSpotlight,
+                      title: Text(
+                        it.indexNumber != null ? '第 ${it.indexNumber} 话 · ${it.name}' : it.name,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: isSelected ? Colors.white : AppColors.textSecondary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      '$sizeStr${it.played ? ' · 已看' : ''}',
-                      style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
-                    ),
-                    onChanged: (checked) {
-                      setState(() {
-                        if (checked == true) {
-                          _selectedIds.add(it.id);
-                        } else {
-                          _selectedIds.remove(it.id);
-                        }
-                      });
-                    },
-                  );
-                },
+                      subtitle: Text(
+                        '$sizeStr${it.played ? ' · 已看' : ''}',
+                        style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
+                      ),
+                      onChanged: (checked) {
+                        setState(() {
+                          if (checked == true) {
+                            _selectedIds.add(it.id);
+                          } else {
+                            _selectedIds.remove(it.id);
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
               ),
             ),
           ),

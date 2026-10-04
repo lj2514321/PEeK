@@ -1,7 +1,8 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/danmaku/data/dandanplay_service.dart';
-import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
+import 'package:embyplayer/src/core/domain/playback_settings.dart';
 import 'package:flutter/material.dart';
 
 class DanmakuSettingsSheet extends StatefulWidget {
@@ -142,8 +143,9 @@ class _DanmakuSettingsSheetState extends State<DanmakuSettingsSheet> {
           const SizedBox(height: 8),
 
           Flexible(
-            child: SingleChildScrollView(
-              child: Column(
+            child: PeekSmoothScroll(
+              child: SingleChildScrollView(
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Master Switch
@@ -709,8 +711,9 @@ class _DanmakuSettingsSheetState extends State<DanmakuSettingsSheet> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.white10),
                         ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
+                        child: PeekSmoothScroll(
+                          child: ListView.separated(
+                            shrinkWrap: true,
                           padding: const EdgeInsets.all(4),
                           itemCount: _searchResults.length,
                           separatorBuilder: (_, index) =>
@@ -766,6 +769,7 @@ class _DanmakuSettingsSheetState extends State<DanmakuSettingsSheet> {
                           },
                         ),
                       ),
+                    ),
                     ],
                   ],
                   const SizedBox(height: 12),
@@ -773,6 +777,7 @@ class _DanmakuSettingsSheetState extends State<DanmakuSettingsSheet> {
               ),
             ),
           ),
+        ),
         ],
       ),
     ),

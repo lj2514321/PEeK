@@ -4,27 +4,41 @@
 
 构建一个 Windows 优先、可扩展到 macOS/Linux 的本地媒体与 Jellyfin / Emby 客户端。远程播放优先使用服务器提供的原始媒体流，在能力或网络条件不满足时由服务器直传或转码；本地文件与本地 STRM 不经过服务器。
 
-## 分层
+## 分层与整洁架构
 
 ```text
-Presentation
-  └── 页面、对话框、播放器控件
-Application
-  └── 登录、浏览、播放、进度上报等用例
-Domain
-  ├── ServerProfile / MediaItem
-  ├── PlaybackPlan / PlaybackSessionSnapshot
-  └── MediaServerGateway / 播放策略模型
-Infrastructure
-  ├── JellyfinGateway / EmbyGateway
-  ├── Dio 网络客户端
-  ├── JSON 文件缓存与偏好存储
-  ├── 本地媒体目录与原生文件夹选择器
-  ├── 系统安全凭据存储
-  └── PlaybackRuntime / media_kit / libmpv
+App Layer (src/app/)
+  ├── AppRoutes (类型安全中心化路由门面与 3D 页面转场)
+  ├── AppProviders (应用顶层依赖注入装配中心 Composition Root)
+  └── 主题 (Theme)、窗口外壳 (AppChrome) 与应用入口
+Features Layer (src/features/)
+  ├── home / library / favorites / people / search / details
+  ├── player / danmaku / download / analytics / dedupe
+  ├── local_library / servers / settings
+  └── 每个特性内聚划分 presentation / domain / data
+Core Domain Layer (src/core/domain/)
+  ├── MediaItem / MediaStreamInfo / MediaFilter (核心媒体公共模型)
+  ├── ServerAccount / ServerType / ServerDiscovery (服务器公共模型)
+  ├── PlaybackPlan / PlaybackSettings (播放与弹幕调度公共模型)
+  └── ExternalIdInfo / RemoteSearchResult (智能刮削与匹配模型)
+Core Infrastructure Layer (src/core/)
+  ├── network (Dio 网络客户端、SessionExpiryCoordinator)
+  ├── storage (SecureTokenStore、MediaCacheStore、SearchHistoryStore)
+  └── presentation (PeekSmoothScroll 全局平滑滚动引擎、PeekMotion 动效、PeekMediaImage)
 ```
 
 UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO。两个服务端适配器可以复用公共 HTTP 工具，但必须分别处理接口差异和版本兼容。
+
+### 模块解耦与依赖规范
+
+1. **核心领域模型唯一下沉 (`src/core/domain/`)**：通用的领域实体（如 `MediaItem`、`ServerAccount`、`PlaybackPlan`、`PlaybackSettings`）统一收敛于公共领域层，业务 Feature 仅单向依赖 Core Domain，禁止将跨特性通用的实体置于具体某一业务 Feature（如 `servers` 或 `player`）中。
+2. **跨模块双向循环依赖清零**：
+   - `danmaku ⟷ player`：弹幕模块仅依赖 `core/domain/playback_settings.dart`，切断向 `player` 的反向依赖。
+   - `servers ⟷ player`：服务器调度与账户设置仅依赖 `core/domain/playback_plan.dart` 与公共硬件解码设置，切断向 `player` 的反向依赖。
+   - `details ⟷ people`：演员作品页面归位至 `features/people/presentation/person_works_page.dart`，切断 `people` 模块向 `details` 的反向依赖。
+3. **类型安全路由门面 (`src/app/app_routes.dart`)**：页面间严禁跨特性直接 import 目标 Page 类并手动 `Navigator.push`；所有跨特性跳转统一经由 `AppRoutes.openMediaDetail`、`openPlayback`、`openPersonWorks`、`openDedupe` 等强类型静态门面完成，内聚封装 `Peek3DPageRoute` 转场动效与参数校验。
+4. **依赖倒置与应用装配中心 (`src/app/app_providers.dart`)**：底层基础设施 `src/core/network/network_providers.dart` 仅注册通用网络与缓存 Provider，禁止向上逆向依赖 `features/`；所有跨特性的服务组合与状态委托统一在顶层 `src/app/app_providers.dart`（Composition Root）装配。
+
 
 主导航使用按需创建、访问后保活的 `PageView` 承载首页、媒体库、收藏、搜索和设置；切换一级页面不得销毁其滚动位置、媒体库路径或搜索上下文，也不得在首次访问前提前请求隐藏页面数据。宽屏侧栏允许用户主动收起，720–1039px 自动使用紧凑图标栏，小屏使用六项底部导航；收起态必须保留 Tooltip、语义标签和可见激活态。离屏页面停止非必要轮播并释放输入焦点，账户切换仍通过 `didUpdateWidget` 清理用户隔离状态。
 
@@ -86,4 +100,8 @@ Windows 音量联动只操作当前 PEeK 进程的 WASAPI 音频会话：播放�
 - SMTC 与音频会话桥接为 Windows 可选能力；初始化、海报读取或会话绑定失败不得阻断 libmpv 播放，退出播放时必须注销原生事件并清空系统媒体卡片。
 - 横向内容轨统一使用惰性构建、触控/鼠标拖动和桌面方向按钮；按钮只在对应方向确实可滚动时启用。
 - 媒体库批量模式必须明确显示选择数量、忙碌状态和退出入口；收藏与观看状态不能只依赖颜色，必须同时使用图标或文字。
+- 页面跨特性跳转必须通过 `AppRoutes` 门面触发，禁止在 View 层直接跨包引用其他 Feature 的页面 Widget 类。
+- `core/` 下的底层网络与存储模块严禁反向向上引用 `features/` 业务代码，跨特性组合统一在 `src/app/app_providers.dart` 中完成。
+- 通用领域模型（MediaItem、ServerAccount、PlaybackPlan、PlaybackSettings 等）必须统一定义于 `src/core/domain/`，Feature 之间保持单向独立。
 - libmpv 二进制发布前需要完成许可证与第三方声明审查。
+

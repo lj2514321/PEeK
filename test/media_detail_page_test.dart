@@ -205,6 +205,42 @@ void main() {
     expect(find.text('黑客帝国 2'), findsOneWidget);
     expect(find.text('当前'), findsOneWidget);
   });
+
+  testWidgets(
+    'renders and interacts with media tag chips and tag works dialog',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final service = _FakeDetailService();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [mediaLibraryProvider.overrideWithValue(service)],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: MediaDetailPage(account: account, initialItem: item),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('detail-tag-赛博朋克')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('detail-tag-赛博朋克')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.text('#赛博朋克'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('银翼杀手 2049'), findsOneWidget);
+    },
+  );
 }
 
 class _FakeDetailService extends MediaLibraryService {
@@ -215,6 +251,38 @@ class _FakeDetailService extends MediaLibraryService {
   final requestedPersonIds = <String>[];
   List<MediaItem> collections = const [];
   List<MediaItem> collectionItems = const [];
+
+  @override
+  Future<MediaPage> getItems(
+    AuthenticatedServer account, {
+    String? parentId,
+    String? collectionType,
+    int startIndex = 0,
+    int limit = 60,
+    MediaLibrarySort sort = MediaLibrarySort.nameAscending,
+    MediaLibraryKindFilter kind = MediaLibraryKindFilter.all,
+    MediaLibraryStatusFilter status = MediaLibraryStatusFilter.all,
+    MediaResolutionFilter resolution = MediaResolutionFilter.all,
+    double? minCommunityRating,
+    int? productionYear,
+    String? tag,
+    List<String>? tags,
+    bool collapseBoxSets = false,
+    bool forceRefresh = false,
+  }) async {
+    return MediaPage(
+      items: [
+        MediaItem(
+          id: 'tagged-movie-1',
+          name: '银翼杀手 2049',
+          kind: MediaItemKind.movie,
+          tags: [tag ?? '赛博朋克'],
+        ),
+      ],
+      totalRecordCount: 1,
+      nextStartIndex: 1,
+    );
+  }
 
   @override
   Future<List<MediaItem>> getCollectionsForItem(
@@ -257,6 +325,7 @@ class _FakeDetailService extends MediaLibraryService {
       productionYear: 2026,
       runTime: Duration(minutes: 108),
       genres: ['剧情', '科幻'],
+      tags: ['赛博朋克', '反乌托邦'],
       communityRating: 8.4,
       officialRating: 'PG-13',
       people: [

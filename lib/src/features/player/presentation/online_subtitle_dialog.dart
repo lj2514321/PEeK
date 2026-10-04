@@ -1,4 +1,5 @@
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
@@ -130,45 +131,47 @@ class _OnlineSubtitleDialogState extends State<OnlineSubtitleDialog> {
                                 style: TextStyle(color: AppColors.textTertiary),
                               ),
                             )
-                          : ListView.separated(
-                              itemCount: _results.length,
-                              separatorBuilder: (_, _) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final item = _results[index];
-                                final isDownloading = _downloadingId == item.id;
-                                return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  title: Text(
-                                    item.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
+                          : PeekSmoothScroll(
+                              child: ListView.separated(
+                                itemCount: _results.length,
+                                separatorBuilder: (_, _) => const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final item = _results[index];
+                                  final isDownloading = _downloadingId == item.id;
+                                  return ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
                                     ),
-                                  ),
-                                  subtitle: Text(
-                                    '${item.providerName} · ${item.format.toUpperCase()}${item.comment != null ? ' · ${item.comment}' : ''}',
-                                    style: const TextStyle(
-                                      color: AppColors.textTertiary,
-                                      fontSize: 12,
+                                    title: Text(
+                                      item.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
                                     ),
-                                  ),
-                                  trailing: isDownloading
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
+                                    subtitle: Text(
+                                      '${item.providerName} · ${item.format.toUpperCase()}${item.comment != null ? ' · ${item.comment}' : ''}',
+                                      style: const TextStyle(
+                                        color: AppColors.textTertiary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    trailing: isDownloading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : FilledButton.tonal(
+                                            onPressed: () => _download(item),
+                                            child: const Text('下载并挂载'),
                                           ),
-                                        )
-                                      : FilledButton.tonal(
-                                          onPressed: () => _download(item),
-                                          child: const Text('下载并挂载'),
-                                        ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
             ),
           ],

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/app/app_chrome.dart';
@@ -117,6 +118,95 @@ void main() {
       expect(playbackService.stoppedCount, 1);
       expect(AppChrome.immersive.value, isFalse);
       expect(tester.takeException(), isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 15)),
+  );
+
+  testWidgets(
+    'unhides mouse cursor on pointer movement and shows unified seek pill',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final logDirectory = Directory.systemTemp.createTempSync(
+        'peek-player-cursor-test-',
+      );
+      addTearDown(() {
+        AppChrome.leaveImmersive();
+        if (logDirectory.existsSync()) {
+          logDirectory.deleteSync(recursive: true);
+        }
+      });
+
+      final runtime = _FakePlaybackRuntime();
+      addTearDown(runtime.closeStreams);
+      final playbackService = _RecordingPlaybackService();
+      final systemSession = _FakeSystemMediaSession();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            playbackServiceProvider.overrideWithValue(playbackService),
+            playbackSettingsStoreProvider.overrideWithValue(
+              MemoryPlaybackSettingsStore(),
+            ),
+            playbackDiagnosticLogProvider.overrideWithValue(
+              PlaybackDiagnosticLog(directory: logDirectory),
+            ),
+            windowsMediaSessionProvider.overrideWithValue(() => systemSession),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: PlaybackPage(
+              account: _account,
+              item: _item,
+              plan: _plan,
+              runtime: runtime,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+
+      final mouseRegionFinder = find.byKey(
+        const ValueKey('playback-page-mouse-region'),
+      );
+      expect(mouseRegionFinder, findsOneWidget);
+
+      MouseRegion mouseRegion = tester.widget<MouseRegion>(mouseRegionFinder);
+      expect(mouseRegion.cursor, SystemMouseCursors.basic);
+
+      runtime._playingController.add(true);
+      await tester.pump(const Duration(seconds: 4));
+
+      mouseRegion = tester.widget<MouseRegion>(mouseRegionFinder);
+      expect(mouseRegion.cursor, SystemMouseCursors.none);
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(gesture.removePointer);
+      await gesture.addPointer(location: const Offset(100, 100));
+      await tester.pump();
+
+      await gesture.moveTo(const Offset(200, 200));
+      await tester.pump();
+
+      mouseRegion = tester.widget<MouseRegion>(mouseRegionFinder);
+      expect(mouseRegion.cursor, SystemMouseCursors.basic);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byKey(const ValueKey('player-seek-feedback')), findsOneWidget);
+      final pillCenter = tester.getCenter(find.byKey(const ValueKey('player-seek-feedback')));
+      expect(pillCenter.dy, lessThan(250));
+
+      await tester.pump(const Duration(milliseconds: 150));
+      mouseRegion = tester.widget<MouseRegion>(mouseRegionFinder);
+      expect(mouseRegion.cursor, SystemMouseCursors.none);
     },
     timeout: const Timeout(Duration(seconds: 15)),
   );

@@ -7,6 +7,7 @@ import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/details/presentation/identify_dialog.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
@@ -14,6 +15,7 @@ import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/scrobble/presentation/bangumi_summary_card.dart';
 import 'package:embyplayer/src/features/download/presentation/batch_download_sheet.dart';
+import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -52,12 +54,41 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   String? _similarError;
   String? _playbackError;
   String? _selectedMediaSourceId;
-  final ScrollController _scrollController = ScrollController();
+  final _scrollController = SmoothScrollController();
   double _scrollOffset = 0;
 
   @override
   void initState() {
     super.initState();
+    if (widget.initialItem.kind == MediaItemKind.person &&
+        widget.account != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          Peek3DPageRoute(
+            builder: (_) => PersonWorksPage(
+              account: widget.account!,
+              person: MediaPerson(
+                id: widget.initialItem.id,
+                name: widget.initialItem.name,
+                type: 'Actor',
+                imageUri: widget.initialItem.imageUri,
+                imageHeaders: widget.initialItem.imageHeaders,
+              ),
+              onOpen: (work) => Navigator.of(context).pushReplacement(
+                Peek3DPageRoute(
+                  builder: (_) => MediaDetailPage(
+                    account: widget.account,
+                    initialItem: work,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      });
+      return;
+    }
     if (widget.initialItem.mediaSources.isNotEmpty) {
       _selectedMediaSourceId = widget.initialItem.mediaSources.first.id;
     }
@@ -435,6 +466,43 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     );
   }
 
+  Future<void> _openTagWorks(String tag) async {
+    await peekShowDialog<void>(
+      context: context,
+      builder: (dialogContext) => _TagWorksDialog(
+        account: widget.account,
+        tag: tag,
+        onOpenMedia: (work) {
+          Navigator.of(dialogContext).pop();
+          Navigator.of(context).push<void>(
+            Peek3DPageRoute(
+              builder: (context) => MediaDetailPage(
+                account: widget.account,
+                initialItem: work,
+              ),
+            ),
+          );
+        },
+        onOpenInLibrary: widget.account == null
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                Navigator.of(context).push<void>(
+                  Peek3DPageRoute(
+                    builder: (context) => MediaLibraryPage(
+                      account: widget.account,
+                      initialTag: tag,
+                      onGoHome: () => Navigator.of(context).popUntil(
+                        (route) => route.isFirst,
+                      ),
+                    ),
+                  ),
+                );
+              },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentSeasonEpisodes =
@@ -453,14 +521,17 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
         body: AmbientBackdrop(
           child: Stack(
             children: [
-              CustomScrollView(
+              PeekSmoothScroll(
                 controller: _scrollController,
-                slivers: [
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
                   SliverToBoxAdapter(
                     child: _DetailHero(
                       item: _item,
                       collectionName: _collections.firstOrNull?.name,
                       onTapCollection: _scrollToCollection,
+                      onTapTag: _openTagWorks,
                       loading: _loadingDetails,
                       playable: _playable,
                       planningPlayback:
@@ -535,6 +606,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                               _OverviewAndSpecsBento(
                                 item: _item,
                                 selectedMediaSourceId: _selectedMediaSourceId,
+                                onTapTag: _openTagWorks,
                                 onSelectMediaSource: (id) {
                                   setState(() => _selectedMediaSourceId = id);
                                 },
@@ -584,8 +656,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                   ),
                 ],
               ),
+            ),
 
-              // Top Floating Navigation Bar Overlay
+            // Top Floating Navigation Bar Overlay
               Positioned(
                 top: 0,
                 left: 0,
@@ -713,6 +786,7 @@ class _DetailHero extends StatelessWidget {
     required this.item,
     this.collectionName,
     this.onTapCollection,
+    this.onTapTag,
     required this.loading,
     required this.playable,
     required this.planningPlayback,
@@ -732,6 +806,7 @@ class _DetailHero extends StatelessWidget {
   final MediaItem item;
   final String? collectionName;
   final VoidCallback? onTapCollection;
+  final ValueChanged<String>? onTapTag;
   final bool loading;
   final bool playable;
   final bool planningPlayback;
@@ -783,6 +858,7 @@ class _DetailHero extends StatelessWidget {
                   item: item,
                   collectionName: collectionName,
                   onTapCollection: onTapCollection,
+                  onTapTag: onTapTag,
                   compact: compact,
                   playable: playable,
                   planningPlayback: planningPlayback,
@@ -911,6 +987,7 @@ class _DetailCopy extends StatelessWidget {
     required this.item,
     this.collectionName,
     this.onTapCollection,
+    this.onTapTag,
     required this.compact,
     required this.playable,
     required this.planningPlayback,
@@ -930,6 +1007,7 @@ class _DetailCopy extends StatelessWidget {
   final MediaItem item;
   final String? collectionName;
   final VoidCallback? onTapCollection;
+  final ValueChanged<String>? onTapTag;
   final bool compact;
   final bool playable;
   final bool planningPlayback;
@@ -1072,6 +1150,39 @@ class _DetailCopy extends StatelessWidget {
           runSpacing: 8,
           children: badges.map((badge) => _SpecChip(spec: badge)).toList(),
         ),
+
+        // Tags
+        if (item.tags.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final tag in item.tags.take(6))
+                _TagChip(
+                  key: ValueKey('detail-tag-$tag'),
+                  tag: tag,
+                  onTap: () => onTapTag?.call(tag),
+                ),
+              if (item.tags.length > 6)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '+${item.tags.length - 6}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textTertiary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
 
         // Action Buttons
         if (playable) ...[
@@ -1236,6 +1347,61 @@ class _SpecChip extends StatelessWidget {
   }
 }
 
+class _TagChip extends StatelessWidget {
+  const _TagChip({
+    super.key,
+    required this.tag,
+    this.onTap,
+  });
+
+  final String tag;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.spotlight.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppColors.spotlight.withValues(alpha: 0.32),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '#$tag',
+                style: const TextStyle(
+                  color: AppColors.spotlight,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 8,
+                  color: AppColors.spotlight.withValues(alpha: 0.7),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PlaybackActions extends StatelessWidget {
   const _PlaybackActions({
     required this.compact,
@@ -1257,32 +1423,38 @@ class _PlaybackActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = FilledButton.icon(
-      onPressed: planning ? null : onPlay,
-      style: FilledButton.styleFrom(
-        backgroundColor: AppColors.spotlight,
-        foregroundColor: Colors.black,
-        shape: const StadiumBorder(),
-        elevation: 6,
-        shadowColor: AppColors.spotlight.withValues(alpha: 0.4),
-        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
-      ),
-      icon: planning
-          ? const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.2,
-                color: Colors.black,
-              ),
-            )
-          : const Icon(Icons.play_arrow_rounded, size: 22),
-      label: Text(
-        planning
-            ? '正在加载播放…'
-            : resume
-            ? '继续播放 · $resumeLabel'
-            : '立即播放',
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+    final primary = PeekMagneticButton(
+      enabled: !planning,
+      maxOffset: 5.0,
+      pressScale: 0.94,
+      hoverScale: 1.04,
+      child: FilledButton.icon(
+        onPressed: planning ? null : onPlay,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.spotlight,
+          foregroundColor: Colors.black,
+          shape: const StadiumBorder(),
+          elevation: 6,
+          shadowColor: AppColors.spotlight.withValues(alpha: 0.4),
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
+        ),
+        icon: planning
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: Colors.black,
+                ),
+              )
+            : const Icon(Icons.play_arrow_rounded, size: 22),
+        label: Text(
+          planning
+              ? '正在加载播放…'
+              : resume
+              ? '继续播放 · $resumeLabel'
+              : '立即播放',
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+        ),
       ),
     );
 
@@ -1541,21 +1713,24 @@ class _EpisodePickerSection extends StatelessWidget {
 
           // Season Tabs (if more than 1 season or special)
           if (seasonNumbers.length > 1) ...[
-            SingleChildScrollView(
+            PeekSmoothScroll(
               scrollDirection: Axis.horizontal,
-              child: Row(
-                children: seasonNumbers.map((season) {
-                  final isSelected = season == selectedSeason;
-                  final label = season == 0 ? '特别篇' : '第 $season 季';
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(label),
-                      selected: isSelected,
-                      onSelected: (_) => onSelectSeason(season),
-                    ),
-                  );
-                }).toList(),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: seasonNumbers.map((season) {
+                    final isSelected = season == selectedSeason;
+                    final label = season == 0 ? '特别篇' : '第 $season 季';
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(label),
+                        selected: isSelected,
+                        onSelected: (_) => onSelectSeason(season),
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
             ),
             const SizedBox(height: 18),
@@ -1754,18 +1929,23 @@ class _OverviewAndSpecsBento extends StatelessWidget {
     required this.item,
     this.selectedMediaSourceId,
     this.onSelectMediaSource,
+    this.onTapTag,
   });
 
   final MediaItem item;
   final String? selectedMediaSourceId;
   final ValueChanged<String>? onSelectMediaSource;
+  final ValueChanged<String>? onTapTag;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 900;
-        final overviewWidget = _OverviewCard(item: item);
+        final overviewWidget = _OverviewCard(
+          item: item,
+          onTapTag: onTapTag,
+        );
         final specsWidget = _MediaSpecsCard(
           item: item,
           selectedMediaSourceId: selectedMediaSourceId,
@@ -1811,9 +1991,13 @@ class _OverviewAndSpecsBento extends StatelessWidget {
 }
 
 class _OverviewCard extends StatefulWidget {
-  const _OverviewCard({required this.item});
+  const _OverviewCard({
+    required this.item,
+    this.onTapTag,
+  });
 
   final MediaItem item;
+  final ValueChanged<String>? onTapTag;
 
   @override
   State<_OverviewCard> createState() => _OverviewCardState();
@@ -1907,6 +2091,50 @@ class _OverviewCardState extends State<_OverviewCard> {
                   ],
                 ),
               ),
+            ),
+          ],
+          if (widget.item.tags.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const Divider(height: 1, color: Colors.white12),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Icon(
+                  Icons.label_rounded,
+                  size: 16,
+                  color: AppColors.spotlight,
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  '媒体标签',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '(${widget.item.tags.length})',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final tag in widget.item.tags)
+                  _TagChip(
+                    key: ValueKey('overview-tag-$tag'),
+                    tag: tag,
+                    onTap: () => widget.onTapTag?.call(tag),
+                  ),
+              ],
             ),
           ],
         ],
@@ -2793,4 +3021,245 @@ String _kindLabel(MediaItemKind kind) {
     MediaItemKind.person => '人物',
     MediaItemKind.folder => '文件夹',
   };
+}
+
+class _TagWorksDialog extends ConsumerStatefulWidget {
+  const _TagWorksDialog({
+    required this.account,
+    required this.tag,
+    required this.onOpenMedia,
+    this.onOpenInLibrary,
+  });
+
+  final AuthenticatedServer? account;
+  final String tag;
+  final ValueChanged<MediaItem> onOpenMedia;
+  final VoidCallback? onOpenInLibrary;
+
+  @override
+  ConsumerState<_TagWorksDialog> createState() => _TagWorksDialogState();
+}
+
+class _TagWorksDialogState extends ConsumerState<_TagWorksDialog> {
+  List<MediaItem> _items = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(_loadWorks);
+  }
+
+  Future<void> _loadWorks() async {
+    final account = widget.account;
+    if (account == null) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _items = const [];
+        });
+      }
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final service = ref.read(mediaLibraryProvider);
+      final result = await service.getItems(
+        account,
+        tag: widget.tag,
+        limit: 40,
+      );
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _items = result.items;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = '读取标签作品失败: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Container(
+        width: 720,
+        constraints: const BoxConstraints(maxHeight: 620),
+        padding: const EdgeInsets.all(24),
+        decoration: AppGlass.decoration(radius: 24, elevated: true),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.spotlight.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.label_rounded,
+                    color: AppColors.spotlight,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#${widget.tag}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _loading
+                            ? '正在读取相关作品…'
+                            : _items.isEmpty
+                                ? '未找到相关作品'
+                                : '共找到 ${_items.length} 部相关媒体',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.onOpenInLibrary != null)
+                  TextButton.icon(
+                    key: const ValueKey('tag-works-open-library'),
+                    onPressed: widget.onOpenInLibrary,
+                    icon: const Icon(Icons.filter_alt_rounded, size: 16),
+                    label: const Text('在媒体库筛选'),
+                  ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: '关闭',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1, color: Colors.white12),
+            const SizedBox(height: 16),
+            // Content
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _error!,
+                                style: const TextStyle(color: AppColors.error),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton(
+                                onPressed: _loadWorks,
+                                child: const Text('重试'),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _items.isEmpty
+                          ? const Center(
+                              child: Text(
+                                '暂无包含该标签的其他内容',
+                                style: TextStyle(color: AppColors.textTertiary),
+                              ),
+                            )
+                          : GridView.builder(
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 140,
+                                childAspectRatio: 2 / 3.4,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 14,
+                              ),
+                              itemCount: _items.length,
+                              itemBuilder: (context, index) {
+                                final it = _items[index];
+                                return InkWell(
+                                  key: ValueKey('tag-work-${it.id}'),
+                                  onTap: () => widget.onOpenMedia(it),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          clipBehavior: Clip.antiAlias,
+                                          decoration: BoxDecoration(
+                                            color: AppColors.surfaceHigh,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.12),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: PeekMediaImage(
+                                            uri: it.imageUri,
+                                            headers: it.imageHeaders,
+                                            kind: PeekMediaImageKind.poster,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        it.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        it.productionYear?.toString() ??
+                                            _kindLabel(it.kind),
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.textTertiary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

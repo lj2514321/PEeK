@@ -1,4 +1,5 @@
-import 'package:animations/animations.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
@@ -17,9 +18,11 @@ abstract final class AppColors {
   static const textTertiary = Color(0xFF9299A7);
 
   static const spotlight = Color(0xFFFFD27D);
+  static const spotlightLight = Color(0xFFFFF0C2);
   static const onSpotlight = Color(0xFF19140B);
   static const indigo = Color(0xFF928BFF);
   static const cyan = Color(0xFF6EDCE8);
+  static const cyanLight = Color(0xFFB5F4FC);
   static const success = Color(0xFF58C99A);
   static const error = Color(0xFFFF8585);
 }
@@ -31,6 +34,8 @@ abstract final class AppMotion {
 
   static const enterCurve = Curves.easeOutCubic;
   static const exitCurve = Curves.easeInCubic;
+
+  static final bool isTest = Platform.environment.containsKey('FLUTTER_TEST');
 
   static Duration responsive(BuildContext context, Duration duration) {
     return MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
@@ -51,13 +56,8 @@ class PeekPageTransitionsBuilder extends PageTransitionsBuilder {
     if (context != null && MediaQuery.disableAnimationsOf(context)) {
       return child;
     }
-    return SharedAxisTransition(
-      animation: animation,
-      secondaryAnimation: secondaryAnimation,
-      transitionType: SharedAxisTransitionType.horizontal,
-      fillColor: AppColors.canvas,
-      child: child,
-    );
+    // 禁用原生平台厚重过渡，采用无延迟轻量渐变，彻底消除原生路由引擎在桌面端的卡顿与延迟
+    return FadeTransition(opacity: animation, child: child);
   }
 }
 
@@ -94,7 +94,13 @@ abstract final class AppTheme {
       scaffoldBackgroundColor: AppColors.canvas,
       canvasColor: AppColors.canvas,
       pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {TargetPlatform.windows: PeekPageTransitionsBuilder()},
+        builders: {
+          TargetPlatform.windows: PeekPageTransitionsBuilder(),
+          TargetPlatform.android: PeekPageTransitionsBuilder(),
+          TargetPlatform.iOS: PeekPageTransitionsBuilder(),
+          TargetPlatform.macOS: PeekPageTransitionsBuilder(),
+          TargetPlatform.linux: PeekPageTransitionsBuilder(),
+        },
       ),
       focusColor: AppColors.indigo.withValues(alpha: 0.24),
       hoverColor: AppColors.textPrimary.withValues(alpha: 0.055),

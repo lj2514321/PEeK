@@ -1,4 +1,4 @@
-import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
+import 'package:embyplayer/src/core/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 

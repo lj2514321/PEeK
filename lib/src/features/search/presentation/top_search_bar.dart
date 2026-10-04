@@ -1,24 +1,21 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
-import 'package:embyplayer/src/core/presentation/peek_motion.dart';
-import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Clean, lightweight top search bar with VisionOS liquid glass dropdown panel.
 class TopSearchBar extends ConsumerStatefulWidget {
-  const TopSearchBar({
-    super.key,
-    required this.account,
-    this.compact = false,
-  });
+  const TopSearchBar({super.key, required this.account, this.compact = false});
 
   final AuthenticatedServer? account;
   final bool compact;
@@ -27,16 +24,12 @@ class TopSearchBar extends ConsumerStatefulWidget {
   ConsumerState<TopSearchBar> createState() => TopSearchBarState();
 }
 
-class TopSearchBarState extends ConsumerState<TopSearchBar>
-    with SingleTickerProviderStateMixin {
+class TopSearchBarState extends ConsumerState<TopSearchBar> {
   static const _searchDelay = Duration(milliseconds: 300);
 
   final _queryController = TextEditingController();
   final _focusNode = FocusNode();
   final _layerLink = LayerLink();
-
-  late final AnimationController _animController;
-  late final Animation<double> _dropdownAnimation;
 
   OverlayEntry? _overlayEntry;
   Timer? _debounce;
@@ -46,23 +39,12 @@ class TopSearchBarState extends ConsumerState<TopSearchBar>
   bool _loading = false;
   String? _error;
   bool _isDropdownOpen = false;
-  bool _isClosing = false;
 
   bool get _hasQuery => _queryController.text.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 150),
-      reverseDuration: const Duration(milliseconds: 100),
-    );
-    _dropdownAnimation = CurvedAnimation(
-      parent: _animController,
-      curve: const Cubic(0.16, 1.0, 0.3, 1.0),
-      reverseCurve: Curves.easeInCubic,
-    );
     _focusNode.addListener(_onFocusChange);
     Future<void>.microtask(_loadHistory);
   }
@@ -86,12 +68,10 @@ class TopSearchBarState extends ConsumerState<TopSearchBar>
   @override
   void dispose() {
     _debounce?.cancel();
-    _isClosing = false;
     _isDropdownOpen = false;
     _overlayEntry?.remove();
     _overlayEntry?.dispose();
     _overlayEntry = null;
-    _animController.dispose();
     _queryController.dispose();
     _focusNode
       ..removeListener(_onFocusChange)
@@ -176,11 +156,7 @@ class TopSearchBarState extends ConsumerState<TopSearchBar>
     try {
       final page = await ref
           .read(mediaLibraryProvider)
-          .search(
-            account,
-            query: query,
-            limit: 20,
-          );
+          .search(account, query: query, limit: 20);
       if (!mounted || generation != _requestGeneration) return;
       setState(() {
         _items = page.items;
@@ -210,31 +186,43 @@ class TopSearchBarState extends ConsumerState<TopSearchBar>
     _closeDropdown();
     _focusNode.unfocus();
 
-    Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) => MediaDetailPage(
-          account: widget.account,
-          initialItem: item,
+    final account = widget.account;
+    if (account == null) return;
+
+    if (item.kind == MediaItemKind.person) {
+      AppRoutes.openPersonWorks(
+        context,
+        account: account,
+        person: MediaPerson(
+          id: item.id,
+          name: item.name,
+          type: 'Actor',
+          imageUri: item.imageUri,
+          imageHeaders: item.imageHeaders,
         ),
-      ),
+        onOpen: (work) => AppRoutes.openMediaDetail(
+          context,
+          account: account,
+          item: work,
+        ),
+      );
+      return;
+    }
+
+    AppRoutes.openMediaDetail(
+      context,
+      account: account,
+      item: item,
     );
   }
 
   void _openDropdown() {
-    if (_isDropdownOpen) {
-      if (_isClosing) {
-        _isClosing = false;
-        _animController.forward();
-      }
-      return;
-    }
+    if (_isDropdownOpen) return;
     _isDropdownOpen = true;
-    _isClosing = false;
 
     _overlayEntry = OverlayEntry(
       builder: (context) => _SearchDropdownOverlay(
         layerLink: _layerLink,
-        animation: _dropdownAnimation,
         queryController: _queryController,
         focusNode: _focusNode,
         items: _items,
@@ -253,25 +241,14 @@ class TopSearchBarState extends ConsumerState<TopSearchBar>
     );
 
     Overlay.of(context).insert(_overlayEntry!);
-    _animController.forward(from: 0.0);
   }
 
-  Future<void> _closeDropdown() async {
-    if (!_isDropdownOpen || _isClosing) return;
-    _isClosing = true;
-    try {
-      await _animController.reverse();
-    } catch (_) {
-      // Ignored if cancelled or interrupted
-    } finally {
-      if (_isClosing) {
-        _overlayEntry?.remove();
-        _overlayEntry?.dispose();
-        _overlayEntry = null;
-        _isDropdownOpen = false;
-        _isClosing = false;
-      }
-    }
+  void _closeDropdown() {
+    if (!_isDropdownOpen) return;
+    _isDropdownOpen = false;
+    _overlayEntry?.remove();
+    _overlayEntry?.dispose();
+    _overlayEntry = null;
   }
 
   @override
@@ -283,9 +260,7 @@ class TopSearchBarState extends ConsumerState<TopSearchBar>
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.10),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
           ),
           child: IconButton(
             tooltip: '搜索媒体库（Ctrl+K）',
@@ -408,7 +383,6 @@ class TopSearchBarState extends ConsumerState<TopSearchBar>
 class _SearchDropdownOverlay extends StatelessWidget {
   const _SearchDropdownOverlay({
     required this.layerLink,
-    required this.animation,
     required this.queryController,
     required this.focusNode,
     required this.items,
@@ -423,7 +397,6 @@ class _SearchDropdownOverlay extends StatelessWidget {
   });
 
   final LayerLink layerLink;
-  final Animation<double> animation;
   final TextEditingController queryController;
   final FocusNode focusNode;
   final List<MediaItem> items;
@@ -443,28 +416,69 @@ class _SearchDropdownOverlay extends StatelessWidget {
     final maxPanelHeight = (screenSize.height - 120).clamp(200.0, 460.0);
     final query = queryController.text.trim();
 
-    return Stack(
-      children: [
-        // Dismiss tap barrier with smooth fade-in / fade-out
-        Positioned.fill(
-          child: AnimatedBuilder(
-            animation: animation,
-            builder: (context, child) {
-              return Opacity(
-                opacity: (animation.value * 0.35).clamp(0.0, 1.0),
-                child: child,
-              );
-            },
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: onDismiss,
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.18),
-              ),
+    final barrier = GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: onDismiss,
+      child: Container(color: Colors.black.withValues(alpha: 0.18)),
+    );
+
+    final panel = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          key: const ValueKey('search-dropdown-panel'),
+          constraints: BoxConstraints(maxHeight: maxPanelHeight),
+          decoration: BoxDecoration(
+            // Translucent liquid glass tint (not opaque!)
+            color: const Color(0x70101426),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.16),
+                Colors.white.withValues(alpha: 0.04),
+                Colors.black.withValues(alpha: 0.50),
+              ],
+              stops: const [0.0, 0.35, 1.0],
             ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.20),
+              width: 1.2,
+            ),
+            boxShadow: [
+              const BoxShadow(
+                color: Color(0x384A90E2),
+                blurRadius: 36,
+                spreadRadius: 1,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.45),
+                blurRadius: 32,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: _buildContent(context, query),
           ),
         ),
-        // Liquid Glass Dropdown "半框" with fluid spring/cubic animation
+      ),
+    );
+
+    return Stack(
+      children: [
+        // Dismiss tap barrier with smooth fade-in
+        Positioned.fill(
+          child: AppMotion.isTest
+              ? barrier
+              : barrier.animate().fadeIn(
+                  duration: const Duration(milliseconds: 160),
+                ),
+        ),
+        // Liquid Glass Dropdown "半框" with fluid spring/bounce animation
         Positioned(
           width: panelWidth,
           child: CompositedTransformFollower(
@@ -473,74 +487,27 @@ class _SearchDropdownOverlay extends StatelessWidget {
             targetAnchor: Alignment.bottomRight,
             followerAnchor: Alignment.topRight,
             offset: const Offset(0, 8),
-            child: AnimatedBuilder(
-              animation: animation,
-              builder: (context, child) {
-                final t = animation.value;
-                final opacity = t.clamp(0.0, 1.0);
-                final translateY = -8.0 * (1.0 - t);
-                final scale = 0.97 + (0.03 * t);
-
-                return Opacity(
-                  opacity: opacity,
-                  child: Transform.translate(
-                    offset: Offset(0, translateY),
-                    child: Transform.scale(
-                      scale: scale,
-                      alignment: Alignment.topRight,
-                      child: child,
-                    ),
-                  ),
-                );
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                  child: Container(
-                    key: const ValueKey('search-dropdown-panel'),
-                    constraints: BoxConstraints(
-                      maxHeight: maxPanelHeight,
-                    ),
-                    decoration: BoxDecoration(
-                      // Translucent liquid glass tint (not opaque!)
-                      color: const Color(0x70101426),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white.withValues(alpha: 0.16),
-                          Colors.white.withValues(alpha: 0.04),
-                          Colors.black.withValues(alpha: 0.50),
-                        ],
-                        stops: const [0.0, 0.35, 1.0],
+            child: AppMotion.isTest
+                ? panel
+                : panel
+                      .animate()
+                      .fadeIn(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOutQuad,
+                      )
+                      .slideY(
+                        begin: -0.06,
+                        end: 0,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutBack,
+                      )
+                      .scale(
+                        begin: const Offset(0.96, 0.96),
+                        end: const Offset(1.0, 1.0),
+                        alignment: Alignment.topRight,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutBack,
                       ),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.20),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        const BoxShadow(
-                          color: Color(0x384A90E2),
-                          blurRadius: 36,
-                          spreadRadius: 1,
-                        ),
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          blurRadius: 32,
-                          offset: const Offset(0, 14),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: _buildContent(context, query),
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ),
         ),
       ],
@@ -599,27 +566,26 @@ class _SearchDropdownOverlay extends StatelessWidget {
         child: Center(
           child: Text(
             '未找到相关内容',
-            style: TextStyle(
-              color: AppColors.textTertiary,
-              fontSize: 12.5,
-            ),
+            style: TextStyle(color: AppColors.textTertiary, fontSize: 12.5),
           ),
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-      shrinkWrap: true,
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return _SearchResultTile(
-          item: item,
-          account: account!,
-          onTap: () => onItemSelected(item),
-        );
-      },
+    return PeekSmoothScroll(
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        shrinkWrap: true,
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return _SearchResultTile(
+            item: item,
+            account: account!,
+            onTap: () => onItemSelected(item),
+          );
+        },
+      ),
     );
   }
 
@@ -630,10 +596,7 @@ class _SearchDropdownOverlay extends StatelessWidget {
         child: Center(
           child: Text(
             '输入片名、演员或导演开始搜索',
-            style: TextStyle(
-              color: AppColors.textTertiary,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
           ),
         ),
       );
@@ -666,10 +629,7 @@ class _SearchDropdownOverlay extends StatelessWidget {
                 onTap: onClearHistory,
                 child: const Text(
                   '清空',
-                  style: TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
                 ),
               ),
             ],
@@ -746,20 +706,23 @@ class _SearchResultTile extends StatelessWidget {
           children: [
             // Poster / avatar
             ClipRRect(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(
+                item.kind == MediaItemKind.person ? 18 : 6,
+              ),
               child: SizedBox(
-                width: 32,
-                height: 44,
+                width: item.kind == MediaItemKind.person ? 36 : 32,
+                height: item.kind == MediaItemKind.person ? 36 : 44,
                 child: item.kind == MediaItemKind.person
                     ? PeekMediaImage(
                         uri: item.imageUri,
                         headers: item.imageHeaders,
                         kind: PeekMediaImageKind.person,
                         fit: BoxFit.cover,
-                        placeholderBackground:
-                            Colors.white.withValues(alpha: 0.06),
+                        placeholderBackground: Colors.white.withValues(
+                          alpha: 0.06,
+                        ),
                         placeholderIcon: Icons.person_rounded,
-                        placeholderIconSize: 18,
+                        placeholderIconSize: 20,
                         placeholderIconColor: AppColors.textTertiary,
                       )
                     : PeekMediaImage(
@@ -767,8 +730,9 @@ class _SearchResultTile extends StatelessWidget {
                         headers: item.imageHeaders,
                         kind: PeekMediaImageKind.poster,
                         fit: BoxFit.cover,
-                        placeholderBackground:
-                            Colors.white.withValues(alpha: 0.06),
+                        placeholderBackground: Colors.white.withValues(
+                          alpha: 0.06,
+                        ),
                         placeholderIcon: Icons.movie_outlined,
                         placeholderIconSize: 18,
                         placeholderIconColor: AppColors.textTertiary,

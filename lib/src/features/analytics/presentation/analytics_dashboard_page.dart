@@ -1,5 +1,6 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ class AnalyticsDashboardPage extends StatefulWidget {
 
 class _AnalyticsDashboardPageState extends State<AnalyticsDashboardPage> {
   final _store = ViewingHistoryStore();
+  final _scrollController = SmoothScrollController();
   List<ViewingRecord> _records = const [];
   bool _loading = true;
 
@@ -20,6 +22,12 @@ class _AnalyticsDashboardPageState extends State<AnalyticsDashboardPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -52,8 +60,11 @@ class _AnalyticsDashboardPageState extends State<AnalyticsDashboardPage> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: PeekSmoothScroll(
+          controller: _scrollController,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -259,7 +270,8 @@ class _AnalyticsDashboardPageState extends State<AnalyticsDashboardPage> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

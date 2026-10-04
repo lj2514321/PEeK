@@ -2,13 +2,18 @@ import 'dart:ui';
 
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_border_beam.dart';
+import 'package:embyplayer/src/core/presentation/peek_magnetic_button.dart';
+import 'package:embyplayer/src/core/presentation/peek_spring.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_settings.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:window_manager/window_manager.dart';
 
-class PlaybackControls extends StatelessWidget {
+
+class PlaybackControls extends StatefulWidget {
   const PlaybackControls({
     super.key,
     required this.title,
@@ -107,95 +112,235 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback? onOpenExternalPlayer;
 
   @override
-  Widget build(BuildContext context) {
-    final motion = AppMotion.responsive(
-      context,
-      visible ? AppMotion.fast : const Duration(milliseconds: 130),
+  State<PlaybackControls> createState() => _PlaybackControlsState();
+}
+
+class _PlaybackControlsState extends State<PlaybackControls>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
+      reverseDuration: const Duration(milliseconds: 160),
+      value: widget.visible ? 1.0 : 0.0,
     );
-    final curve = visible ? Curves.easeOutCubic : Curves.easeInCubic;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        IgnorePointer(
-          ignoring: !visible,
-          child: AnimatedOpacity(
-            opacity: visible ? 1 : 0,
-            duration: motion,
-            curve: curve,
-            child: _PlaybackTopBar(
-              title: title,
-              method: method,
-              quality: quality,
-              changingSource: changingSource,
-              sourceChangeLabel: sourceChangeLabel,
-              backTooltip: backTooltip,
-              onBack: onBack,
-              onClose: onClose,
-              onDiagnostics: onDiagnostics,
-              onQuality: onQuality,
-              onAudioEnhancement: onAudioEnhancement,
-              onOpenExternalPlayer: onOpenExternalPlayer,
-              onFullScreen: onFullScreen,
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: const Cubic(0.16, 1.0, 0.3, 1.0),
+      reverseCurve: Curves.easeInCubic,
+    );
+  }
+
+  @override
+  void didUpdateWidget(PlaybackControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.visible != oldWidget.visible) {
+      if (widget.visible) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (AppMotion.isTest) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          IgnorePointer(
+            ignoring: !widget.visible,
+            child: Opacity(
+              opacity: widget.visible ? 1.0 : 0.0,
+              child: _PlaybackTopBar(
+                title: widget.title,
+                method: widget.method,
+                quality: widget.quality,
+                changingSource: widget.changingSource,
+                sourceChangeLabel: widget.sourceChangeLabel,
+                backTooltip: widget.backTooltip,
+                onBack: widget.onBack,
+                onClose: widget.onClose,
+                onDiagnostics: widget.onDiagnostics,
+                onQuality: widget.onQuality,
+                onAudioEnhancement: widget.onAudioEnhancement,
+                onOpenExternalPlayer: widget.onOpenExternalPlayer,
+                onFullScreen: widget.onFullScreen,
+              ),
             ),
           ),
-        ),
-        if (buffering || changingSource)
-          Center(
-            child: _BufferingIndicator(
-              label: changingSource ? sourceChangeLabel : '正在缓冲',
+          if (widget.buffering || widget.changingSource)
+            Center(
+              child: _BufferingIndicator(
+                label: widget.changingSource
+                    ? widget.sourceChangeLabel
+                    : '正在缓冲',
+              ),
             ),
-          ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: IgnorePointer(
-            ignoring: !visible,
-            child: AnimatedSlide(
-              offset: visible ? Offset.zero : const Offset(0, 0.08),
-              duration: motion,
-              curve: curve,
-              child: AnimatedOpacity(
-                opacity: visible ? 1 : 0,
-                duration: motion,
-                curve: curve,
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: IgnorePointer(
+              ignoring: !widget.visible,
+              child: Opacity(
+                opacity: widget.visible ? 1.0 : 0.0,
                 child: _PlaybackBottomBar(
-                  playing: playing,
-                  position: position,
-                  duration: duration,
-                  buffer: buffer,
-                  volume: volume,
-                  rate: rate,
-                  fullScreen: fullScreen,
-                  audioLabel: audioLabel,
-                  subtitleLabel: subtitleLabel,
-                  chapters: chapters,
-                  queueAvailable: queueAvailable,
-                  canPrevious: canPrevious,
-                  canNext: canNext,
-                  onPlayPause: onPlayPause,
-                  onSeekPreview: onSeekPreview,
-                  onSeek: onSeek,
-                  onSeekBack: onSeekBack,
-                  onSeekForward: onSeekForward,
-                  onVolumeChanged: onVolumeChanged,
-                  onMute: onMute,
-                  onRateChanged: onRateChanged,
-                  onAudio: onAudio,
-                  onSubtitle: onSubtitle,
-                  onChapters: onChapters,
-                  onPrevious: onPrevious,
-                  onNext: onNext,
-                  onEpisodes: onEpisodes,
-                  onFullScreen: onFullScreen,
-                  danmakuEnabled: danmakuEnabled,
-                  onDanmaku: onDanmaku,
-                  isPip: isPip,
-                  onPip: onPip,
+                  playing: widget.playing,
+                  position: widget.position,
+                  duration: widget.duration,
+                  buffer: widget.buffer,
+                  volume: widget.volume,
+                  rate: widget.rate,
+                  fullScreen: widget.fullScreen,
+                  audioLabel: widget.audioLabel,
+                  subtitleLabel: widget.subtitleLabel,
+                  chapters: widget.chapters,
+                  queueAvailable: widget.queueAvailable,
+                  canPrevious: widget.canPrevious,
+                  canNext: widget.canNext,
+                  onPlayPause: widget.onPlayPause,
+                  onSeekPreview: widget.onSeekPreview,
+                  onSeek: widget.onSeek,
+                  onSeekBack: widget.onSeekBack,
+                  onSeekForward: widget.onSeekForward,
+                  onVolumeChanged: widget.onVolumeChanged,
+                  onMute: widget.onMute,
+                  onRateChanged: widget.onRateChanged,
+                  onAudio: widget.onAudio,
+                  onSubtitle: widget.onSubtitle,
+                  onChapters: widget.onChapters,
+                  onPrevious: widget.onPrevious,
+                  onNext: widget.onNext,
+                  onEpisodes: widget.onEpisodes,
+                  onFullScreen: widget.onFullScreen,
+                  danmakuEnabled: widget.danmakuEnabled,
+                  onDanmaku: widget.onDanmaku,
+                  isPip: widget.isPip,
+                  onPip: widget.onPip,
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, _) {
+        final t = _animation.value;
+        if (t <= 0.001 && !widget.visible) {
+          if (widget.buffering || widget.changingSource) {
+            return Center(
+              child: _BufferingIndicator(
+                label: widget.changingSource
+                    ? widget.sourceChangeLabel
+                    : '正在缓冲',
+              ),
+            );
+          }
+          return const SizedBox.shrink();
+        }
+
+        final topOffsetY = -16.0 * (1.0 - t);
+        final bottomOffsetY = 16.0 * (1.0 - t);
+        final opacity = t.clamp(0.0, 1.0);
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            IgnorePointer(
+              ignoring: !widget.visible,
+              child: Transform.translate(
+                offset: Offset(0, topOffsetY),
+                child: Opacity(
+                  opacity: opacity,
+                  child: _PlaybackTopBar(
+                    title: widget.title,
+                    method: widget.method,
+                    quality: widget.quality,
+                    changingSource: widget.changingSource,
+                    sourceChangeLabel: widget.sourceChangeLabel,
+                    backTooltip: widget.backTooltip,
+                    onBack: widget.onBack,
+                    onClose: widget.onClose,
+                    onDiagnostics: widget.onDiagnostics,
+                    onQuality: widget.onQuality,
+                    onAudioEnhancement: widget.onAudioEnhancement,
+                    onOpenExternalPlayer: widget.onOpenExternalPlayer,
+                    onFullScreen: widget.onFullScreen,
+                  ),
+                ),
+              ),
+            ),
+            if (widget.buffering || widget.changingSource)
+              Center(
+                child: _BufferingIndicator(
+                  label: widget.changingSource
+                      ? widget.sourceChangeLabel
+                      : '正在缓冲',
+                ),
+              ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: IgnorePointer(
+                ignoring: !widget.visible,
+                child: Transform.translate(
+                  offset: Offset(0, bottomOffsetY),
+                  child: Opacity(
+                    opacity: opacity,
+                    child: _PlaybackBottomBar(
+                      playing: widget.playing,
+                      position: widget.position,
+                      duration: widget.duration,
+                      buffer: widget.buffer,
+                      volume: widget.volume,
+                      rate: widget.rate,
+                      fullScreen: widget.fullScreen,
+                      audioLabel: widget.audioLabel,
+                      subtitleLabel: widget.subtitleLabel,
+                      chapters: widget.chapters,
+                      queueAvailable: widget.queueAvailable,
+                      canPrevious: widget.canPrevious,
+                      canNext: widget.canNext,
+                      onPlayPause: widget.onPlayPause,
+                      onSeekPreview: widget.onSeekPreview,
+                      onSeek: widget.onSeek,
+                      onSeekBack: widget.onSeekBack,
+                      onSeekForward: widget.onSeekForward,
+                      onVolumeChanged: widget.onVolumeChanged,
+                      onMute: widget.onMute,
+                      onRateChanged: widget.onRateChanged,
+                      onAudio: widget.onAudio,
+                      onSubtitle: widget.onSubtitle,
+                      onChapters: widget.onChapters,
+                      onPrevious: widget.onPrevious,
+                      onNext: widget.onNext,
+                      onEpisodes: widget.onEpisodes,
+                      onFullScreen: widget.onFullScreen,
+                      danmakuEnabled: widget.danmakuEnabled,
+                      onDanmaku: widget.onDanmaku,
+                      isPip: widget.isPip,
+                      onPip: widget.onPip,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -238,106 +383,110 @@ class _PlaybackTopBar extends StatelessWidget {
       child: _PlaybackDragToMoveArea(
         onDoubleTap: onFullScreen,
         child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xD9000000), Color(0x66000000), Colors.transparent],
-            stops: [0, 0.58, 1],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 22, 38),
-            child: Row(
-              children: [
-                _ControlIconButton(
-                  key: const ValueKey('player-back'),
-                  tooltip: backTooltip ?? '缩小为悬浮画中画（Esc）',
-                  icon: Icons.arrow_back_rounded,
-                  onPressed: onBack,
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        changingSource
-                            ? sourceChangeLabel
-                            : 'PEeK PRIVATE CINEMA',
-                        style: const TextStyle(
-                          color: Color(0xFFB7BBC4),
-                          fontFamily: 'Cascadia Mono',
-                          fontSize: 9,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                if (onAudioEnhancement != null) ...[
-                  _ControlIconButton(
-                    key: const ValueKey('player-audio-enhancement'),
-                    tooltip: '音画增强与夜间模式',
-                    icon: Icons.graphic_eq_rounded,
-                    onPressed: onAudioEnhancement!,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                if (onOpenExternalPlayer != null) ...[
-                  _ControlIconButton(
-                    key: const ValueKey('player-open-external'),
-                    tooltip: '在外部播放器（PotPlayer）中打开',
-                    icon: Icons.open_in_new_rounded,
-                    onPressed: onOpenExternalPlayer!,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                _ControlIconButton(
-                  key: const ValueKey('player-diagnostics'),
-                  tooltip: '播放诊断（Ctrl+D）',
-                  icon: Icons.monitor_heart_outlined,
-                  onPressed: onDiagnostics,
-                ),
-                if (onQuality != null)
-                  _MethodBadge(
-                    method: method,
-                    quality: quality,
-                    onPressed: changingSource ? null : onQuality,
-                  )
-                else
-                  const _LocalSourceBadge(),
-                if (onClose != null) ...[
-                  const SizedBox(width: 8),
-                  _ControlIconButton(
-                    key: const ValueKey('player-close'),
-                    tooltip: '退出播放',
-                    icon: Icons.close_rounded,
-                    onPressed: onClose,
-                  ),
-                ],
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xCC070810),
+                Color(0x66070810),
+                Colors.transparent,
               ],
+              stops: [0.0, 0.65, 1.0],
+            ),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 22, 38),
+              child: Row(
+                children: [
+                  _ControlIconButton(
+                    key: const ValueKey('player-back'),
+                    tooltip: backTooltip ?? '缩小为悬浮画中画（Esc）',
+                    icon: Icons.arrow_back_rounded,
+                    onPressed: onBack,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          changingSource
+                              ? sourceChangeLabel
+                              : 'PEeK PRIVATE CINEMA',
+                          style: const TextStyle(
+                            color: Color(0xFFB7BBC4),
+                            fontFamily: 'Cascadia Mono',
+                            fontSize: 9,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (onAudioEnhancement != null) ...[
+                    _ControlIconButton(
+                      key: const ValueKey('player-audio-enhancement'),
+                      tooltip: '音画增强与夜间模式',
+                      icon: Icons.graphic_eq_rounded,
+                      onPressed: onAudioEnhancement!,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (onOpenExternalPlayer != null) ...[
+                    _ControlIconButton(
+                      key: const ValueKey('player-open-external'),
+                      tooltip: '在外部播放器（PotPlayer）中打开',
+                      icon: Icons.open_in_new_rounded,
+                      onPressed: onOpenExternalPlayer!,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  _ControlIconButton(
+                    key: const ValueKey('player-diagnostics'),
+                    tooltip: '播放诊断（Ctrl+D）',
+                    icon: Icons.monitor_heart_outlined,
+                    onPressed: onDiagnostics,
+                  ),
+                  if (onQuality != null)
+                    _MethodBadge(
+                      method: method,
+                      quality: quality,
+                      onPressed: changingSource ? null : onQuality,
+                    )
+                  else
+                    const _LocalSourceBadge(),
+                  if (onClose != null) ...[
+                    const SizedBox(width: 8),
+                    _ControlIconButton(
+                      key: const ValueKey('player-close'),
+                      tooltip: '退出播放',
+                      icon: Icons.close_rounded,
+                      onPressed: onClose,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -371,15 +520,19 @@ class _LocalSourceBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       key: const ValueKey('player-local-source'),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.surfaceHigh.withValues(alpha: 0.82),
+        color: Colors.black.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.16),
+          width: 1.0,
+        ),
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.storage_rounded, size: 15),
+          Icon(Icons.storage_rounded, size: 14),
           SizedBox(width: 6),
           Text('本地直放', style: TextStyle(fontSize: 10)),
         ],
@@ -467,177 +620,210 @@ class _PlaybackBottomBar extends StatelessWidget {
             queueAvailable && constraints.maxWidth >= 940;
         final padding = compact
             ? const EdgeInsets.fromLTRB(10, 0, 10, 10)
-            : const EdgeInsets.fromLTRB(22, 0, 22, 18);
+            : const EdgeInsets.fromLTRB(22, 0, 22, 20);
         final radius = compact ? 22.0 : 28.0;
         return Padding(
           padding: padding,
-          child: Container(
-            decoration: AppGlass.visionOSDecoration(
-              radius: radius,
-              elevated: true,
-              glowColor: const Color(0x304A90E2),
-              borderOpacity: 0.28,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(radius),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    compact ? 10 : 16,
-                    6,
-                    compact ? 10 : 16,
-                    compact ? 8 : 12,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                if (chapters.isNotEmpty)
-                  _ChapterRail(
-                    chapters: chapters,
-                    position: position,
-                    onPressed: onChapters,
-                  ),
-                _Timeline(
-                  position: position,
-                  duration: duration,
-                  buffer: buffer,
-                  chapters: chapters,
-                  onSeekPreview: onSeekPreview,
-                  onSeek: onSeek,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: compact ? double.infinity : 960,
+              ),
+              child: Container(
+                decoration: AppGlass.visionOSDecoration(
+                  radius: radius,
+                  elevated: false,
+                  glowColor: const Color(0x284A90E2),
+                  borderOpacity: 0.28,
                 ),
-                Row(
-                  children: [
-                    _ControlIconButton(
-                      key: const ValueKey('player-play-pause'),
-                      tooltip: playing ? '暂停（Space）' : '播放（Space）',
-                      icon: playing
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                      prominent: true,
-                      onPressed: onPlayPause,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(radius),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        compact ? 12 : 18,
+                        compact ? 4 : 6,
+                        compact ? 12 : 18,
+                        compact ? 8 : 12,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (chapters.isNotEmpty)
+                            _ChapterRail(
+                              chapters: chapters,
+                              position: position,
+                              onPressed: onChapters,
+                            ),
+                          _Timeline(
+                            position: position,
+                            duration: duration,
+                            buffer: buffer,
+                            chapters: chapters,
+                            onSeekPreview: onSeekPreview,
+                            onSeek: onSeek,
+                          ),
+                          Row(
+                            children: [
+                              _ControlIconButton(
+                                key: const ValueKey('player-play-pause'),
+                                tooltip: playing ? '暂停（Space）' : '播放（Space）',
+                                icon: playing
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                prominent: true,
+                                onPressed: onPlayPause,
+                              ),
+                              if (!compact) ...[
+                                const SizedBox(width: 2),
+                                _ControlIconButton(
+                                  tooltip: '后退 10 秒（←）',
+                                  icon: Icons.replay_10_rounded,
+                                  onPressed: onSeekBack,
+                                ),
+                                _ControlIconButton(
+                                  tooltip: '前进 10 秒（→）',
+                                  icon: Icons.forward_10_rounded,
+                                  onPressed: onSeekForward,
+                                ),
+                              ],
+                              if (showQueueTransport) ...[
+                                _ControlIconButton(
+                                  key: const ValueKey('player-previous'),
+                                  tooltip: '上一集（P）',
+                                  icon: Icons.skip_previous_rounded,
+                                  onPressed: canPrevious ? onPrevious : null,
+                                ),
+                                _ControlIconButton(
+                                  key: const ValueKey('player-episodes'),
+                                  tooltip: '选集',
+                                  icon: Icons.video_collection_rounded,
+                                  onPressed: onEpisodes,
+                                ),
+                                _ControlIconButton(
+                                  key: const ValueKey('player-next'),
+                                  tooltip: '下一集（N）',
+                                  icon: Icons.skip_next_rounded,
+                                  onPressed: canNext ? onNext : null,
+                                ),
+                              ] else if (queueAvailable)
+                                _ControlIconButton(
+                                  key: const ValueKey('player-episodes'),
+                                  tooltip: '选集',
+                                  icon: Icons.video_collection_rounded,
+                                  onPressed: onEpisodes,
+                                ),
+                              const SizedBox(width: 4),
+                              Text(
+                                veryCompact
+                                    ? _time(position)
+                                    : '${_time(position)} / ${_time(duration)}',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontFamily: 'Cascadia Mono',
+                                  fontSize: veryCompact ? 9 : 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (!compact) ...[
+                                _ControlIconButton(
+                                  tooltip: volume <= 0 ? '取消静音（M）' : '静音（M）',
+                                  icon: _volumeIcon(volume),
+                                  onPressed: onMute,
+                                ),
+                                SizedBox(
+                                  key: const ValueKey('player-volume'),
+                                  width: 92,
+                                  child: SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      activeTrackColor: AppColors.textSecondary,
+                                      inactiveTrackColor: Colors.white
+                                          .withValues(alpha: 0.14),
+                                      thumbColor: Colors.white,
+                                      overlayColor: Colors.white.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                      trackHeight: 2.5,
+                                      thumbShape: const RoundSliderThumbShape(
+                                        enabledThumbRadius: 4.5,
+                                      ),
+                                      overlayShape:
+                                          const RoundSliderOverlayShape(
+                                            overlayRadius: 10,
+                                          ),
+                                    ),
+                                    child: Slider(
+                                      value: volume.clamp(0, 100),
+                                      min: 0,
+                                      max: 100,
+                                      onChanged: onVolumeChanged,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              _ControlIconButton(
+                                key: const ValueKey('player-audio'),
+                                tooltip: '音轨：$audioLabel',
+                                icon: Icons.graphic_eq_rounded,
+                                onPressed: onAudio,
+                              ),
+                              _ControlIconButton(
+                                key: const ValueKey('player-subtitle'),
+                                tooltip: '字幕：$subtitleLabel',
+                                icon: subtitleLabel == '关闭'
+                                    ? Icons.subtitles_off_rounded
+                                    : Icons.subtitles_rounded,
+                                onPressed: onSubtitle,
+                              ),
+                              if (onDanmaku != null)
+                                _ControlIconButton(
+                                  key: const ValueKey('player-danmaku'),
+                                  tooltip: danmakuEnabled ? '弹幕设置' : '弹幕（已关闭）',
+                                  icon: danmakuEnabled
+                                      ? Icons.comment_rounded
+                                      : Icons.comments_disabled_rounded,
+                                  onPressed: onDanmaku,
+                                ),
+                              if (!veryCompact)
+                                _RateButton(
+                                  rate: rate,
+                                  onChanged: onRateChanged,
+                                ),
+                              if (onPip != null)
+                                _ControlIconButton(
+                                  key: const ValueKey('player-pip'),
+                                  tooltip: isPip ? '退出置顶小窗' : '画中画置顶小窗',
+                                  icon: isPip
+                                      ? Icons.picture_in_picture_alt_rounded
+                                      : Icons.picture_in_picture_rounded,
+                                  onPressed: onPip,
+                                ),
+                              _ControlIconButton(
+                                key: const ValueKey('player-fullscreen'),
+                                tooltip: fullScreen ? '退出全屏（F）' : '全屏（F）',
+                                icon: fullScreen
+                                    ? Icons.fullscreen_exit_rounded
+                                    : Icons.fullscreen_rounded,
+                                onPressed: onFullScreen,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                    if (!compact) ...[
-                      _ControlIconButton(
-                        tooltip: '后退 10 秒（←）',
-                        icon: Icons.replay_10_rounded,
-                        onPressed: onSeekBack,
-                      ),
-                      _ControlIconButton(
-                        tooltip: '前进 10 秒（→）',
-                        icon: Icons.forward_10_rounded,
-                        onPressed: onSeekForward,
-                      ),
-                    ],
-                    if (showQueueTransport) ...[
-                      _ControlIconButton(
-                        key: const ValueKey('player-previous'),
-                        tooltip: '上一集（P）',
-                        icon: Icons.skip_previous_rounded,
-                        onPressed: canPrevious ? onPrevious : null,
-                      ),
-                      _ControlIconButton(
-                        key: const ValueKey('player-episodes'),
-                        tooltip: '选集',
-                        icon: Icons.video_collection_rounded,
-                        onPressed: onEpisodes,
-                      ),
-                      _ControlIconButton(
-                        key: const ValueKey('player-next'),
-                        tooltip: '下一集（N）',
-                        icon: Icons.skip_next_rounded,
-                        onPressed: canNext ? onNext : null,
-                      ),
-                    ] else if (queueAvailable)
-                      _ControlIconButton(
-                        key: const ValueKey('player-episodes'),
-                        tooltip: '选集',
-                        icon: Icons.video_collection_rounded,
-                        onPressed: onEpisodes,
-                      ),
-                    const SizedBox(width: 4),
-                    Text(
-                      veryCompact
-                          ? _time(position)
-                          : '${_time(position)} / ${_time(duration)}',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontFamily: 'Cascadia Mono',
-                        fontSize: veryCompact ? 9 : 10,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (!compact) ...[
-                      _ControlIconButton(
-                        tooltip: volume <= 0 ? '取消静音（M）' : '静音（M）',
-                        icon: _volumeIcon(volume),
-                        onPressed: onMute,
-                      ),
-                      SizedBox(
-                        key: const ValueKey('player-volume'),
-                        width: 92,
-                        child: Slider(
-                          value: volume.clamp(0, 100),
-                          min: 0,
-                          max: 100,
-                          onChanged: onVolumeChanged,
-                        ),
-                      ),
-                    ],
-                    _ControlIconButton(
-                      key: const ValueKey('player-audio'),
-                      tooltip: '音轨：$audioLabel',
-                      icon: Icons.graphic_eq_rounded,
-                      onPressed: onAudio,
-                    ),
-                    _ControlIconButton(
-                      key: const ValueKey('player-subtitle'),
-                      tooltip: '字幕：$subtitleLabel',
-                      icon: subtitleLabel == '关闭'
-                          ? Icons.subtitles_off_rounded
-                          : Icons.subtitles_rounded,
-                      onPressed: onSubtitle,
-                    ),
-                    if (onDanmaku != null)
-                      _ControlIconButton(
-                        key: const ValueKey('player-danmaku'),
-                        tooltip: danmakuEnabled ? '弹幕设置' : '弹幕（已关闭）',
-                        icon: danmakuEnabled
-                            ? Icons.comment_rounded
-                            : Icons.comments_disabled_rounded,
-                        onPressed: onDanmaku,
-                      ),
-                    if (!veryCompact)
-                      _RateButton(rate: rate, onChanged: onRateChanged),
-                    if (onPip != null)
-                      _ControlIconButton(
-                        key: const ValueKey('player-pip'),
-                        tooltip: isPip ? '退出置顶小窗' : '画中画置顶小窗',
-                        icon: isPip
-                            ? Icons.picture_in_picture_alt_rounded
-                            : Icons.picture_in_picture_rounded,
-                        onPressed: onPip,
-                      ),
-                    _ControlIconButton(
-                      key: const ValueKey('player-fullscreen'),
-                      tooltip: fullScreen ? '退出全屏（F）' : '全屏（F）',
-                      icon: fullScreen
-                          ? Icons.fullscreen_exit_rounded
-                          : Icons.fullscreen_rounded,
-                      onPressed: onFullScreen,
-                    ),
-                  ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-    ),
-  );
-},
-);
-}
+        );
+      },
+    );
+  }
 }
 
 class _Timeline extends StatelessWidget {
@@ -851,19 +1037,54 @@ class _ControlIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      onPressed: onPressed,
-      style: prominent
-          ? IconButton.styleFrom(
-              foregroundColor: AppColors.onSpotlight,
-              backgroundColor: AppColors.spotlight,
-              shadowColor: AppColors.spotlight.withValues(alpha: 0.45),
-              elevation: 8,
-            )
-          : null,
-      icon: Icon(icon, size: prominent ? 25 : 21),
+    final Widget button;
+    if (prominent) {
+      button = Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.spotlight.withValues(alpha: 0.45),
+              blurRadius: 18,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: IconButton(
+          tooltip: tooltip,
+          visualDensity: VisualDensity.compact,
+          onPressed: onPressed,
+          style: IconButton.styleFrom(
+            foregroundColor: AppColors.onSpotlight,
+            backgroundColor: AppColors.spotlight,
+            shadowColor: Colors.black.withValues(alpha: 0.35),
+            elevation: 8,
+            padding: const EdgeInsets.all(9),
+          ),
+          icon: Icon(icon, size: 24),
+        ),
+      );
+    } else {
+      button = IconButton(
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          foregroundColor: AppColors.textPrimary,
+          hoverColor: Colors.white.withValues(alpha: 0.12),
+          focusColor: AppColors.spotlight.withValues(alpha: 0.2),
+        ),
+        icon: Icon(icon, size: 20),
+      );
+    }
+
+    return PeekMagneticButton(
+      enabled: onPressed != null,
+      maxOffset: prominent ? 5.0 : 3.5,
+      pressScale: prominent ? 0.92 : 0.94,
+      hoverScale: prominent ? 1.05 : 1.04,
+      child: button,
     );
   }
 }
@@ -885,6 +1106,10 @@ class _RateButton extends StatelessWidget {
       onSelected: onChanged,
       color: AppColors.surfaceHigh,
       position: PopupMenuPosition.over,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+      ),
       itemBuilder: (context) => [
         for (final value in _rates)
           PopupMenuItem(
@@ -906,14 +1131,23 @@ class _RateButton extends StatelessWidget {
             ),
           ),
       ],
-      child: SizedBox(
-        width: 46,
-        height: 44,
-        child: Center(
+      child: PeekMagneticButton(
+        maxOffset: 3.0,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.14),
+              width: 0.8,
+            ),
+          ),
           child: Text(
             '${rate}x',
             style: const TextStyle(
-              color: AppColors.textSecondary,
+              color: AppColors.textPrimary,
               fontFamily: 'Cascadia Mono',
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -946,15 +1180,24 @@ class _MethodBadge extends StatelessWidget {
     final showMethod = MediaQuery.sizeOf(context).width >= 560;
     return Tooltip(
       message: '画质上限：${quality.label}',
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.48),
-        borderRadius: BorderRadius.circular(99),
-        child: InkWell(
-          key: const ValueKey('player-quality'),
-          borderRadius: BorderRadius.circular(99),
-          onTap: onPressed,
+      child: PeekMagneticButton(
+        enabled: onPressed != null,
+        maxOffset: 3.0,
+        child: Material(
+          color: Colors.black.withValues(alpha: 0.42),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(99),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.18),
+              width: 1.0,
+            ),
+          ),
+          child: InkWell(
+            key: const ValueKey('player-quality'),
+            borderRadius: BorderRadius.circular(99),
+            onTap: onPressed,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+            padding: const EdgeInsets.fromLTRB(11, 6, 9, 6),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -965,14 +1208,14 @@ class _MethodBadge extends StatelessWidget {
                       color: AppColors.textTertiary,
                       fontFamily: 'Cascadia Mono',
                       fontSize: 9,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.6,
                     ),
                   ),
                   Container(
                     width: 1,
                     height: 11,
                     margin: const EdgeInsets.symmetric(horizontal: 8),
-                    color: Colors.white.withValues(alpha: 0.14),
+                    color: Colors.white.withValues(alpha: 0.16),
                   ),
                 ],
                 Text(
@@ -996,8 +1239,9 @@ class _MethodBadge extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _BufferingIndicator extends StatelessWidget {
@@ -1043,60 +1287,107 @@ class PlaybackSeekFeedback extends StatelessWidget {
     final forward = deltaSeconds >= 0;
     final seconds = deltaSeconds.abs();
     final label = '${forward ? '快进' : '快退'} $seconds 秒';
-    return Semantics(
+    final themeColor = forward ? AppColors.spotlight : AppColors.cyan;
+
+    final indicator = Semantics(
       liveRegion: true,
       label: '$label，当前位置 ${_time(position)}',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xE60D1018),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.32),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                forward ? Icons.forward_10_rounded : Icons.replay_10_rounded,
-                color: AppColors.spotlight,
-                size: 30,
-              ),
-              const SizedBox(width: 12),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _time(position),
-                    style: const TextStyle(
-                      color: AppColors.textTertiary,
-                      fontFamily: 'Cascadia Mono',
-                      fontSize: 11,
-                    ),
-                  ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.42),
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.16),
+                  Colors.white.withValues(alpha: 0.04),
+                  Colors.black.withValues(alpha: 0.38),
                 ],
               ),
-            ],
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.22),
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: themeColor.withValues(alpha: 0.22),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  forward ? Icons.forward_10_rounded : Icons.replay_10_rounded,
+                  color: themeColor,
+                  size: 15,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                Container(
+                  width: 3,
+                  height: 3,
+                  margin: const EdgeInsets.symmetric(horizontal: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Text(
+                  _time(position),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontFamily: 'Cascadia Mono',
+                    fontSize: 12.0,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
+
+    if (AppMotion.isTest) return indicator;
+    final beamed = PeekBorderBeam(
+      borderRadius: BorderRadius.circular(20),
+      beamColor: themeColor,
+      secondaryColor: forward ? AppColors.spotlightLight : AppColors.cyanLight,
+      duration: const Duration(seconds: 3),
+      child: indicator,
+    );
+    return beamed
+        .animate()
+        .fadeIn(duration: const Duration(milliseconds: 140))
+        .slideY(
+          begin: -0.12,
+          end: 0,
+          duration: const Duration(milliseconds: 160),
+          curve: PeekCurves.spatialEnter,
+        );
   }
 }
 

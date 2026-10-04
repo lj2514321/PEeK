@@ -126,21 +126,31 @@ flutter build windows --profile
 
 ```text
 Flutter Presentation
-  ├── Home / Library / Favorites / Search / Details
+  ├── AppRoutes (中心化类型安全路由门面、双层空间景深路由与影院光幕转场)
+  ├── Home / Library / Favorites / Search / Details / People
+  ├── Player / Danmaku / Download / Analytics / Dedupe
   └── PlaybackPage + PlaybackInteractionCoordinator
              │
              ▼
-Application & Services
+Application & Services (Composition Root: AppProviders)
   ├── HomeFeedService / PlaybackPreparationService
   ├── MediaLibraryService / LocalMediaLibraryService / PlaybackService
   └── SessionExpiryCoordinator
              │
              ▼
+Core Domain (lib/src/core/domain/)
+  ├── MediaItem / MediaStreamInfo / MediaFilter
+  ├── ServerAccount / ServerType / ServerDiscovery
+  ├── PlaybackPlan / PlaybackSettings
+  └── ExternalIdInfo / RemoteSearchResult
+             │
+             ▼
 Infrastructure
-  ├── Dio + Jellyfin/Emby API + 本地文件系统
+  ├── Dio + Jellyfin/Emby Gateway + 本地文件系统
   ├── Windows Secure Storage + JSON Cache/Catalog
+  ├── PeekSmoothScroll 全局平滑滚动引擎 + PeekMotion
   ├── PlaybackRuntime → media_kit / libmpv
-  └── Windows SMTC / WASAPI Session
+  └── Windows SMTC / WASAPI Audio Session
 ```
 
 播放器通过可替换的 `PlaybackRuntime` 隔离 media_kit，页面级测试可以使用假运行时验证打开、快进、上报和资源释放，而不需要启动 libmpv。
@@ -151,19 +161,27 @@ Infrastructure
 
 ```text
 lib/src/
-├── app/                  # 主题、玻璃拟态组件与窗口外壳
-├── core/                 # 网络协调、本地存储与通用展示组件
-└── features/
-    ├── home/             # 首页与主导航
-    ├── library/          # 媒体库浏览
-    ├── local_library/    # 本地目录、扫描、持久化与播放计划
-    ├── favorites/        # 收藏页
-    ├── people/             # 演员浏览
-    ├── search/           # 全局搜索
-    ├── details/          # 媒体与演员详情
-    ├── player/           # 播放计划、运行时、控制器与诊断
-    ├── servers/          # 服务发现、认证及媒体 API
-    └── settings/         # 播放偏好
+├── app/                  # 主题、玻璃拟态组件、窗口外壳、路由门面 (AppRoutes) 与装配中心 (AppProviders)
+├── core/                 # 核心基础设施与公共领域层
+│   ├── domain/           # 核心公共领域模型 (MediaItem, ServerAccount, PlaybackPlan, PlaybackSettings)
+│   ├── network/          # 底层 Dio 网络客户端与会话失效协调器 (SessionExpiryCoordinator)
+│   ├── storage/          # 系统安全凭据、媒体与历史 JSON 本地存储
+│   └── presentation/     # 全局平滑滚动引擎 (PeekSmoothScroll)、动效系统 (PeekMotion) 与图片组件
+└── features/             # 业务特性模块（单向依赖 Core，模块间彻底消除循环依赖）
+    ├── home/             # 首页轮播、继续观看与主导航 Shell
+    ├── library/          # 媒体库浏览、多维过滤与批量管理
+    ├── local_library/    # 本地目录、扫描、持久化与本地播放计划
+    ├── favorites/        # 跨库收藏与状态即时同步
+    ├── people/           # 演员全量检索与演职员作品集浏览
+    ├── search/           # 全局搜索、拼音与首字母联想匹配
+    ├── details/          # 媒体详情、剧季展示与刮削智能识别
+    ├── player/           # 播放核心、多轨与字幕控制、画质平滑切换与诊断
+    ├── danmaku/          # 弹幕悬浮流渲染与在线匹配设置面板
+    ├── download/         # 剧集离线批量下载与任务管理器
+    ├── analytics/        # 观影统计与数据可视化分析仪表盘
+    ├── dedupe/           # 重复媒体版本识别与合并清理
+    ├── servers/          # 服务发现、认证及 Emby/Jellyfin Gateway 协议适配
+    └── settings/         # 硬件解码与播放偏好配置
 ```
 
 视觉规范位于 [design-system](design-system/default/MASTER.md)，播放兼容性边界记录在 [播放验证矩阵](docs/PLAYBACK_TEST_MATRIX.md)。
@@ -177,7 +195,7 @@ flutter test
 flutter build windows --profile
 ```
 
-当前测试覆盖服务发现、认证与安全存储、媒体缓存、媒体库与搜索、播放计划、播放器控件、播放页面生命周期、Windows 窗口和系统媒体桥接等关键路径。
+当前全工程自动化测试用例达 **316 项并保持 100% 通过**，全面覆盖领域模型、空间景深路由门面、服务发现、认证与安全存储、平滑滚动、媒体缓存、媒体库与搜索、播放计划、播放器控件、播放页面生命周期、Windows 窗口和系统媒体桥接等关键路径。
 
 推送到 `master` 或提交 Pull Request 时，GitHub Actions 会自动执行格式检查、静态分析、全量测试与 Windows MSIX 打包。推送 `vMAJOR.MINOR.PATCH` 标签会自动创建 GitHub Release。
 
