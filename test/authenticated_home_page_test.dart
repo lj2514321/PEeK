@@ -293,6 +293,7 @@ class _HomeLibraryService extends MediaLibraryService {
     AuthenticatedServer account, {
     int limit = 18,
     bool forceRefresh = false,
+    bool excludeActiveSessions = true,
   }) async {
     await _wait();
     resumeRequests += 1;

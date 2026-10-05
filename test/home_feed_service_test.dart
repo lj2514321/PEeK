@@ -331,6 +331,7 @@ class _FakeLibraryService extends MediaLibraryService {
     AuthenticatedServer account, {
     int limit = 18,
     bool forceRefresh = false,
+    bool excludeActiveSessions = true,
   }) async {
     resumeRequests += 1;
     lastResumeForceRefresh = forceRefresh;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:embyplayer/src/app/app_chrome.dart';
@@ -13,6 +14,7 @@ import 'package:embyplayer/src/features/details/presentation/person_works_page.d
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
+import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:embyplayer/src/features/scrobble/presentation/bangumi_summary_card.dart';
 import 'package:embyplayer/src/features/download/presentation/batch_download_sheet.dart';
 import 'package:embyplayer/src/features/library/presentation/media_library_page.dart';
@@ -223,12 +225,20 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
       _playbackError = null;
     });
     try {
+      final coordinator = ref.read(globalPlaybackCoordinatorProvider.notifier);
+      final livePos = fromBeginning
+          ? Duration.zero
+          : coordinator.getEffectivePosition(targetItem.id);
+      final effectiveTarget = (livePos != null && livePos > targetItem.resumePosition)
+          ? targetItem.copyWith(resumePosition: livePos)
+          : targetItem;
       final prepared = await ref
           .read(playbackPreparationProvider)
           .prepare(
             widget.account,
-            targetItem,
+            effectiveTarget,
             fromBeginning: fromBeginning,
+            startPosition: livePos,
             mediaSourceId: targetItem.id == _item.id ? _selectedMediaSourceId : null,
           );
       if (!mounted) return;
@@ -505,6 +515,14 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
+      if (prev?.mode == PlaybackPresentationMode.mini &&
+          next.mode == PlaybackPresentationMode.hidden) {
+        if (mounted && !_item.isLocal) {
+          unawaited(_loadDetails(forceRefresh: true));
+        }
+      }
+    });
     final currentSeasonEpisodes =
         _seasonEpisodeMap[_selectedSeasonNumber] ??
         (_episodes.isNotEmpty ? _episodes : const <MediaItem>[]);
@@ -982,7 +1000,7 @@ class _DetailPoster extends StatelessWidget {
   }
 }
 
-class _DetailCopy extends StatelessWidget {
+class _DetailCopy extends ConsumerWidget {
   const _DetailCopy({
     required this.item,
     this.collectionName,
@@ -1024,8 +1042,14 @@ class _DetailCopy extends StatelessWidget {
   final VoidCallback? onDownload;
 
   @override
-  Widget build(BuildContext context) {
-    final resume = item.resumePosition > Duration.zero;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
+      (s) => s.positionFor(item.id),
+    ));
+    final effectivePos = (livePos != null && livePos > Duration.zero)
+        ? livePos
+        : item.resumePosition;
+    final resume = effectivePos > Duration.zero;
     final badges = _buildSpecBadges(item);
 
     return Column(
@@ -1191,7 +1215,7 @@ class _DetailCopy extends StatelessWidget {
             compact: compact,
             resume: resume,
             planning: planningPlayback,
-            resumeLabel: _position(item.resumePosition),
+            resumeLabel: _position(effectivePos),
             onPlay: onPlay,
             onPlayFromBeginning: onPlayFromBeginning,
             onPlayExternal: onPlayExternal,
@@ -1758,7 +1782,7 @@ class _EpisodePickerSection extends StatelessWidget {
   }
 }
 
-class _EpisodeCard extends StatelessWidget {
+class _EpisodeCard extends ConsumerWidget {
   const _EpisodeCard({
     required this.episode,
     required this.isPlanning,
@@ -1770,9 +1794,15 @@ class _EpisodeCard extends StatelessWidget {
   final VoidCallback onPlay;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
+      (s) => s.positionFor(episode.id),
+    ));
+    final effectiveResume = (livePos != null && livePos > Duration.zero)
+        ? livePos
+        : episode.resumePosition;
     final epNum = episode.indexNumber != null ? 'E${episode.indexNumber}' : '';
-    final hasResume = episode.resumePosition > Duration.zero;
+    final hasResume = effectiveResume > Duration.zero;
 
     return Container(
       width: 280,
@@ -1870,7 +1900,7 @@ class _EpisodeCard extends StatelessWidget {
                             bottom: 0,
                             child: LinearProgressIndicator(
                               value:
-                                  (episode.resumePosition.inMilliseconds /
+                                  (effectiveResume.inMilliseconds /
                                           episode.runTime!.inMilliseconds)
                                       .clamp(0.0, 1.0),
                               backgroundColor: Colors.black45,

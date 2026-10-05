@@ -1347,6 +1347,7 @@ class _TopCommandBar extends StatelessWidget {
                   ),
                   SizedBox(width: compact ? 8 : 12),
                   _AccountStatus(
+                    key: const ValueKey('top-account-status'),
                     server: server,
                     account: account,
                     compact: compact,
@@ -1533,6 +1534,7 @@ class _TopDestinationHeading extends StatelessWidget {
 
 class _AccountStatus extends StatelessWidget {
   const _AccountStatus({
+    super.key,
     required this.server,
     required this.account,
     required this.compact,
@@ -1604,12 +1606,6 @@ class _AccountStatus extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 14,
-                      color: AppColors.textTertiary,
                     ),
                   ],
                 ],

@@ -11,6 +11,7 @@ import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/home/domain/home_feed.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
+import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -204,9 +205,14 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     if (_planningItemId != null) return;
     setState(() => _planningItemId = item.id);
     try {
+      final coordinator = ref.read(globalPlaybackCoordinatorProvider.notifier);
+      final livePos = coordinator.getEffectivePosition(item.id);
+      final effectiveItem = livePos != null && livePos > item.resumePosition
+          ? item.copyWith(resumePosition: livePos)
+          : item;
       final prepared = await ref
           .read(playbackPreparationProvider)
-          .prepare(widget.account, item);
+          .prepare(widget.account, effectiveItem, startPosition: livePos);
       if (!mounted) return;
 
       if (prepared.settings.useExternalPlayer) {
@@ -260,6 +266,12 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
+      if (prev?.mode == PlaybackPresentationMode.mini &&
+          next.mode == PlaybackPresentationMode.hidden) {
+        unawaited(_refreshContinueWatching());
+      }
+    });
     final feed = _feed;
     return RefreshIndicator(
       onRefresh: () => _load(forceRefresh: true),
@@ -791,7 +803,7 @@ class _CarouselControls extends StatelessWidget {
   }
 }
 
-class _HomeHero extends StatelessWidget {
+class _HomeHero extends ConsumerWidget {
   const _HomeHero({
     super.key,
     required this.item,
@@ -808,11 +820,17 @@ class _HomeHero extends StatelessWidget {
   final VoidCallback onDetails;
 
   @override
-  Widget build(BuildContext context) {
-    final resumable = item.resumePosition > Duration.zero;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
+      (s) => s.positionFor(item.id),
+    ));
+    final effectivePos = (livePos != null && livePos > Duration.zero)
+        ? livePos
+        : item.resumePosition;
+    final resumable = effectivePos > Duration.zero;
     final progress = item.runTime == null || item.runTime == Duration.zero
         ? 0.0
-        : (item.resumePosition.inMilliseconds / item.runTime!.inMilliseconds)
+        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds)
               .clamp(0.0, 1.0);
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -909,7 +927,7 @@ class _HomeHero extends StatelessWidget {
                           const SizedBox(height: 20),
                           _ProjectionProgress(
                             value: progress,
-                            position: item.resumePosition,
+                            position: effectivePos,
                             duration: item.runTime,
                           ),
                         ],
@@ -1084,7 +1102,7 @@ class _MediaTrack extends StatelessWidget {
   }
 }
 
-class _HomeMediaCard extends StatelessWidget {
+class _HomeMediaCard extends ConsumerWidget {
   const _HomeMediaCard({
     required this.item,
     required this.portrait,
@@ -1096,10 +1114,16 @@ class _HomeMediaCard extends StatelessWidget {
   final VoidCallback onOpen;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
+      (s) => s.positionFor(item.id),
+    ));
+    final effectivePos = (livePos != null && livePos > Duration.zero)
+        ? livePos
+        : item.resumePosition;
     final progress = item.runTime == null || item.runTime == Duration.zero
         ? 0.0
-        : (item.resumePosition.inMilliseconds / item.runTime!.inMilliseconds)
+        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds)
               .clamp(0.0, 1.0);
     return PeekContextMenuRegion(
       items: (context) => [

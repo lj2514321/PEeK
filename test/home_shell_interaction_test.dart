@@ -289,6 +289,58 @@ void main() {
     expect(find.text('演员列表'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'renders account status without invalid downward arrow and navigates to server settings',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final account = _account();
+      final library = _ShellLibraryService();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            serverAuthenticationProvider.overrideWithValue(
+              _ShellAuthenticationService(account),
+            ),
+            mediaLibraryProvider.overrideWithValue(library),
+            searchHistoryStoreProvider.overrideWithValue(
+              MemorySearchHistoryStore(),
+            ),
+            playbackSettingsStoreProvider.overrideWithValue(
+              MemoryPlaybackSettingsStore(),
+            ),
+          ],
+          child: const EmbyPlayerApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final accountStatusFinder = find.byKey(
+        const ValueKey('top-account-status'),
+      );
+      expect(accountStatusFinder, findsOneWidget);
+      expect(
+        find.descendant(of: accountStatusFinder, matching: find.text('Alex')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: accountStatusFinder,
+          matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
+        ),
+        findsNothing,
+      );
+
+      await tester.tap(accountStatusFinder);
+      await tester.pumpAndSettle();
+
+      expect(find.text('服务器'), findsWidgets);
+    },
+  );
 }
 
 class _ShellAuthenticationService extends ServerAuthenticationService {
@@ -427,6 +479,7 @@ class _ShellLibraryService extends MediaLibraryService {
     AuthenticatedServer account, {
     int limit = 18,
     bool forceRefresh = false,
+    bool excludeActiveSessions = true,
   }) async => const [];
 
   @override

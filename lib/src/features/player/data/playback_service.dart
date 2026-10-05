@@ -177,7 +177,12 @@ class PlaybackService {
     AuthenticatedServer account,
     PlaybackSessionSnapshot snapshot,
   ) {
-    return _report(account, 'Sessions/Playing/Stopped', snapshot);
+    return _report(
+      account,
+      'Sessions/Playing/Stopped',
+      snapshot,
+      eventName: 'Stopped',
+    );
   }
 
   Future<void> markPlayed(AuthenticatedServer account, String itemId) async {
@@ -221,8 +226,11 @@ class PlaybackService {
     };
     if (eventName != null) body['EventName'] = eventName;
     try {
+      final uri = _appendPath(account.server.apiBaseUri, path).replace(
+        queryParameters: eventName != null ? {'EventName': eventName} : null,
+      );
       await _dio.postUri<void>(
-        _appendPath(account.server.apiBaseUri, path),
+        uri,
         data: body,
         options: Options(
           contentType: Headers.jsonContentType,

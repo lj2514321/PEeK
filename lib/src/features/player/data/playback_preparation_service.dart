@@ -42,18 +42,25 @@ class PlaybackPreparationService {
     AuthenticatedServer? account,
     MediaItem item, {
     bool fromBeginning = false,
+    Duration? startPosition,
     String? mediaSourceId,
   }) async {
+    final resumeAt = fromBeginning
+        ? Duration.zero
+        : (startPosition ?? item.resumePosition);
+
     if (item.isLocal) {
       final localLibrary = _localLibrary;
       if (localLibrary == null) {
         throw const PlaybackServiceException('本地媒体库服务尚未初始化。');
       }
       final settingsFuture = _readSettings();
-      final plan = await localLibrary.createPlaybackPlan(item);
+      final plan = await localLibrary.createPlaybackPlan(
+        item.copyWith(resumePosition: resumeAt),
+      );
       return PreparedPlayback(
-        item: item,
-        plan: plan,
+        item: item.copyWith(resumePosition: resumeAt),
+        plan: plan.copyWith(startPosition: resumeAt),
         settings: await settingsFuture,
       );
     }
@@ -69,6 +76,7 @@ class PlaybackPreparationService {
         final localItem = item.copyWith(
           source: MediaItemSource.local,
           sourcePath: completedTask.savePath,
+          resumePosition: resumeAt,
         );
         final settingsFuture = _readSettings();
         final queueFuture = account != null ? _buildQueue(account, item) : null;
@@ -79,7 +87,7 @@ class PlaybackPreparationService {
           streamUri: Uri.file(file.absolute.path, windows: Platform.isWindows),
           method: PlaybackMethod.directPlay,
           duration: item.runTime,
-          startPosition: fromBeginning ? Duration.zero : item.resumePosition,
+          startPosition: resumeAt,
         );
         return PreparedPlayback(
           item: localItem,
@@ -98,11 +106,11 @@ class PlaybackPreparationService {
     final plan = await _playback.createPlan(
       account,
       item,
-      startPosition: fromBeginning ? Duration.zero : null,
+      startPosition: fromBeginning ? Duration.zero : startPosition,
       mediaSourceId: mediaSourceId,
     );
     return PreparedPlayback(
-      item: item,
+      item: item.copyWith(resumePosition: resumeAt),
       plan: plan,
       settings: await settingsFuture,
       queue: await queueFuture,

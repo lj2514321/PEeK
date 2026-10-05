@@ -15,6 +15,7 @@ import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
+import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
@@ -467,6 +468,14 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
+      if (prev?.mode == PlaybackPresentationMode.mini &&
+          next.mode == PlaybackPresentationMode.hidden) {
+        if (prev?.item != null) {
+          unawaited(_refreshSingleItem(prev!.item!));
+        }
+      }
+    });
     final account = widget.account;
 
     if (_loadingCatalog && _libraries.isEmpty) {
@@ -2104,7 +2113,7 @@ class _MediaGrid extends StatelessWidget {
   }
 }
 
-class _MediaCard extends StatelessWidget {
+class _MediaCard extends ConsumerWidget {
   const _MediaCard({
     required this.item,
     required this.selectionMode,
@@ -2124,10 +2133,16 @@ class _MediaCard extends StatelessWidget {
   final VoidCallback? onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
+      (s) => s.positionFor(item.id),
+    ));
+    final effectivePos = (livePos != null && livePos > Duration.zero)
+        ? livePos
+        : item.resumePosition;
     final progress = item.runTime == null || item.runTime == Duration.zero
         ? 0.0
-        : (item.resumePosition.inMilliseconds / item.runTime!.inMilliseconds)
+        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds)
               .clamp(0.0, 1.0);
     final browsable =
         item.kind == MediaItemKind.folder ||

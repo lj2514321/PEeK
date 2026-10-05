@@ -573,6 +573,7 @@ class MediaLibraryService {
     AuthenticatedServer account, {
     int limit = 18,
     bool forceRefresh = false,
+    bool excludeActiveSessions = true,
   }) async {
     final query = <String, String>{
       'UserId': account.userId,
@@ -586,7 +587,7 @@ class MediaLibraryService {
       'EnableImageTypes': 'Primary,Backdrop',
       'EnableImages': 'true',
       'EnableUserData': 'true',
-      'ExcludeActiveSessions': 'true',
+      'ExcludeActiveSessions': excludeActiveSessions ? 'true' : 'false',
       'StartIndex': '0',
       'Limit': '$limit',
       'EnableTotalRecordCount': 'true',
@@ -1098,6 +1099,15 @@ class MediaLibraryService {
       }
     } on DioException catch (error) {
       throw _mapDioException(error);
+    }
+  }
+
+  /// Clears the internal HTTP cache so that subsequent requests fetch fresh data.
+  Future<void> invalidateCache() async {
+    try {
+      await _cache.clear();
+    } on Object {
+      // Cache cleanup must not block on error.
     }
   }
 

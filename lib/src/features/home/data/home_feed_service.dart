@@ -59,7 +59,11 @@ class HomeFeedService {
     HomeFeed currentFeed,
   ) async {
     final refreshed = await _capture(
-      () => _library.getResumeItems(account, forceRefresh: true),
+      () => _library.getResumeItems(
+        account,
+        forceRefresh: true,
+        excludeActiveSessions: false,
+      ),
     );
     if (refreshed.authenticationExpired) {
       throw MediaLibraryException(

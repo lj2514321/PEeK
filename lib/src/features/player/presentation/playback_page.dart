@@ -109,6 +109,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Timer? _systemVolumeRetryTimer;
   late final PlaybackDiagnosticLog _diagnosticLog;
   late final SystemMediaSession _systemMediaSession;
+  late final PlaybackService _playbackService;
+  late final GlobalPlaybackCoordinator _playbackCoordinator;
+  late final MediaLibraryService _mediaLibrary;
   final PlaybackDiagnosticsService _diagnosticsService =
       const PlaybackDiagnosticsService();
   bool _minimized = false;
@@ -197,6 +200,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _pageFocusNode.requestFocus();
     _diagnosticLog = ref.read(playbackDiagnosticLogProvider);
     _systemMediaSession = ref.read(windowsMediaSessionProvider)();
+    _playbackService = ref.read(playbackServiceProvider);
+    _playbackCoordinator = ref.read(globalPlaybackCoordinatorProvider.notifier);
+    _mediaLibrary = ref.read(mediaLibraryProvider);
     AppChrome.enterImmersive();
     unawaited(_fetchDanmaku());
     unawaited(_initBangumi());
@@ -247,15 +253,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     Future<void>.microtask(_openInitialMedia);
     Future<void>.microtask(() {
       if (mounted) {
-        ref
-            .read(globalPlaybackCoordinatorProvider.notifier)
-            .registerActivePlayback(
-              account: widget.account,
-              item: widget.item,
-              plan: widget.plan,
-              queue: widget.queue,
-              runtime: _runtime,
-            );
+        _playbackCoordinator.registerActivePlayback(
+          account: widget.account,
+          item: widget.item,
+          plan: widget.plan,
+          queue: widget.queue,
+          runtime: _runtime,
+          initialPosition: _position,
+        );
       }
     });
   }
@@ -534,7 +539,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   void _startProgressTimer() {
     _progressTimer?.cancel();
     _progressTimer = Timer.periodic(
-      const Duration(seconds: 10),
+      const Duration(milliseconds: 3500),
       (_) => _safeReportProgress('TimeUpdate'),
     );
   }
@@ -2191,9 +2196,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     final account = widget.account;
     if (account == null || _item.isLocal) return;
     try {
-      await ref
-          .read(playbackServiceProvider)
-          .reportProgress(account, _snapshot(), eventName: eventName);
+      await _playbackService.reportProgress(
+        account,
+        _snapshot(),
+        eventName: eventName,
+      );
     } catch (_) {
       // A later periodic update can recover from a transient failure.
     }
@@ -2204,10 +2211,10 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     final account = widget.account;
     if (account == null || _item.isLocal) return;
     _reportedStopped = true;
+    _playbackCoordinator.recordPosition(_item.id, _position);
+    unawaited(_mediaLibrary.invalidateCache());
     try {
-      await ref
-          .read(playbackServiceProvider)
-          .reportStopped(account, _snapshot());
+      await _playbackService.reportStopped(account, _snapshot());
     } catch (_) {
       // Closing or rebuilding playback must not be blocked by reporting.
     }
@@ -2217,7 +2224,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     final account = widget.account;
     if (account == null || _item.isLocal) return;
     try {
-      await ref.read(playbackServiceProvider).markPlayed(account, _item.id);
+      await _playbackService.markPlayed(account, _item.id);
     } catch (_) {
       // The completed check-in can still mark the item on the server.
     }
@@ -2464,16 +2471,15 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _systemVolumeRetryTimer?.cancel();
     _interactions.cancelPendingSeek();
 
-    ref
-        .read(globalPlaybackCoordinatorProvider.notifier)
-        .registerActivePlayback(
-          account: widget.account,
-          item: _item,
-          plan: _plan,
-          queue: _queue,
-          runtime: _runtime,
-        );
-    ref.read(globalPlaybackCoordinatorProvider.notifier).minimize();
+    _playbackCoordinator.registerActivePlayback(
+      account: widget.account,
+      item: _item,
+      plan: _plan,
+      queue: _queue,
+      runtime: _runtime,
+      initialPosition: _position,
+    );
+    _playbackCoordinator.minimize();
     if (_remotePlayback) {
       await _safeReportProgress('TimeUpdate');
     }
@@ -2485,11 +2491,8 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   Future<void> _close() async {
     if (_closing) return;
     setState(() => _closing = true);
-    unawaited(
-      ref
-          .read(globalPlaybackCoordinatorProvider.notifier)
-          .close(disposeRuntime: false),
-    );
+    _playbackCoordinator.recordPosition(_item.id, _position);
+    unawaited(_playbackCoordinator.close(disposeRuntime: false));
     _progressTimer?.cancel();
     _interactions.cancelControlsHide();
     _nextEpisodeTimer?.cancel();

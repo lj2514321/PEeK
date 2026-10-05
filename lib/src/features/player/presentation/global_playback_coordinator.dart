@@ -30,6 +30,8 @@ class GlobalPlaybackState {
     this.playing = false,
     this.position = Duration.zero,
     this.duration = Duration.zero,
+    this.recentPositions = const {},
+    this.revision = 0,
   });
 
   final PlaybackPresentationMode mode;
@@ -41,6 +43,21 @@ class GlobalPlaybackState {
   final bool playing;
   final Duration position;
   final Duration duration;
+  final Map<String, Duration> recentPositions;
+  final int revision;
+
+  Duration? positionFor(String itemId) {
+    if (item?.id == itemId && position > Duration.zero) return position;
+    return recentPositions[itemId];
+  }
+
+  double? progressFor(String itemId, Duration? totalDuration) {
+    final pos = positionFor(itemId);
+    if (pos == null || totalDuration == null || totalDuration <= Duration.zero) {
+      return null;
+    }
+    return (pos.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
+  }
 
   GlobalPlaybackState copyWith({
     PlaybackPresentationMode? mode,
@@ -52,6 +69,8 @@ class GlobalPlaybackState {
     bool? playing,
     Duration? position,
     Duration? duration,
+    Map<String, Duration>? recentPositions,
+    int? revision,
   }) {
     return GlobalPlaybackState(
       mode: mode ?? this.mode,
@@ -63,6 +82,8 @@ class GlobalPlaybackState {
       playing: playing ?? this.playing,
       position: position ?? this.position,
       duration: duration ?? this.duration,
+      recentPositions: recentPositions ?? this.recentPositions,
+      revision: revision ?? this.revision,
     );
   }
 }
@@ -86,34 +107,36 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     return const GlobalPlaybackState();
   }
 
+  Duration? getEffectivePosition(String itemId) => state.positionFor(itemId);
+
+  void recordPosition(String itemId, Duration position) {
+    if (position <= Duration.zero) return;
+    final updated = Map<String, Duration>.from(state.recentPositions);
+    updated[itemId] = position;
+    state = state.copyWith(
+      recentPositions: updated,
+      revision: state.revision + 1,
+    );
+  }
+
   void registerActivePlayback({
     required AuthenticatedServer? account,
     required MediaItem item,
     required PlaybackPlan plan,
     PlaybackQueue? queue,
     required PlaybackRuntime runtime,
+    Duration? initialPosition,
   }) {
     _cancelSubscriptions();
     _activeRuntime = runtime;
 
-    _subscriptions.add(
-      runtime.playingStream.listen((playing) {
-        state = state.copyWith(playing: playing);
-        _syncMiniProgressTimer();
-      }),
-    );
-    _subscriptions.add(
-      runtime.positionStream.listen((position) {
-        if (position > Duration.zero || state.position == Duration.zero) {
-          state = state.copyWith(position: position);
-        }
-      }),
-    );
-    _subscriptions.add(
-      runtime.durationStream.listen((duration) {
-        state = state.copyWith(duration: duration);
-      }),
-    );
+    final initialPos = (initialPosition != null && initialPosition > Duration.zero)
+        ? initialPosition
+        : runtime.position;
+    final updatedPositions = Map<String, Duration>.from(state.recentPositions);
+    if (initialPos > Duration.zero) {
+      updatedPositions[item.id] = initialPos;
+    }
 
     state = GlobalPlaybackState(
       mode: PlaybackPresentationMode.full,
@@ -123,7 +146,44 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
       queue: queue,
       runtime: runtime,
       playing: runtime.playing,
-      position: runtime.position,
+      position: initialPos,
+      duration: plan.duration ?? Duration.zero,
+      recentPositions: updatedPositions,
+      revision: state.revision + 1,
+    );
+
+    _subscriptions.add(
+      runtime.playingStream.listen((playing) {
+        state = state.copyWith(playing: playing);
+        _syncMiniProgressTimer();
+      }),
+    );
+
+    DateTime lastPositionUpdateTime = DateTime.now();
+    _subscriptions.add(
+      runtime.positionStream.listen((position) {
+        if (position > Duration.zero || state.position == Duration.zero) {
+          final now = DateTime.now();
+          final diff = (position - state.position).abs();
+          if (diff >= const Duration(seconds: 1) ||
+              now.difference(lastPositionUpdateTime) >= const Duration(milliseconds: 350)) {
+            lastPositionUpdateTime = now;
+            final recents = Map<String, Duration>.from(state.recentPositions);
+            recents[item.id] = position;
+            state = state.copyWith(
+              position: position,
+              recentPositions: recents,
+            );
+          }
+        }
+      }),
+    );
+    _subscriptions.add(
+      runtime.durationStream.listen((duration) {
+        if (duration > Duration.zero) {
+          state = state.copyWith(duration: duration);
+        }
+      }),
     );
   }
 
@@ -176,13 +236,19 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     final runtime = state.runtime;
     if (runtime == null) return;
     await runtime.playOrPause();
+    final isPlaying = runtime.playing;
+    state = state.copyWith(playing: isPlaying);
+    if (state.mode == PlaybackPresentationMode.mini) {
+      unawaited(_reportMiniProgress(isPlaying ? 'Unpause' : 'Pause'));
+    }
     _syncMiniProgressTimer();
   }
 
   Future<void> seekRelative(Duration delta) async {
     final runtime = state.runtime;
     if (runtime == null) return;
-    final target = state.position + delta;
+    final current = state.position > Duration.zero ? state.position : runtime.position;
+    final target = current + delta;
     final clamped = Duration(
       milliseconds: target.inMilliseconds.clamp(
         0,
@@ -191,22 +257,32 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
             : target.inMilliseconds,
       ),
     );
+    final updatedPositions = Map<String, Duration>.from(state.recentPositions);
+    if (state.item != null) {
+      updatedPositions[state.item!.id] = clamped;
+    }
+    state = state.copyWith(
+      position: clamped,
+      recentPositions: updatedPositions,
+    );
     await runtime.seek(clamped);
     if (state.mode == PlaybackPresentationMode.mini) {
-      _reportMiniProgress('Seek');
+      unawaited(_reportMiniProgress('Seek', positionOverride: clamped));
     }
   }
 
   Future<void> close({bool disposeRuntime = true}) async {
     final runtime = state.runtime;
     final item = state.item;
-    final pos = runtime?.position ?? state.position;
+    final pos = (state.position > Duration.zero ? state.position : runtime?.position) ?? Duration.zero;
     final account = state.account;
     final plan = state.plan;
 
     _cancelSubscriptions();
 
-    if (item != null) {
+    final updatedPositions = Map<String, Duration>.from(state.recentPositions);
+    if (item != null && pos > Duration.zero) {
+      updatedPositions[item.id] = pos;
       final watchMinutes = (pos.inSeconds / 60).round();
       if (watchMinutes > 0) {
         unawaited(
@@ -217,6 +293,9 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
         );
       }
     }
+
+    // Invalidate media library HTTP cache so subsequent requests get fresh data
+    unawaited(ref.read(mediaLibraryProvider).invalidateCache());
 
     // If closing from floating mini player, report Stopped to Emby with latest position
     if (disposeRuntime &&
@@ -239,7 +318,12 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
       }
     }
 
-    state = const GlobalPlaybackState(mode: PlaybackPresentationMode.hidden);
+    state = state.copyWith(
+      mode: PlaybackPresentationMode.hidden,
+      playing: false,
+      recentPositions: updatedPositions,
+      revision: state.revision + 1,
+    );
     _activeRuntime = null;
 
     if (disposeRuntime && runtime != null) {
@@ -252,21 +336,28 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     _miniProgressTimer?.cancel();
     _miniProgressTimer = null;
     if (state.mode == PlaybackPresentationMode.mini && state.playing) {
+      unawaited(_reportMiniProgress('TimeUpdate'));
       _miniProgressTimer = Timer.periodic(
-        const Duration(seconds: 5),
+        const Duration(milliseconds: 3500),
         (_) => unawaited(_reportMiniProgress('TimeUpdate')),
       );
     }
   }
 
-  Future<void> _reportMiniProgress(String eventName) async {
+  Future<void> _reportMiniProgress(
+    String eventName, {
+    Duration? positionOverride,
+  }) async {
     final account = state.account;
     final plan = state.plan;
     final item = state.item;
     final runtime = state.runtime;
     if (account == null || plan == null || item == null || item.isLocal) return;
     try {
-      final currentPos = runtime?.position ?? state.position;
+      final currentPos = positionOverride ??
+          (state.position > Duration.zero
+              ? state.position
+              : (runtime?.position ?? Duration.zero));
       final snapshot = PlaybackSessionSnapshot(
         plan: plan,
         position: currentPos,
@@ -279,6 +370,9 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
             snapshot,
             eventName: eventName,
           );
+      final updatedPositions = Map<String, Duration>.from(state.recentPositions);
+      updatedPositions[item.id] = currentPos;
+      state = state.copyWith(recentPositions: updatedPositions);
     } catch (_) {
       // Periodic reporting can fail silently
     }

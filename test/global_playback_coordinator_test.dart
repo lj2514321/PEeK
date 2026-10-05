@@ -187,4 +187,55 @@ void main() {
     await coordinator.seekRelative(const Duration(minutes: 15));
     expect(container.read(globalPlaybackCoordinatorProvider).position, const Duration(minutes: 15));
   });
+
+  test('GlobalPlaybackCoordinator tracks recentPositions, progress, and effective positions', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final coordinator = container.read(globalPlaybackCoordinatorProvider.notifier);
+    final runtime = _FakeRuntime();
+
+    final testPlan = PlaybackPlan(
+      itemId: 'ep1',
+      mediaSourceId: 'src_ep1',
+      playSessionId: 'sess_ep1',
+      streamUri: Uri.parse('http://localhost/ep1.mp4'),
+      method: PlaybackMethod.directPlay,
+      duration: const Duration(minutes: 40),
+    );
+
+    coordinator.registerActivePlayback(
+      account: null,
+      item: const MediaItem(
+        id: 'ep1',
+        name: 'Episode 1',
+        kind: MediaItemKind.episode,
+        runTime: Duration(minutes: 40),
+      ),
+      plan: testPlan,
+      runtime: runtime,
+    );
+
+    // Initial position before any playback progress
+    expect(coordinator.getEffectivePosition('ep1'), isNull);
+
+    // Seek to 10 minutes
+    await coordinator.seekRelative(const Duration(minutes: 10));
+    expect(coordinator.getEffectivePosition('ep1'), const Duration(minutes: 10));
+    expect(
+      container.read(globalPlaybackCoordinatorProvider).progressFor('ep1', const Duration(minutes: 40)),
+      0.25,
+    );
+
+    // Manually record another item position
+    coordinator.recordPosition('ep2', const Duration(minutes: 20));
+    expect(coordinator.getEffectivePosition('ep2'), const Duration(minutes: 20));
+
+    // Close
+    await coordinator.close();
+    expect(container.read(globalPlaybackCoordinatorProvider).mode, PlaybackPresentationMode.hidden);
+    // Recent position persists after close
+    expect(coordinator.getEffectivePosition('ep1'), const Duration(minutes: 10));
+    expect(coordinator.getEffectivePosition('ep2'), const Duration(minutes: 20));
+  });
 }
