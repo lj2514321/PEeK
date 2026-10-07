@@ -79,7 +79,7 @@
 - [x] 中心化类型安全路由门面（`AppRoutes` 封装 `Peek3DPageRoute`，消除 UI 页面跨特性强引用）
 - [x] 依赖倒置与顶层装配中心（`AppProviders` 承载业务装配，底层 `core/network` 净化）
 - [x] 物理动力学平滑滚动引擎（`PeekSmoothScroll` 全局弹簧与反向零黏滞算法覆盖所有滚动视口）
-- [x] 全工程 308 项自动化测试 100% 通过与 Windows Release 安装包构建验证
+- [x] 全工程 323 项自动化测试 100% 通过与 Windows Release 安装包构建验证
 
 ## 持续体验优化
 
@@ -91,4 +91,6 @@
 - [x] 收藏、已观看状态与批量操作
 - [x] 跨媒体库收藏页、分页浏览、快捷移除与撤销
 - [x] 跨媒体库全量演员检索与 ParentId 独立分类过滤
+- [x] 小窗/画中画全局播放进度实时双向同步（`GlobalPlaybackCoordinator` 乐观广播、内存镜像与活跃会话避让）
+- [x] 顶部命令栏用户状态胶囊无障碍 Affordance 规范化，清除无效的向下展开标志
 

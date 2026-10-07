@@ -45,7 +45,7 @@ PEeK 希望提供一套真正适合桌面使用的 Jellyfin/Emby 体验：快速
 | 媒体库 | 本地/远程媒体库统一入口、分页、层级浏览、排序筛选、三档海报密度、远程批量操作 |
 | 搜索与详情 | 全局搜索、人物结果、演员作品、相似内容、收藏与观看状态 |
 | 演员 | 跨媒体库浏览演员，点击进入其全部作品与详情 |
-| 播放 | 本地文件/STRM 直放、Direct Play、Direct Stream、Transcode、断点续播与远程进度上报 |
+| 播放 | 本地文件/STRM 直放、Direct Play、Direct Stream、Transcode、断点续播、远程进度上报与画中画全局双向进度同步 |
 | 播放控制 | 音轨、字幕、章节、倍速、画质、全屏、上一集/下一集 |
 | 本地体验 | 登录持久化、JSON 媒体缓存、图片磁盘缓存、搜索历史与播放偏好 |
 | Windows | SMTC 系统媒体面板、媒体键、应用音频会话音量、MSIX/App Installer |
@@ -133,7 +133,7 @@ Flutter Presentation
              │
              ▼
 Application & Services (Composition Root: AppProviders)
-  ├── HomeFeedService / PlaybackPreparationService
+  ├── HomeFeedService / PlaybackPreparationService / GlobalPlaybackCoordinator
   ├── MediaLibraryService / LocalMediaLibraryService / PlaybackService
   └── SessionExpiryCoordinator
              │
@@ -195,7 +195,7 @@ flutter test
 flutter build windows --profile
 ```
 
-当前全工程自动化测试用例达 **316 项并保持 100% 通过**，全面覆盖领域模型、空间景深路由门面、服务发现、认证与安全存储、平滑滚动、媒体缓存、媒体库与搜索、播放计划、播放器控件、播放页面生命周期、Windows 窗口和系统媒体桥接等关键路径。
+当前全工程自动化测试用例达 **323 项并保持 100% 通过**，全面覆盖领域模型、空间景深路由门面、服务发现、认证与安全存储、平滑滚动、媒体缓存、媒体库与搜索、播放计划、播放器控件、全局播放进度协调与画中画同步、播放页面生命周期、Windows 窗口和系统媒体桥接等关键路径。
 
 推送到 `master` 或提交 Pull Request 时，GitHub Actions 会自动执行格式检查、静态分析、全量测试与 Windows MSIX 打包。推送 `vMAJOR.MINOR.PATCH` 标签会自动创建 GitHub Release。
 

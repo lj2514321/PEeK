@@ -59,9 +59,10 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
 3. 播放准备阶段并行读取本地解码偏好；自动模式向 libmpv 传递 `auto-safe`，不支持的格式由底层回退到软件解码，兼容模式传递 `no`。
 4. 可替换的 `PlaybackRuntime` 将流地址、认证请求头和起始位置交给 media_kit/libmpv；页面测试使用假运行时验证生命周期，播放中切换画质时先准备新计划，打开失败则恢复原播放源。
 5. 仅远程播放由会话协调器发送 Started，并每约十秒及状态变化时发送 Progress。
-6. 远程播放完成、切换条目或关闭窗口时发送 Stopped；本地播放不产生服务器请求。
-7. 诊断面板仅在打开时每三秒读取一次 libmpv 安全属性；关闭面板立即停止采样。
-8. Windows Runner 通过 `ISystemMediaTransportControlsInterop` 为顶层窗口创建单一 SMTC 会话；Dart 侧同步标题、剧集、海报、播放状态、时间轴和队列能力，系统按钮事件再回到现有播放用例。
+6. 全局播放协调与小窗多视图同步：由 `GlobalPlaybackCoordinator` 维护全局播放态，通过 `optimisticPositionStream` 与内存断点镜像向活跃的首页继续观看、媒体详情页及媒体库实时广播播放进度；拉取服务端继续观看时默认启用 `excludeActiveSessions` 避让，防止服务端未落库的滞后断点覆盖本地最新播放位置。
+7. 远程播放完成、切换条目或关闭窗口时发送 Stopped；本地播放不产生服务器请求。
+8. 诊断面板仅在打开时每三秒读取一次 libmpv 安全属性；关闭面板立即停止采样。
+9. Windows Runner 通过 `ISystemMediaTransportControlsInterop` 为顶层窗口创建单一 SMTC 会话；Dart 侧同步标题、剧集、海报、播放状态、时间轴和队列能力，系统按钮事件再回到现有播放用例。
 
 Windows 音量联动只操作当前 PEeK 进程的 WASAPI 音频会话：播放器滑块写入 `ISimpleAudioVolume`，系统音量混合器的外部修改通过 `IAudioSessionEvents` 回传。不得修改系统主音量或其他应用的音量；音频会话尚未创建时退回 media_kit 音量，并在媒体打开后有限次数重试绑定。
 
@@ -103,5 +104,6 @@ Windows 音量联动只操作当前 PEeK 进程的 WASAPI 音频会话：播放�
 - 页面跨特性跳转必须通过 `AppRoutes` 门面触发，禁止在 View 层直接跨包引用其他 Feature 的页面 Widget 类。
 - `core/` 下的底层网络与存储模块严禁反向向上引用 `features/` 业务代码，跨特性组合统一在 `src/app/app_providers.dart` 中完成。
 - 通用领域模型（MediaItem、ServerAccount、PlaybackPlan、PlaybackSettings 等）必须统一定义于 `src/core/domain/`，Feature 之间保持单向独立。
+- UI 组件操作暗示（Affordance）与实际行为严格统一：向下展开箭头仅用于可原地展开的折叠面板或下拉菜单，顶部命令栏用户胶囊等导航跳转按钮保持纯净状态徽标设计，禁止伪装为下拉菜单。
 - libmpv 二进制发布前需要完成许可证与第三方声明审查。
 
