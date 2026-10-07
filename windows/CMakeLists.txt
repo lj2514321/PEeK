@@ -55,6 +55,19 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# Apply multi-window patches for plugins before they are built
+set(MEDIA_KIT_VIDEO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter/ephemeral/.plugin_symlinks/media_kit_video/windows")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/patches/media_kit_video/media_kit_video_plugin.cc" AND EXISTS "${MEDIA_KIT_VIDEO_DIR}")
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/patches/media_kit_video/media_kit_video_plugin.cc"
+    "${MEDIA_KIT_VIDEO_DIR}/media_kit_video_plugin.cc"
+    COPYONLY)
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/patches/media_kit_video/media_kit_video_plugin.h"
+    "${MEDIA_KIT_VIDEO_DIR}/media_kit_video_plugin.h"
+    COPYONLY)
+endif()
+
 include(flutter/generated_plugins.cmake)
 
 

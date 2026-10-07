@@ -148,6 +148,114 @@ class MediaItem {
       mediaSources: mediaSources ?? this.mediaSources,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'kind': kind.name,
+    'overview': overview,
+    'productionYear': productionYear,
+    'runTimeMs': runTime?.inMilliseconds,
+    'imageTag': imageTag,
+    'imageUri': imageUri?.toString(),
+    'backdropUri': backdropUri?.toString(),
+    'imageHeaders': imageHeaders,
+    'chapters': chapters.map((c) => c.toJson()).toList(),
+    'people': people.map((p) => p.toJson()).toList(),
+    'genres': genres,
+    'tags': tags,
+    'communityRating': communityRating,
+    'officialRating': officialRating,
+    'tagline': tagline,
+    'seriesName': seriesName,
+    'indexNumber': indexNumber,
+    'parentIndexNumber': parentIndexNumber,
+    'parentId': parentId,
+    'seriesId': seriesId,
+    'collectionType': collectionType,
+    'source': source.name,
+    'sourcePath': sourcePath,
+    'fileSize': fileSize,
+    'dateModified': dateModified?.toIso8601String(),
+    'played': played,
+    'favorite': favorite,
+    'resumePositionMs': resumePosition.inMilliseconds,
+    'providerIds': providerIds,
+    'videoCodec': videoCodec,
+    'container': container,
+    'width': width,
+    'height': height,
+    'bitrate': bitrate,
+    'mediaSources': mediaSources.map((s) => s.toJson()).toList(),
+  };
+
+  factory MediaItem.fromJson(Map<String, dynamic> json) {
+    return MediaItem(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      kind: MediaItemKind.values.firstWhere(
+        (k) => k.name == json['kind'],
+        orElse: () => MediaItemKind.movie,
+      ),
+      overview: json['overview'] as String?,
+      productionYear: json['productionYear'] as int?,
+      runTime: json['runTimeMs'] != null
+          ? Duration(milliseconds: json['runTimeMs'] as int)
+          : null,
+      imageTag: json['imageTag'] as String?,
+      imageUri: json['imageUri'] != null
+          ? Uri.tryParse(json['imageUri'] as String)
+          : null,
+      backdropUri: json['backdropUri'] != null
+          ? Uri.tryParse(json['backdropUri'] as String)
+          : null,
+      imageHeaders: Map<String, String>.from(
+        json['imageHeaders'] as Map? ?? const {},
+      ),
+      chapters: (json['chapters'] as List? ?? const [])
+          .map((c) => MediaChapter.fromJson(Map<String, dynamic>.from(c as Map)))
+          .toList(),
+      people: (json['people'] as List? ?? const [])
+          .map((p) => MediaPerson.fromJson(Map<String, dynamic>.from(p as Map)))
+          .toList(),
+      genres: (json['genres'] as List? ?? const []).cast<String>(),
+      tags: (json['tags'] as List? ?? const []).cast<String>(),
+      communityRating: (json['communityRating'] as num?)?.toDouble(),
+      officialRating: json['officialRating'] as String?,
+      tagline: json['tagline'] as String?,
+      seriesName: json['seriesName'] as String?,
+      indexNumber: json['indexNumber'] as int?,
+      parentIndexNumber: json['parentIndexNumber'] as int?,
+      parentId: json['parentId'] as String?,
+      seriesId: json['seriesId'] as String?,
+      collectionType: json['collectionType'] as String?,
+      source: MediaItemSource.values.firstWhere(
+        (s) => s.name == json['source'],
+        orElse: () => MediaItemSource.remote,
+      ),
+      sourcePath: json['sourcePath'] as String?,
+      fileSize: json['fileSize'] as int?,
+      dateModified: json['dateModified'] != null
+          ? DateTime.tryParse(json['dateModified'] as String)
+          : null,
+      played: json['played'] as bool? ?? false,
+      favorite: json['favorite'] as bool? ?? false,
+      resumePosition: Duration(
+        milliseconds: json['resumePositionMs'] as int? ?? 0,
+      ),
+      providerIds: Map<String, String>.from(
+        json['providerIds'] as Map? ?? const {},
+      ),
+      videoCodec: json['videoCodec'] as String?,
+      container: json['container'] as String?,
+      width: json['width'] as int?,
+      height: json['height'] as int?,
+      bitrate: json['bitrate'] as int?,
+      mediaSources: (json['mediaSources'] as List? ?? const [])
+          .map((s) => MediaSourceInfo.fromJson(Map<String, dynamic>.from(s as Map)))
+          .toList(),
+    );
+  }
 }
 
 class MediaSourceInfo {
@@ -195,6 +303,36 @@ class MediaSourceInfo {
     }
     return '${(size / (1024 * 1024)).toStringAsFixed(0)} MB';
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'container': container,
+    'fileSize': fileSize,
+    'bitrate': bitrate,
+    'width': width,
+    'height': height,
+    'videoCodec': videoCodec,
+    'videoRange': videoRange,
+    'audioCodec': audioCodec,
+    'path': path,
+  };
+
+  factory MediaSourceInfo.fromJson(Map<String, dynamic> json) {
+    return MediaSourceInfo(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      container: json['container'] as String?,
+      fileSize: json['fileSize'] as int?,
+      bitrate: json['bitrate'] as int?,
+      width: json['width'] as int?,
+      height: json['height'] as int?,
+      videoCodec: json['videoCodec'] as String?,
+      videoRange: json['videoRange'] as String?,
+      audioCodec: json['audioCodec'] as String?,
+      path: json['path'] as String?,
+    );
+  }
 }
 
 class MediaChapter {
@@ -202,6 +340,20 @@ class MediaChapter {
 
   final String name;
   final Duration startPosition;
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'startPositionMs': startPosition.inMilliseconds,
+  };
+
+  factory MediaChapter.fromJson(Map<String, dynamic> json) {
+    return MediaChapter(
+      name: json['name'] as String? ?? '',
+      startPosition: Duration(
+        milliseconds: json['startPositionMs'] as int? ?? 0,
+      ),
+    );
+  }
 }
 
 class MediaPerson {
@@ -220,4 +372,28 @@ class MediaPerson {
   final String? role;
   final Uri? imageUri;
   final Map<String, String> imageHeaders;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'type': type,
+    'role': role,
+    'imageUri': imageUri?.toString(),
+    'imageHeaders': imageHeaders,
+  };
+
+  factory MediaPerson.fromJson(Map<String, dynamic> json) {
+    return MediaPerson(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      role: json['role'] as String?,
+      imageUri: json['imageUri'] != null
+          ? Uri.tryParse(json['imageUri'] as String)
+          : null,
+      imageHeaders: Map<String, String>.from(
+        json['imageHeaders'] as Map? ?? const {},
+      ),
+    );
+  }
 }

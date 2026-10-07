@@ -62,6 +62,11 @@ class PlaybackControls extends StatefulWidget {
     this.onAudioEnhancement,
     this.onOpenExternalPlayer,
     this.onClose,
+    this.onMinimize,
+    this.onToggleMaximize,
+    this.onToggleAlwaysOnTop,
+    this.isAlwaysOnTop = false,
+    this.isMaximized = false,
   });
 
   final String title;
@@ -110,6 +115,11 @@ class PlaybackControls extends StatefulWidget {
   final VoidCallback? onPip;
   final VoidCallback? onAudioEnhancement;
   final VoidCallback? onOpenExternalPlayer;
+  final VoidCallback? onMinimize;
+  final VoidCallback? onToggleMaximize;
+  final VoidCallback? onToggleAlwaysOnTop;
+  final bool isAlwaysOnTop;
+  final bool isMaximized;
 
   @override
   State<PlaybackControls> createState() => _PlaybackControlsState();
@@ -178,6 +188,11 @@ class _PlaybackControlsState extends State<PlaybackControls>
                 onAudioEnhancement: widget.onAudioEnhancement,
                 onOpenExternalPlayer: widget.onOpenExternalPlayer,
                 onFullScreen: widget.onFullScreen,
+                onMinimize: widget.onMinimize,
+                onToggleMaximize: widget.onToggleMaximize,
+                onToggleAlwaysOnTop: widget.onToggleAlwaysOnTop,
+                isAlwaysOnTop: widget.isAlwaysOnTop,
+                isMaximized: widget.isMaximized,
               ),
             ),
           ),
@@ -280,6 +295,11 @@ class _PlaybackControlsState extends State<PlaybackControls>
                     onAudioEnhancement: widget.onAudioEnhancement,
                     onOpenExternalPlayer: widget.onOpenExternalPlayer,
                     onFullScreen: widget.onFullScreen,
+                    onMinimize: widget.onMinimize,
+                    onToggleMaximize: widget.onToggleMaximize,
+                    onToggleAlwaysOnTop: widget.onToggleAlwaysOnTop,
+                    isAlwaysOnTop: widget.isAlwaysOnTop,
+                    isMaximized: widget.isMaximized,
                   ),
                 ),
               ),
@@ -360,6 +380,11 @@ class _PlaybackTopBar extends StatelessWidget {
     this.onAudioEnhancement,
     this.onOpenExternalPlayer,
     required this.onFullScreen,
+    this.onMinimize,
+    this.onToggleMaximize,
+    this.onToggleAlwaysOnTop,
+    this.isAlwaysOnTop = false,
+    this.isMaximized = false,
   });
 
   final String title;
@@ -375,6 +400,11 @@ class _PlaybackTopBar extends StatelessWidget {
   final VoidCallback? onAudioEnhancement;
   final VoidCallback? onOpenExternalPlayer;
   final VoidCallback onFullScreen;
+  final VoidCallback? onMinimize;
+  final VoidCallback? onToggleMaximize;
+  final VoidCallback? onToggleAlwaysOnTop;
+  final bool isAlwaysOnTop;
+  final bool isMaximized;
 
   @override
   Widget build(BuildContext context) {
@@ -472,6 +502,37 @@ class _PlaybackTopBar extends StatelessWidget {
                     )
                   else
                     const _LocalSourceBadge(),
+                  if (onToggleAlwaysOnTop != null) ...[
+                    const SizedBox(width: 8),
+                    _ControlIconButton(
+                      key: const ValueKey('player-pin'),
+                      tooltip: isAlwaysOnTop ? '取消置顶' : '置顶窗口',
+                      icon: isAlwaysOnTop
+                          ? Icons.push_pin_rounded
+                          : Icons.push_pin_outlined,
+                      onPressed: onToggleAlwaysOnTop!,
+                    ),
+                  ],
+                  if (onMinimize != null) ...[
+                    const SizedBox(width: 8),
+                    _ControlIconButton(
+                      key: const ValueKey('player-minimize'),
+                      tooltip: '最小化',
+                      icon: Icons.remove_rounded,
+                      onPressed: onMinimize!,
+                    ),
+                  ],
+                  if (onToggleMaximize != null) ...[
+                    const SizedBox(width: 8),
+                    _ControlIconButton(
+                      key: const ValueKey('player-maximize'),
+                      tooltip: isMaximized ? '向下还原' : '最大化',
+                      icon: isMaximized
+                          ? Icons.crop_portrait_rounded
+                          : Icons.crop_square_rounded,
+                      onPressed: onToggleMaximize!,
+                    ),
+                  ],
                   if (onClose != null) ...[
                     const SizedBox(width: 8),
                     _ControlIconButton(

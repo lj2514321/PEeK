@@ -469,10 +469,18 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
-      if (prev?.mode == PlaybackPresentationMode.mini &&
-          next.mode == PlaybackPresentationMode.hidden) {
-        if (prev?.item != null) {
-          unawaited(_refreshSingleItem(prev!.item!));
+      final wasActive = prev?.mode == PlaybackPresentationMode.mini ||
+          prev?.mode == PlaybackPresentationMode.window ||
+          prev?.mode == PlaybackPresentationMode.full;
+      if (wasActive && next.mode == PlaybackPresentationMode.hidden) {
+        final item = prev?.item;
+        if (item != null) {
+          unawaited(_refreshSingleItem(item));
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (mounted) {
+              unawaited(_refreshSingleItem(item));
+            }
+          });
         }
       }
     });

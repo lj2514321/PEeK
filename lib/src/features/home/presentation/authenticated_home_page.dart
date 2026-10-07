@@ -120,13 +120,13 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     }
   }
 
-  Future<void> _refreshContinueWatching() async {
+  Future<void> _refreshContinueWatching({bool force = false}) async {
     final currentFeed = _feed;
     if (currentFeed == null) {
       await _load();
       return;
     }
-    if (_refreshing) return;
+    if (_refreshing && !force) return;
     setState(() => _refreshing = true);
     try {
       final feed = await ref
@@ -267,9 +267,16 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   @override
   Widget build(BuildContext context) {
     ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
-      if (prev?.mode == PlaybackPresentationMode.mini &&
-          next.mode == PlaybackPresentationMode.hidden) {
+      final wasActive = prev?.mode == PlaybackPresentationMode.mini ||
+          prev?.mode == PlaybackPresentationMode.window ||
+          prev?.mode == PlaybackPresentationMode.full;
+      if (wasActive && next.mode == PlaybackPresentationMode.hidden) {
         unawaited(_refreshContinueWatching());
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted) {
+            unawaited(_refreshContinueWatching(force: true));
+          }
+        });
       }
     });
     final feed = _feed;

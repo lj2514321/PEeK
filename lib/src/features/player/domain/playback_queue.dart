@@ -46,6 +46,23 @@ class PlaybackQueue {
   int indexOf(String itemId) {
     return items.indexWhere((item) => item.id == itemId);
   }
+
+  Map<String, dynamic> toJson() => {
+    'items': items.map((item) => item.toJson()).toList(),
+    'currentIndex': currentIndex,
+  };
+
+  factory PlaybackQueue.fromJson(Map<String, dynamic> json) {
+    final rawItems = (json['items'] as List? ?? const [])
+        .map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final idx = json['currentIndex'] as int? ?? 0;
+    if (rawItems.isEmpty) {
+      throw ArgumentError('PlaybackQueue.fromJson: items must not be empty');
+    }
+    final safeIdx = (idx >= 0 && idx < rawItems.length) ? idx : 0;
+    return PlaybackQueue(items: rawItems, currentIndex: safeIdx);
+  }
 }
 
 int _compareEpisodes(MediaItem left, MediaItem right) {

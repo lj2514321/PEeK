@@ -17,6 +17,7 @@ enum PlaybackPresentationMode {
   hidden,
   mini,
   full,
+  window,
 }
 
 class GlobalPlaybackState {
@@ -184,6 +185,77 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
           state = state.copyWith(duration: duration);
         }
       }),
+    );
+  }
+
+  void registerWindowPlayback({
+    required AuthenticatedServer? account,
+    required MediaItem item,
+    required PlaybackPlan plan,
+    PlaybackQueue? queue,
+    Duration? initialPosition,
+  }) {
+    _cancelSubscriptions();
+    _activeRuntime = null;
+
+    final initialPos =
+        (initialPosition != null && initialPosition > Duration.zero)
+            ? initialPosition
+            : plan.startPosition;
+    final updatedPositions = Map<String, Duration>.from(state.recentPositions);
+    if (initialPos > Duration.zero) {
+      updatedPositions[item.id] = initialPos;
+    }
+
+    state = GlobalPlaybackState(
+      mode: PlaybackPresentationMode.window,
+      account: account,
+      item: item,
+      plan: plan,
+      queue: queue,
+      runtime: null,
+      playing: true,
+      position: initialPos,
+      duration: plan.duration ?? Duration.zero,
+      recentPositions: updatedPositions,
+      revision: state.revision + 1,
+    );
+  }
+
+  void reportOptimisticProgress(
+    String itemId,
+    Duration position, {
+    Duration? duration,
+    bool? playing,
+  }) {
+    final updatedPositions = Map<String, Duration>.from(state.recentPositions);
+    if (position > Duration.zero) {
+      updatedPositions[itemId] = position;
+    }
+    state = state.copyWith(
+      position: position,
+      duration: duration ?? state.duration,
+      playing: playing ?? state.playing,
+      recentPositions: updatedPositions,
+      revision: state.revision + 1,
+    );
+  }
+
+  void updatePlaybackState({bool? playing, Duration? position}) {
+    state = state.copyWith(
+      playing: playing ?? state.playing,
+      position: position ?? state.position,
+      revision: state.revision + 1,
+    );
+  }
+
+  void clearActivePlayback() {
+    _cancelSubscriptions();
+    _activeRuntime = null;
+    state = state.copyWith(
+      mode: PlaybackPresentationMode.hidden,
+      playing: false,
+      revision: state.revision + 1,
     );
   }
 

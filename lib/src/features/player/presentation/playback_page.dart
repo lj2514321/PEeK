@@ -71,6 +71,13 @@ class PlaybackPage extends ConsumerStatefulWidget {
     this.isResumingFromMini = false,
     this.enableMiniPlayer = true,
     this.longPressSpeed = 2.0,
+    this.onProgressUpdated,
+    this.onWindowClosed,
+    this.onMinimize,
+    this.onToggleMaximize,
+    this.onToggleAlwaysOnTop,
+    this.isAlwaysOnTop = false,
+    this.isMaximized = false,
   });
 
   final AuthenticatedServer? account;
@@ -86,12 +93,20 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final bool isResumingFromMini;
   final bool enableMiniPlayer;
   final double longPressSpeed;
+  final void Function(Duration position, Duration duration, bool playing)?
+      onProgressUpdated;
+  final VoidCallback? onWindowClosed;
+  final VoidCallback? onMinimize;
+  final VoidCallback? onToggleMaximize;
+  final VoidCallback? onToggleAlwaysOnTop;
+  final bool isAlwaysOnTop;
+  final bool isMaximized;
 
   @override
-  ConsumerState<PlaybackPage> createState() => _PlaybackPageState();
+  ConsumerState<PlaybackPage> createState() => PlaybackPageState();
 }
 
-class _PlaybackPageState extends ConsumerState<PlaybackPage> {
+class PlaybackPageState extends ConsumerState<PlaybackPage> {
   late final PlaybackRuntime _runtime =
       widget.runtime ??
       MediaKitPlaybackRuntime(decodingMode: widget.hardwareDecodingMode);
@@ -117,6 +132,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   bool _minimized = false;
 
   Duration _position = Duration.zero;
+
+  Duration get currentPosition =>
+      _position > Duration.zero ? _position : _runtime.position;
   Duration _duration = Duration.zero;
   Duration _buffer = Duration.zero;
   Duration? _previewPosition;
@@ -279,6 +297,19 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     } catch (_) {}
   }
 
+  DateTime _lastProgressUpdatedTime = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void _notifyProgressUpdated({bool immediate = false}) {
+    if (widget.onProgressUpdated == null) return;
+    final now = DateTime.now();
+    if (immediate ||
+        now.difference(_lastProgressUpdatedTime) >=
+            const Duration(milliseconds: 500)) {
+      _lastProgressUpdatedTime = now;
+      widget.onProgressUpdated!(_position, _effectiveDuration, _playing);
+    }
+  }
+
   void _listenToPlayer() {
     _subscriptions.addAll([
       _runtime.playingStream.listen(_playingChanged),
@@ -291,6 +322,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           _scheduleSystemTimelineSync();
           _checkIntroOutro(_position);
           _checkBangumiScrobble(_position);
+          _notifyProgressUpdated();
         }
       }),
       _runtime.durationStream.listen((value) {
@@ -298,6 +330,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
           _duration = value;
           _publishTimeline();
           _scheduleSystemTimelineSync(immediate: true);
+          _notifyProgressUpdated(immediate: true);
         }
       }),
       _runtime.bufferStream.listen((value) {
@@ -571,6 +604,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       _safeReportProgress(playing ? 'Unpause' : 'Pause');
     }
     _syncSystemPlayback();
+    _notifyProgressUpdated(immediate: true);
   }
 
   void _showControls() {
@@ -686,6 +720,7 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     await _runtime.seek(target);
     await _safeReportProgress('TimeUpdate');
     _scheduleSystemTimelineSync(immediate: true);
+    _notifyProgressUpdated(immediate: true);
     if (showControls) _showControls();
   }
 
@@ -700,11 +735,13 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
       afterCommitted: () async {
         await _safeReportProgress('TimeUpdate');
         _scheduleSystemTimelineSync(immediate: true);
+        _notifyProgressUpdated(immediate: true);
       },
     );
     _position = target;
     _previewPosition = null;
     _publishTimeline();
+    _notifyProgressUpdated(immediate: true);
     return Future<void>.value();
   }
 
@@ -2207,10 +2244,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
   }
 
   Future<void> _safeReportStopped() async {
-    if (_reportedStopped || !_reportedStarted) return;
+    if (_reportedStopped) return;
+    _reportedStopped = true;
+    _notifyProgressUpdated(immediate: true);
     final account = widget.account;
     if (account == null || _item.isLocal) return;
-    _reportedStopped = true;
     _playbackCoordinator.recordPosition(_item.id, _position);
     unawaited(_mediaLibrary.invalidateCache());
     try {
@@ -2488,9 +2526,14 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     }
   }
 
+  Future<void> close() => _close();
+
   Future<void> _close() async {
     if (_closing) return;
     setState(() => _closing = true);
+    if (_position == Duration.zero && _runtime.position > Duration.zero) {
+      _position = _runtime.position;
+    }
     _playbackCoordinator.recordPosition(_item.id, _position);
     unawaited(_playbackCoordinator.close(disposeRuntime: false));
     _progressTimer?.cancel();
@@ -2501,7 +2544,9 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
     _systemTimelineTimer?.cancel();
     _systemVolumeRetryTimer?.cancel();
     _interactions.cancelPendingSeek();
-    await _persistPlaybackPreferences();
+    try {
+      await _persistPlaybackPreferences();
+    } catch (_) {}
     _writeDiagnosticLog('playback_closed');
     final watchMinutes = (_position.inSeconds / 60).round();
     if (watchMinutes > 0) {
@@ -2512,32 +2557,46 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
         ),
       );
     }
-    await _safeReportStopped();
-    await _disposeSystemMedia();
-    if (_fullScreen && Platform.isWindows) {
-      try {
-        await _setNativeFullScreen(false);
-      } on Object {
-        // The page still needs to close if the native window is unavailable.
+    try {
+      await _safeReportStopped().timeout(const Duration(milliseconds: 2500));
+    } catch (_) {}
+    try {
+      await _disposeSystemMedia();
+    } catch (_) {}
+    if (widget.onWindowClosed == null) {
+      if (_fullScreen && Platform.isWindows) {
+        try {
+          await _setNativeFullScreen(false);
+        } on Object {
+          // The page still needs to close if the native window is unavailable.
+        }
+        _fullScreen = false;
       }
-      _fullScreen = false;
-    }
-    if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
-      try {
-        await WindowPipController.instance.exitPip();
-      } on Object {
-        // The page still needs to close if the native window is unavailable.
+      if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
+        try {
+          await WindowPipController.instance.exitPip();
+        } on Object {
+          // The page still needs to close if the native window is unavailable.
+        }
+        _isPip = false;
       }
-      _isPip = false;
     }
-    await _disposePlayer();
-    if (mounted) Navigator.of(context).pop();
+    try {
+      await _disposePlayer();
+    } catch (_) {}
+    widget.onWindowClosed?.call();
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _disposePlayer() async {
     if (_playerDisposed) return;
     _playerDisposed = true;
-    await _runtime.dispose();
+    try {
+      await _runtime.pause().timeout(const Duration(milliseconds: 300));
+    } catch (_) {}
+    unawaited(_runtime.dispose().catchError((_) {}));
   }
 
   Future<void> _disposeSystemMedia() async {
@@ -2803,6 +2862,11 @@ class _PlaybackPageState extends ConsumerState<PlaybackPage> {
                                     unawaited(_showAudioEnhancementSheet()),
                                 onOpenExternalPlayer: () =>
                                     unawaited(_openInExternalPlayer()),
+                                onMinimize: widget.onMinimize,
+                                onToggleMaximize: widget.onToggleMaximize,
+                                onToggleAlwaysOnTop: widget.onToggleAlwaysOnTop,
+                                isAlwaysOnTop: widget.isAlwaysOnTop,
+                                isMaximized: widget.isMaximized,
                               ),
                             );
                           },

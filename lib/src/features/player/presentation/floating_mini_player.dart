@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
+import 'package:embyplayer/src/features/player/presentation/player_window_coordinator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -23,6 +24,10 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
   Widget build(BuildContext context) {
     final state = ref.watch(globalPlaybackCoordinatorProvider);
     final coordinator = ref.read(globalPlaybackCoordinatorProvider.notifier);
+
+    if (state.mode == PlaybackPresentationMode.window && state.item != null) {
+      return _buildWindowPlaybackIndicator(context, state);
+    }
 
     if (state.mode != PlaybackPresentationMode.mini ||
         state.runtime == null ||
@@ -220,8 +225,152 @@ class _FloatingMiniPlayerState extends ConsumerState<FloatingMiniPlayer> {
           ),
         ),
       ),
-    ),
-  ),
-);
-}
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWindowPlaybackIndicator(
+    BuildContext context,
+    GlobalPlaybackState state,
+  ) {
+    final padding = MediaQuery.of(context).padding;
+    const indicatorWidth = 320.0;
+    const indicatorHeight = 62.0;
+
+    final right = 24.0;
+    final bottom = 24.0 + padding.bottom;
+
+    return Positioned(
+      right: right,
+      bottom: bottom,
+      width: indicatorWidth,
+      height: indicatorHeight,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          decoration: AppGlass.visionOSDecoration(
+            radius: 14,
+            elevated: true,
+            glowColor: AppColors.spotlight.withValues(alpha: 0.15),
+            borderOpacity: 0.28,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Stack(
+              children: [
+                InkWell(
+                  onTap: () =>
+                      ref.read(playerWindowCoordinatorProvider).focusWindow(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.smart_display_rounded,
+                            color: AppColors.spotlight,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.spotlight,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  const Text(
+                                    '正在独立窗口播放',
+                                    style: TextStyle(
+                                      color: AppColors.textTertiary,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                state.item!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: '唤起播放窗口',
+                          icon: const Icon(
+                            Icons.open_in_new_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          onPressed: () => ref
+                              .read(playerWindowCoordinatorProvider)
+                              .focusWindow(),
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: '关闭播放',
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
+                          onPressed: () => ref
+                              .read(playerWindowCoordinatorProvider)
+                              .closeWindow(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: LinearProgressIndicator(
+                    value: state.duration.inMilliseconds > 0
+                        ? (state.position.inMilliseconds /
+                                state.duration.inMilliseconds)
+                            .clamp(0.0, 1.0)
+                        : 0.0,
+                    backgroundColor: Colors.white10,
+                    color: AppColors.spotlight,
+                    minHeight: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

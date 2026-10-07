@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:embyplayer/src/app/app_chrome.dart';
+import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
@@ -13,7 +14,6 @@ import 'package:embyplayer/src/features/details/presentation/identify_dialog.dar
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
-import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:embyplayer/src/features/scrobble/presentation/bangumi_summary_card.dart';
 import 'package:embyplayer/src/features/download/presentation/batch_download_sheet.dart';
@@ -131,10 +131,10 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     return numbers.isEmpty ? [1] : numbers;
   }
 
-  Future<void> _loadDetails({bool forceRefresh = false}) async {
+  Future<void> _loadDetails({bool forceRefresh = false, bool force = false}) async {
     final account = widget.account;
     if (account == null || _item.isLocal) return;
-    if (_loadingDetails) return;
+    if (_loadingDetails && !force) return;
     setState(() {
       _loadingDetails = true;
       _detailError = null;
@@ -267,20 +267,20 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
         }
       }
 
-      await Navigator.of(context).push<void>(
-        Peek3DPageRoute(
-          builder: (context) => PlaybackPage(
-            account: widget.account,
-            item: prepared.item,
-            plan: prepared.plan,
-            queue: prepared.queue,
-            hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
-            maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
-            subtitlePreferences: prepared.settings.subtitlePreferences,
-            enableMiniPlayer: prepared.settings.enableMiniPlayer,
-            longPressSpeed: prepared.settings.longPressSpeed,
-          ),
-        ),
+      await AppRoutes.openPlayback(
+        context,
+        account: widget.account,
+        item: prepared.item,
+        plan: prepared.plan,
+        queue: prepared.queue,
+        hardwareDecodingMode: prepared.settings.hardwareDecodingMode,
+        maxStreamingBitrate: prepared.settings.maxStreamingBitrate,
+        subtitlePreferences: prepared.settings.subtitlePreferences,
+        skipIntroPreferences: prepared.settings.skipIntroPreferences,
+        danmakuPreferences: prepared.settings.danmakuPreferences,
+        enableMiniPlayer: prepared.settings.enableMiniPlayer,
+        longPressSpeed: prepared.settings.longPressSpeed,
+        ref: ref,
       );
       if (mounted && !targetItem.isLocal) {
         await _loadDetails(forceRefresh: true);
@@ -516,10 +516,17 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
-      if (prev?.mode == PlaybackPresentationMode.mini &&
-          next.mode == PlaybackPresentationMode.hidden) {
+      final wasActive = prev?.mode == PlaybackPresentationMode.mini ||
+          prev?.mode == PlaybackPresentationMode.window ||
+          prev?.mode == PlaybackPresentationMode.full;
+      if (wasActive && next.mode == PlaybackPresentationMode.hidden) {
         if (mounted && !_item.isLocal) {
           unawaited(_loadDetails(forceRefresh: true));
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (mounted && !_item.isLocal) {
+              unawaited(_loadDetails(forceRefresh: true, force: true));
+            }
+          });
         }
       }
     });

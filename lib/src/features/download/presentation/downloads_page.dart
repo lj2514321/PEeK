@@ -1,8 +1,8 @@
+import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/download/data/download_manager_service.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
-import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter/material.dart';
 
@@ -68,14 +68,11 @@ class _DownloadsPageState extends State<DownloadsPage>
       method: PlaybackMethod.directPlay,
     );
 
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => PlaybackPage(
-          account: null,
-          item: localItem,
-          plan: plan,
-        ),
-      ),
+    AppRoutes.openPlayback(
+      context,
+      account: null,
+      item: localItem,
+      plan: plan,
     );
   }
 

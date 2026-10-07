@@ -21,6 +21,27 @@ class DiscoveredServer {
   final String version;
   final String serverId;
   final Uri apiBaseUri;
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind.name,
+    'name': name,
+    'version': version,
+    'serverId': serverId,
+    'apiBaseUri': apiBaseUri.toString(),
+  };
+
+  factory DiscoveredServer.fromJson(Map<String, dynamic> json) {
+    return DiscoveredServer(
+      kind: ServerKind.values.firstWhere(
+        (k) => k.name == json['kind'],
+        orElse: () => ServerKind.jellyfin,
+      ),
+      name: json['name'] as String? ?? '',
+      version: json['version'] as String? ?? '',
+      serverId: json['serverId'] as String? ?? '',
+      apiBaseUri: Uri.parse(json['apiBaseUri'] as String? ?? ''),
+    );
+  }
 }
 
 class ServerProfile {
@@ -101,6 +122,26 @@ class AuthenticatedServer {
   final String accessToken;
 
   String get profileId => serverProfileId(server.serverId, userId);
+
+  Map<String, dynamic> toJson() => {
+    'server': server.toJson(),
+    'userId': userId,
+    'userName': userName,
+    'deviceId': deviceId,
+    'accessToken': accessToken,
+  };
+
+  factory AuthenticatedServer.fromJson(Map<String, dynamic> json) {
+    return AuthenticatedServer(
+      server: DiscoveredServer.fromJson(
+        Map<String, dynamic>.from(json['server'] as Map),
+      ),
+      userId: json['userId'] as String? ?? '',
+      userName: json['userName'] as String? ?? '',
+      deviceId: json['deviceId'] as String? ?? '',
+      accessToken: json['accessToken'] as String? ?? '',
+    );
+  }
 }
 
 String serverProfileId(String serverId, String userId) => '$serverId::$userId';

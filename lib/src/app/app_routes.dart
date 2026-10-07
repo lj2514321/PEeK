@@ -1,3 +1,10 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
 import 'package:embyplayer/src/core/domain/playback_plan.dart';
 import 'package:embyplayer/src/core/domain/playback_settings.dart';
@@ -7,9 +14,10 @@ import 'package:embyplayer/src/features/dedupe/presentation/media_dedupe_page.da
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/people/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
+import 'package:embyplayer/src/features/player/domain/player_window_payload.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
-import 'package:flutter/material.dart';
+import 'package:embyplayer/src/features/player/presentation/player_window_coordinator.dart';
 
 /// Centralized, type-safe navigation facade to decouple inter-feature presentation dependencies.
 abstract final class AppRoutes {
@@ -66,7 +74,37 @@ abstract final class AppRoutes {
     bool isResumingFromMini = false,
     bool enableMiniPlayer = true,
     double longPressSpeed = 2.0,
-  }) {
+    WidgetRef? ref,
+  }) async {
+    // On Windows desktop, when starting fresh playback (not resuming from floating mini player),
+    // launch or switch to the dedicated independent Player Window.
+    if (!kIsWeb && Platform.isWindows && runtime == null && !AppMotion.isTest) {
+      try {
+        final coordinator = ref != null
+            ? ref.read(playerWindowCoordinatorProvider)
+            : ProviderScope.containerOf(context, listen: false)
+                .read(playerWindowCoordinatorProvider);
+        final payload = PlayerWindowPayload(
+          account: account,
+          item: item,
+          plan: plan,
+          queue: queue,
+          hardwareDecodingMode: hardwareDecodingMode,
+          maxStreamingBitrate: maxStreamingBitrate,
+          subtitlePreferences: subtitlePreferences,
+          skipIntroPreferences: skipIntroPreferences,
+          danmakuPreferences: danmakuPreferences,
+        );
+        await coordinator.openOrSwitch(payload);
+        return;
+      } catch (e) {
+        debugPrint(
+          '[AppRoutes] Failed to open playback in dedicated window, falling back: $e',
+        );
+      }
+    }
+
+    if (!context.mounted) return;
     return Navigator.of(context).push<void>(
       TheatricalIrisPageRoute(
         builder: (_) => PlaybackPage(
