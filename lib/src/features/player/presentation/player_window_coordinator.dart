@@ -8,8 +8,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:embyplayer/src/app/app_providers.dart';
+import 'package:embyplayer/src/core/domain/media_item.dart';
+import 'package:embyplayer/src/core/domain/playback_plan.dart';
+import 'package:embyplayer/src/core/domain/playback_settings.dart';
+import 'package:embyplayer/src/core/domain/server.dart';
+import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
 import 'package:embyplayer/src/features/player/domain/player_window_payload.dart';
 import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
+import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
 
 final playerWindowCoordinatorProvider =
     Provider<PlayerWindowCoordinator>((ref) {
@@ -85,9 +91,83 @@ class PlayerWindowCoordinator {
             .clearActivePlayback();
         return true;
 
+      case PlayerWindowProtocol.methodHandoverToMiniPlayer:
+        _playerWindow = null;
+        if (call.arguments is Map) {
+          final args = Map<String, dynamic>.from(call.arguments as Map);
+          await _handleHandoverToMiniPlayer(args);
+        }
+        return true;
+
+      case PlayerWindowProtocol.methodReportMediaChanged:
+        if (call.arguments is Map) {
+          final args = Map<String, dynamic>.from(call.arguments as Map);
+          final itemMap = args['item'] as Map?;
+          final planMap = args['plan'] as Map?;
+          if (itemMap != null) {
+            final item = MediaItem.fromJson(Map<String, dynamic>.from(itemMap));
+            final plan = planMap != null
+                ? PlaybackPlan.fromJson(Map<String, dynamic>.from(planMap))
+                : null;
+            ref
+                .read(globalPlaybackCoordinatorProvider.notifier)
+                .updateActiveItem(item, plan: plan);
+          }
+        }
+        return true;
+
       default:
         return null;
     }
+  }
+
+  Future<void> _handleHandoverToMiniPlayer(Map<String, dynamic> args) async {
+    final item = MediaItem.fromJson(
+      Map<String, dynamic>.from(args['item'] as Map),
+    );
+    final account = args['account'] != null
+        ? AuthenticatedServer.fromJson(
+            Map<String, dynamic>.from(args['account'] as Map),
+          )
+        : null;
+    final plan = PlaybackPlan.fromJson(
+      Map<String, dynamic>.from(args['plan'] as Map),
+    );
+    final queue = args['queue'] != null
+        ? PlaybackQueue.fromJson(
+            Map<String, dynamic>.from(args['queue'] as Map),
+          )
+        : null;
+    final posMs = args['positionMs'] as int? ?? 0;
+    final position = Duration(milliseconds: posMs);
+    final playing = args['playing'] as bool? ?? true;
+    final decodingModeName = args['hardwareDecodingMode'] as String?;
+    final decodingMode = HardwareDecodingMode.values.firstWhere(
+      (e) => e.name == decodingModeName,
+      orElse: () => HardwareDecodingMode.automatic,
+    );
+
+    final updatedPlan = plan.copyWith(
+      startPosition: position > Duration.zero ? position : plan.startPosition,
+    );
+
+    final runtime = MediaKitPlaybackRuntime(decodingMode: decodingMode);
+    await runtime.open(
+      updatedPlan,
+      play: playing,
+      startPosition: position > Duration.zero ? position : null,
+    );
+
+    final global = ref.read(globalPlaybackCoordinatorProvider.notifier);
+    global.registerActivePlayback(
+      account: account,
+      item: item,
+      plan: updatedPlan,
+      queue: queue,
+      runtime: runtime,
+      initialPosition: position,
+    );
+    global.minimize();
   }
 
   Future<void> openOrSwitch(PlayerWindowPayload payload) async {
@@ -169,10 +249,16 @@ class PlayerWindowCoordinator {
       } catch (_) {}
       _playerWindow = null;
     }
+    ref
+        .read(globalPlaybackCoordinatorProvider.notifier)
+        .clearActivePlayback();
   }
 
   void dispose() {
     if (!kIsWeb && Platform.isWindows) {
+      if (_playerWindow != null) {
+        unawaited(closeWindow());
+      }
       _channel.setMethodCallHandler(null);
     }
   }

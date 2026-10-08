@@ -72,8 +72,10 @@ class PlaybackPage extends ConsumerStatefulWidget {
     this.enableMiniPlayer = true,
     this.longPressSpeed = 2.0,
     this.onProgressUpdated,
+    this.onItemChanged,
     this.onWindowClosed,
     this.onMinimize,
+    this.onMinimizeToMini,
     this.onToggleMaximize,
     this.onToggleAlwaysOnTop,
     this.isAlwaysOnTop = false,
@@ -95,8 +97,10 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final double longPressSpeed;
   final void Function(Duration position, Duration duration, bool playing)?
       onProgressUpdated;
+  final void Function(MediaItem item, PlaybackPlan plan)? onItemChanged;
   final VoidCallback? onWindowClosed;
   final VoidCallback? onMinimize;
+  final VoidCallback? onMinimizeToMini;
   final VoidCallback? onToggleMaximize;
   final VoidCallback? onToggleAlwaysOnTop;
   final bool isAlwaysOnTop;
@@ -135,6 +139,18 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Duration get currentPosition =>
       _position > Duration.zero ? _position : _runtime.position;
+  MediaItem get currentItem => _item;
+  PlaybackPlan get currentPlan => _plan;
+  PlaybackQueue? get currentQueue => _queue;
+  bool get isPlaying => _playing;
+  PlaybackBitrate get maxStreamingBitrate => _maxStreamingBitrate;
+  SubtitlePreferences get subtitlePreferences => _subtitlePreferences;
+  SkipIntroPreferences get skipIntroPreferences => _skipIntroPreferences;
+  DanmakuPreferences get danmakuPreferences => _danmakuPreferences;
+  Future<void> pause() => _runtime.pause();
+  Future<void> resume() => _runtime.play();
+  Future<void> seek(Duration position) => _seek(position);
+  Future<void> disposePlayer() => _disposePlayer();
   Duration _duration = Duration.zero;
   Duration _buffer = Duration.zero;
   Duration? _previewPosition;
@@ -1401,7 +1417,7 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
         _plan,
         executablePath: settings.externalPlayerPath,
         seekPosition: currentPos,
-        title: widget.item.name,
+        title: _item.name,
       );
       if (!mounted) return;
       if (launched) {
@@ -2379,6 +2395,7 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
       if (_diagnosticsVisible) _diagnostics = null;
       _item = target;
       _queue = queue.select(index);
+      widget.onItemChanged?.call(target, nextPlan);
       _selectedAudioStreamIndex = nextPlan.audioStreamIndex;
       _selectedSubtitleStreamIndex = nextPlan.subtitleStreamIndex;
       _subtitlesDisabled = nextPlan.subtitleStreamIndex == null;
@@ -2481,6 +2498,10 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   Future<void> _minimize() async {
     if (_closing || _minimized) return;
+    if (widget.onMinimizeToMini != null) {
+      widget.onMinimizeToMini!();
+      return;
+    }
     if (mounted) {
       setState(() => _minimized = true);
     }
@@ -2521,7 +2542,7 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
     if (_remotePlayback) {
       await _safeReportProgress('TimeUpdate');
     }
-    if (mounted) {
+    if (mounted && Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
   }
@@ -2553,7 +2574,7 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
       unawaited(
         ViewingHistoryStore().recordViewing(
           minutes: watchMinutes,
-          kind: widget.item.kind.name,
+          kind: _item.kind.name,
         ),
       );
     }
@@ -2628,12 +2649,14 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
-    if (_fullScreen && Platform.isWindows) {
-      unawaited(_setNativeFullScreen(false));
-    }
-    if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
-      unawaited(WindowPipController.instance.exitPip());
-      _isPip = false;
+    if (widget.onWindowClosed == null) {
+      if (_fullScreen && Platform.isWindows) {
+        unawaited(_setNativeFullScreen(false));
+      }
+      if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
+        unawaited(WindowPipController.instance.exitPip());
+        _isPip = false;
+      }
     }
     if (!_minimized) {
       if (!_reportedStopped) unawaited(_safeReportStopped());

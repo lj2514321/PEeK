@@ -1,5 +1,6 @@
 #include "flutter_window.h"
 
+#include <commctrl.h>
 #include <dwmapi.h>
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
@@ -11,6 +12,26 @@
 #include "flutter/generated_plugin_registrant.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
 #include "windows_media_session.h"
+
+namespace {
+
+static std::map<HWND, std::shared_ptr<WindowsMediaSessionBridge>> g_subwindow_media_sessions;
+
+static LRESULT CALLBACK SubwindowMediaSessionSubclassProc(
+    HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+    UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+  auto* bridge = reinterpret_cast<WindowsMediaSessionBridge*>(dwRefData);
+  if (bridge && bridge->HandleWindowMessage(uMsg, wParam, lParam)) {
+    return 0;
+  }
+  if (uMsg == WM_NCDESTROY) {
+    RemoveWindowSubclass(hwnd, SubwindowMediaSessionSubclassProc, uIdSubclass);
+    g_subwindow_media_sessions.erase(hwnd);
+  }
+  return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -68,11 +89,19 @@ bool FlutterWindow::OnCreate() {
             ::PostMessage(root_hwnd, WM_CLOSE, 0, 0);
             result->Success();
             g_subwindow_channels.erase(root_hwnd);
+            g_subwindow_media_sessions.erase(root_hwnd);
           } else {
             result->NotImplemented();
           }
         });
         g_subwindow_channels[root_hwnd] = std::move(subwindow_channel);
+
+        auto subwindow_session = WindowsMediaSessionBridge::Create(
+            registry->messenger(), root_hwnd);
+        SetWindowSubclass(
+            root_hwnd, SubwindowMediaSessionSubclassProc, 1,
+            reinterpret_cast<DWORD_PTR>(subwindow_session.get()));
+        g_subwindow_media_sessions[root_hwnd] = std::move(subwindow_session);
       }
     }
   });

@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/domain/media_item.dart';
+import 'package:embyplayer/src/core/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/player_window_payload.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 
@@ -143,6 +145,25 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
         }
         return true;
 
+      case PlayerWindowProtocol.methodPause:
+        await _playbackKey.currentState?.pause();
+        return true;
+
+      case PlayerWindowProtocol.methodResume:
+        await _playbackKey.currentState?.resume();
+        return true;
+
+      case PlayerWindowProtocol.methodSeek:
+        final rawPos = call.arguments;
+        if (rawPos is int) {
+          await _playbackKey.currentState?.seek(Duration(milliseconds: rawPos));
+        } else if (rawPos is Map && rawPos['positionMs'] is int) {
+          await _playbackKey.currentState?.seek(
+            Duration(milliseconds: rawPos['positionMs'] as int),
+          );
+        }
+        return true;
+
       case PlayerWindowProtocol.methodFocus:
         await windowManager.show();
         await windowManager.focus();
@@ -186,10 +207,12 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
 
     // 3. Notify main window coordinator
     try {
+      final currentItemId =
+          _playbackKey.currentState?.currentItem.id ?? _payload.item.id;
       await _channel.invokeMethod(
         PlayerWindowProtocol.methodReportClosed,
         {
-          'itemId': _payload.item.id,
+          'itemId': currentItemId,
           'positionMs': finalPos.inMilliseconds,
         },
       );
@@ -209,6 +232,104 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
         } catch (_) {}
       }
     }
+  }
+
+  Future<void> _handoverToMiniPlayer() async {
+    if (_isClosing) return;
+    _isClosing = true;
+
+    windowManager.removeListener(this);
+
+    // 1. Immediately hide window for instant visual feedback
+    if (!kIsWeb && Platform.isWindows) {
+      try {
+        await windowManager.hide();
+      } catch (_) {}
+    }
+
+    // 2. Capture latest playback state
+    final currentPos =
+        _playbackKey.currentState?.currentPosition ?? Duration.zero;
+    final currentItem =
+        _playbackKey.currentState?.currentItem ?? _payload.item;
+    final currentPlan =
+        _playbackKey.currentState?.currentPlan ?? _payload.plan;
+    final currentQueue =
+        _playbackKey.currentState?.currentQueue ?? _payload.queue;
+    final isPlaying = _playbackKey.currentState?.isPlaying ?? true;
+    final currentBitrate =
+        _playbackKey.currentState?.maxStreamingBitrate ??
+        _payload.maxStreamingBitrate;
+    final currentSubPref =
+        _playbackKey.currentState?.subtitlePreferences ??
+        _payload.subtitlePreferences;
+    final currentSkipPref =
+        _playbackKey.currentState?.skipIntroPreferences ??
+        _payload.skipIntroPreferences;
+    final currentDanmakuPref =
+        _playbackKey.currentState?.danmakuPreferences ??
+        _payload.danmakuPreferences;
+
+    // 3. Pause sub-window player immediately
+    try {
+      await _playbackKey.currentState?.pause();
+    } catch (_) {}
+
+    // 4. Notify main window coordinator to adopt playback in mini player
+    try {
+      await _channel.invokeMethod(
+        PlayerWindowProtocol.methodHandoverToMiniPlayer,
+        {
+          'account': _payload.account?.toJson(),
+          'item': currentItem.toJson(),
+          'plan': currentPlan.toJson(),
+          'queue': currentQueue?.toJson(),
+          'positionMs': currentPos.inMilliseconds,
+          'playing': isPlaying,
+          'hardwareDecodingMode': _payload.hardwareDecodingMode.name,
+          'maxStreamingBitrate': currentBitrate.name,
+          'subtitlePreferences': currentSubPref.toJson(),
+          'skipIntroPreferences': currentSkipPref.toJson(),
+          'danmakuPreferences': currentDanmakuPref.toJson(),
+        },
+      );
+    } catch (e) {
+      debugPrint('[PlayerWindow] Error during handover to mini player: $e');
+    }
+
+    // 5. Dispose sub-window player and destroy native subwindow
+    try {
+      await _playbackKey.currentState?.disposePlayer();
+    } catch (_) {}
+
+    if (!kIsWeb && Platform.isWindows) {
+      try {
+        await windowManager.setPreventClose(false);
+      } catch (_) {}
+
+      try {
+        await const MethodChannel('peek/subwindow').invokeMethod('destroyWindow');
+      } catch (_) {
+        try {
+          await windowManager.close();
+        } catch (_) {}
+      }
+    }
+  }
+
+  void _onItemChanged(MediaItem item, PlaybackPlan plan) {
+    if (mounted) {
+      setState(() {
+        _payload = _payload.copyWith(item: item, plan: plan);
+      });
+    }
+    _channel.invokeMethod(
+      PlayerWindowProtocol.methodReportMediaChanged,
+      {
+        'item': item.toJson(),
+        'plan': plan.toJson(),
+      },
+    );
   }
 
   Future<void> _toggleAlwaysOnTop() async {
@@ -232,10 +353,12 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
   }
 
   void _onProgressUpdated(Duration position, Duration duration, bool playing) {
+    final currentItemId =
+        _playbackKey.currentState?.currentItem.id ?? _payload.item.id;
     _channel.invokeMethod(
       PlayerWindowProtocol.methodReportProgress,
       {
-        'itemId': _payload.item.id,
+        'itemId': currentItemId,
         'positionMs': position.inMilliseconds,
         'durationMs': duration.inMilliseconds,
         'playing': playing,
@@ -286,9 +409,11 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
               subtitlePreferences: _payload.subtitlePreferences,
               skipIntroPreferences: _payload.skipIntroPreferences,
               danmakuPreferences: _payload.danmakuPreferences,
-              enableMiniPlayer: false,
+              enableMiniPlayer: true,
               onProgressUpdated: _onProgressUpdated,
+              onItemChanged: _onItemChanged,
               onWindowClosed: _requestClose,
+              onMinimizeToMini: _handoverToMiniPlayer,
               onMinimize: () => windowManager.minimize(),
               onToggleMaximize: _toggleMaximize,
               onToggleAlwaysOnTop: _toggleAlwaysOnTop,

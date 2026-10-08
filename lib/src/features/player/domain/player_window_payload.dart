@@ -21,6 +21,8 @@ abstract final class PlayerWindowProtocol {
   static const String methodReportStateChanged = 'stateChanged';
   static const String methodReportClosed = 'closed';
   static const String methodRequestNext = 'requestNext';
+  static const String methodHandoverToMiniPlayer = 'handoverToMiniPlayer';
+  static const String methodReportMediaChanged = 'reportMediaChanged';
 }
 
 /// The complete initialization & switch payload passed to the Player Window.
@@ -48,6 +50,32 @@ class PlayerWindowPayload {
   final SkipIntroPreferences skipIntroPreferences;
   final DanmakuPreferences danmakuPreferences;
   final double longPressSpeed;
+
+  PlayerWindowPayload copyWith({
+    MediaItem? item,
+    PlaybackPlan? plan,
+    AuthenticatedServer? account,
+    PlaybackQueue? queue,
+    HardwareDecodingMode? hardwareDecodingMode,
+    PlaybackBitrate? maxStreamingBitrate,
+    SubtitlePreferences? subtitlePreferences,
+    SkipIntroPreferences? skipIntroPreferences,
+    DanmakuPreferences? danmakuPreferences,
+    double? longPressSpeed,
+  }) {
+    return PlayerWindowPayload(
+      item: item ?? this.item,
+      plan: plan ?? this.plan,
+      account: account ?? this.account,
+      queue: queue ?? this.queue,
+      hardwareDecodingMode: hardwareDecodingMode ?? this.hardwareDecodingMode,
+      maxStreamingBitrate: maxStreamingBitrate ?? this.maxStreamingBitrate,
+      subtitlePreferences: subtitlePreferences ?? this.subtitlePreferences,
+      skipIntroPreferences: skipIntroPreferences ?? this.skipIntroPreferences,
+      danmakuPreferences: danmakuPreferences ?? this.danmakuPreferences,
+      longPressSpeed: longPressSpeed ?? this.longPressSpeed,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'item': item.toJson(),

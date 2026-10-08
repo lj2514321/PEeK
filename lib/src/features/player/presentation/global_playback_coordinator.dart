@@ -1,17 +1,23 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:embyplayer/src/app/app.dart';
+import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/analytics/data/viewing_history_store.dart';
 import 'package:embyplayer/src/features/player/domain/playback_plan.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
+import 'package:embyplayer/src/features/player/domain/player_window_payload.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_page.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
+import 'package:embyplayer/src/features/player/presentation/player_window_coordinator.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum PlaybackPresentationMode {
   hidden,
@@ -249,6 +255,29 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     );
   }
 
+  void updateActiveItem(MediaItem item, {PlaybackPlan? plan}) {
+    state = state.copyWith(
+      item: item,
+      plan: plan ?? state.plan,
+      revision: state.revision + 1,
+    );
+  }
+
+  void closeMiniSilently() {
+    _cancelSubscriptions();
+    _miniProgressTimer?.cancel();
+    _miniProgressTimer = null;
+    final runtime = state.runtime;
+    _activeRuntime = null;
+    unawaited(runtime?.pause());
+    unawaited(runtime?.dispose().catchError((_) {}));
+    state = state.copyWith(
+      mode: PlaybackPresentationMode.hidden,
+      playing: false,
+      revision: state.revision + 1,
+    );
+  }
+
   void clearActivePlayback() {
     _cancelSubscriptions();
     _activeRuntime = null;
@@ -278,7 +307,6 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
 
     _miniProgressTimer?.cancel();
     _miniProgressTimer = null;
-    state = state.copyWith(mode: PlaybackPresentationMode.full);
 
     final currentPos = state.position > Duration.zero
         ? state.position
@@ -287,6 +315,19 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
       startPosition: currentPos > Duration.zero ? currentPos : plan.startPosition,
     );
 
+    if (!kIsWeb && Platform.isWindows && !AppMotion.isTest) {
+      closeMiniSilently();
+      final payload = PlayerWindowPayload(
+        account: account,
+        item: item,
+        plan: updatedPlan,
+        queue: queue,
+      );
+      unawaited(ref.read(playerWindowCoordinatorProvider).openOrSwitch(payload));
+      return;
+    }
+
+    state = state.copyWith(mode: PlaybackPresentationMode.full);
     final navigator = (context != null ? Navigator.maybeOf(context) : null) ??
         EmbyPlayerApp.rootNavigatorKey.currentState;
 
@@ -305,6 +346,14 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   }
 
   Future<void> togglePlayPause() async {
+    if (state.mode == PlaybackPresentationMode.window) {
+      if (state.playing) {
+        await ref.read(playerWindowCoordinatorProvider).pause();
+      } else {
+        await ref.read(playerWindowCoordinatorProvider).resume();
+      }
+      return;
+    }
     final runtime = state.runtime;
     if (runtime == null) return;
     await runtime.playOrPause();
@@ -344,6 +393,10 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   }
 
   Future<void> close({bool disposeRuntime = true}) async {
+    if (state.mode == PlaybackPresentationMode.window) {
+      await ref.read(playerWindowCoordinatorProvider).closeWindow();
+      return;
+    }
     final runtime = state.runtime;
     final item = state.item;
     final pos = (state.position > Duration.zero ? state.position : runtime?.position) ?? Duration.zero;

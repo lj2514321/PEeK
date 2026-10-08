@@ -411,7 +411,7 @@ class _PlaybackTopBar extends StatelessWidget {
     return Align(
       alignment: Alignment.topCenter,
       child: _PlaybackDragToMoveArea(
-        onDoubleTap: onFullScreen,
+        onDoubleTap: onToggleMaximize ?? onFullScreen,
         child: DecoratedBox(
           decoration: const BoxDecoration(
             gradient: LinearGradient(

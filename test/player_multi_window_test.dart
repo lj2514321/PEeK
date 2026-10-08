@@ -248,5 +248,83 @@ void main() {
         equals(PlaybackPresentationMode.hidden),
       );
     });
+
+    test('updateActiveItem updates the current active media item', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final coordinator = container.read(
+        globalPlaybackCoordinatorProvider.notifier,
+      );
+      final item1 = MediaItem(
+        id: 'ep-1',
+        name: 'Episode 1',
+        kind: MediaItemKind.episode,
+      );
+      final item2 = MediaItem(
+        id: 'ep-2',
+        name: 'Episode 2',
+        kind: MediaItemKind.episode,
+      );
+      final plan = PlaybackPlan(
+        itemId: 'ep-1',
+        mediaSourceId: 'src-1',
+        playSessionId: 'sess-1',
+        streamUri: Uri.parse('http://test/stream.mp4'),
+        method: PlaybackMethod.directPlay,
+      );
+
+      coordinator.registerWindowPlayback(account: null, item: item1, plan: plan);
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).item?.name,
+        equals('Episode 1'),
+      );
+
+      coordinator.updateActiveItem(item2);
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).item?.name,
+        equals('Episode 2'),
+      );
+
+      final plan2 = PlaybackPlan(
+        itemId: 'ep-2',
+        mediaSourceId: 'src-2',
+        playSessionId: 'sess-2',
+        streamUri: Uri.parse('http://test/stream2.mp4'),
+        method: PlaybackMethod.directPlay,
+      );
+      coordinator.updateActiveItem(item2, plan: plan2);
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).plan?.itemId,
+        equals('ep-2'),
+      );
+    });
+
+    test('closeMiniSilently sets mode to hidden without errors', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final coordinator = container.read(
+        globalPlaybackCoordinatorProvider.notifier,
+      );
+      coordinator.closeMiniSilently();
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).mode,
+        equals(PlaybackPresentationMode.hidden),
+      );
+    });
+  });
+
+  group('PlayerWindowProtocol constants', () {
+    test('contains handoverToMiniPlayer and reportMediaChanged methods', () {
+      expect(
+        PlayerWindowProtocol.methodHandoverToMiniPlayer,
+        equals('handoverToMiniPlayer'),
+      );
+      expect(
+        PlayerWindowProtocol.methodReportMediaChanged,
+        equals('reportMediaChanged'),
+      );
+    });
   });
 }

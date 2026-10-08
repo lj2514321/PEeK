@@ -47,15 +47,15 @@ class WindowPipController {
     if (!_isPip) return true;
     try {
       await windowManager.setAlwaysOnTop(false);
-      await windowManager.setMinimumSize(const Size(800, 500));
+      await windowManager.setMinimumSize(const Size(480, 270));
       if (_wasMaximized) {
         await windowManager.maximize();
       } else if (_savedBounds != null &&
-          _savedBounds!.width >= 640 &&
-          _savedBounds!.height >= 400) {
+          _savedBounds!.width >= 480 &&
+          _savedBounds!.height >= 270) {
         await windowManager.setBounds(_savedBounds!);
       } else {
-        await windowManager.setSize(const Size(1280, 720));
+        await windowManager.setSize(const Size(1024, 576));
       }
       _savedBounds = null;
       _wasMaximized = false;
