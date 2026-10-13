@@ -297,8 +297,9 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   }
 
   void expand([BuildContext? context]) {
-    if (state.runtime == null || state.item == null || state.plan == null)
+    if (state.runtime == null || state.item == null || state.plan == null) {
       return;
+    }
     final item = state.item!;
     final account = state.account;
     final plan = state.plan!;

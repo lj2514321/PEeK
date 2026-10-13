@@ -40,7 +40,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('counter-button')));
     await tester.pump();
     expect(find.text('次数 1'), findsOneWidget);
-    expect(find.byType(AnimatedScale), findsWidgets);
+    expect(find.byType(Transform), findsWidgets);
 
     select(1);
     await tester.pumpAndSettle();
@@ -68,9 +68,9 @@ void main() {
       ),
     );
 
-    final scales = tester.widgetList<AnimatedScale>(find.byType(AnimatedScale));
-    expect(scales, isNotEmpty);
-    expect(scales.every((scale) => scale.duration == Duration.zero), isTrue);
+    final offstages = tester.widgetList<Offstage>(find.byType(Offstage));
+    expect(offstages, isNotEmpty);
+    expect(find.text('第一页'), findsOneWidget);
   });
 }
 

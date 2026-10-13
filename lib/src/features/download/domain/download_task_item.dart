@@ -72,8 +72,9 @@ class DownloadTaskItem {
   }
 
   String get formattedSpeed {
-    if (speedBytesPerSec < 1024)
+    if (speedBytesPerSec < 1024) {
       return '${speedBytesPerSec.toStringAsFixed(0)} B/s';
+    }
     if (speedBytesPerSec < 1024 * 1024) {
       return '${(speedBytesPerSec / 1024).toStringAsFixed(1)} KB/s';
     }

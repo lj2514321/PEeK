@@ -336,9 +336,9 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
         // Layer 1: Spatial Liquid Glass Scroll Content
         RefreshIndicator(
           onRefresh: () => _load(forceRefresh: true),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 720;
+          child: Builder(
+            builder: (context) {
+              final compact = MediaQuery.sizeOf(context).width < 720;
               final leftPadding = compact ? 0.0 : 28.0;
               return PeekSmoothScroll(
                 controller: _scrollController,

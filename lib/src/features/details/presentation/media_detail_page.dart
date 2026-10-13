@@ -2445,8 +2445,9 @@ class _MediaSpecsCard extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     final labelParts = <String>[];
-    if (source.resolutionLabel.isNotEmpty)
+    if (source.resolutionLabel.isNotEmpty) {
       labelParts.add(source.resolutionLabel);
+    }
     if (source.videoCodec != null && source.videoCodec!.isNotEmpty) {
       labelParts.add(source.videoCodec!.toUpperCase());
     }

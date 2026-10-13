@@ -49,7 +49,8 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
    - **分层解耦与 BackdropFilter 静态化隔离 (`glass.dart` / `authenticated_home_page.dart`)**：将毛玻璃面板中的 `BackdropFilter` 抽离为 `Stack` 下层的 `Positioned.fill` 静态背景层，与动态卡片/文字内容解耦，彻底避免上层内容动效每帧重复触发 Skia 重滤镜光栅化；
    - **自适应内存降采样图层解码 (`peek_media_image.dart`)**：根据卡片类型与视口尺寸注入 `memCacheWidth`（海报 440px、剧集 600px、背景 960px、头像 280px），单张图片 GPU 解码内存从 24MB 锐减至 1MB（降幅 95%）；
    - **超大环境光弥散图层降采样 (`AmbientBackdrop`)**：在 42px 大半径全屏环境光漫反射层指定 `memCacheWidth: 320`，在 100% 保持 VisionOS 空间光品质的前提下将全屏光栅化开销降低逾百倍；
-   - **冷启动首帧布局缓冲 (`PeekStaggeredGridItem`)**：初次加载错峰瀑布流时注入 45ms 布局缓冲（`fromInit ? 45 : 0`），待首帧原生合成就绪后平滑展开二维对角涟漪，杜绝初次加载掉帧。
+   - **冷启动首帧布局缓冲 (`PeekStaggeredGridItem`)**：初次加载错峰瀑布流时注入 45ms 布局缓冲（`fromInit ? 45 : 0`），待首帧原生合成就绪后平滑展开二维对角涟漪，杜绝初次加载掉帧；
+    - **侧栏展开收起单轨同步与内容区布局解耦 (home_shell.dart / authenticated_home_page.dart / media_library_page.dart)**：消除侧栏展开/收起过渡过程中的微卡顿与掉帧。将原有两个独立 Ticker/Controller 统一为由 HomeShellState 单一驱动的 _sidebarController，使侧栏宽度与主内容区位移在每个微秒完全同相；将顶层包裹整页的 LayoutBuilder 优化为响应式静态感知 (MediaQuery.sizeOf(context))，并在 AnimatedBuilder 中复用预构建的主内容区实例，彻底避免动画期间全页 50+ 卡片与 CustomScrollView 的高频反复重建；同时将 _AppRail 内的 BackdropFilter 尺寸稳定为 224px 并由 ClipRRect 裁剪，消除 GPU 模糊缓冲区的动态重分配颠簸。
 
 
 

@@ -501,9 +501,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final horizontalPadding = constraints.maxWidth < 720 ? 20.0 : 32.0;
+    final horizontalPadding =
+        MediaQuery.sizeOf(context).width < 720 ? 20.0 : 32.0;
         final selectedItems = _items
             .where((item) => _selectedIds.contains(item.id))
             .toList(growable: false);
@@ -705,8 +704,6 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             ],
           ),
         );
-      },
-    );
   }
 
   Future<void> _reloadCurrentNode() async {

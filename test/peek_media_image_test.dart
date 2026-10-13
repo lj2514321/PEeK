@@ -83,8 +83,10 @@ void main() {
       ),
     );
 
-    expect(builtImage, isA<Image>());
-    expect((builtImage as Image).image, isA<FileImage>());
+    final provider = (builtImage as Image).image;
+    final resolvedProvider =
+        provider is ResizeImage ? provider.imageProvider : provider;
+    expect(resolvedProvider, isA<FileImage>());
   });
 
   testWidgets('uses the basic cache manager without client-side resizing', (

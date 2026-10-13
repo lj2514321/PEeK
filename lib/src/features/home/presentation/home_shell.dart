@@ -36,7 +36,8 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell>
+    with SingleTickerProviderStateMixin {
   final _mediaHomePageKey = GlobalKey<AuthenticatedHomePageState>();
   final _libraryPageKey = GlobalKey<MediaLibraryPageState>();
   final _favoritesPageKey = GlobalKey<FavoritesPageState>();
@@ -45,6 +46,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   final _visitedDestinations = <int>{0};
   int _selectedIndex = 0;
   bool _sidebarCollapsed = false;
+  late final AnimationController _sidebarController;
+  late final Animation<double> _sidebarAnimation;
   DiscoveredServer? _discoveredServer;
   AuthenticatedServer? _authenticatedServer;
   ServerAccountState _accountState = const ServerAccountState();
@@ -84,6 +87,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   void initState() {
     super.initState();
+    _sidebarController = AnimationController(
+      vsync: this,
+      value: _sidebarCollapsed ? 0.0 : 1.0,
+      duration: AppMotion.slow,
+    );
+    _sidebarAnimation = CurvedAnimation(
+      parent: _sidebarController,
+      curve: Curves.easeOutExpo,
+      reverseCurve: Curves.easeInOutCubic,
+    );
     _sessionExpirySubscription = ref
         .read(sessionExpiryProvider)
         .events
@@ -95,6 +108,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   void dispose() {
+    _sidebarController.dispose();
     _sessionExpirySubscription.cancel();
     super.dispose();
   }
@@ -455,7 +469,21 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   void _toggleSidebar() {
-    setState(() => _sidebarCollapsed = !_sidebarCollapsed);
+    final nextCollapsed = !_sidebarCollapsed;
+    setState(() => _sidebarCollapsed = nextCollapsed);
+    final target = nextCollapsed ? 0.0 : 1.0;
+    final duration = AppMotion.responsive(
+      context,
+      target == 1.0 ? AppMotion.slow : AppMotion.standard,
+    );
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _sidebarController.value = target;
+    } else {
+      _sidebarController.animateTo(
+        target,
+        duration: duration,
+      );
+    }
   }
 
   Future<void> _handleSessionExpired([SessionExpiryEvent? event]) async {
@@ -552,226 +580,243 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               final canExtendRail = constraints.maxWidth >= 1040;
               final extendedRail = canExtendRail && !_sidebarCollapsed;
               final compactContent = constraints.maxWidth < 900;
-              final sidebarDuration = AppMotion.responsive(
-                context,
-                extendedRail ? AppMotion.slow : AppMotion.standard,
+              final disableAnimations = MediaQuery.disableAnimationsOf(context);
+              if (disableAnimations) {
+                _sidebarController.value = extendedRail ? 1.0 : 0.0;
+              } else if (!canExtendRail &&
+                  _sidebarController.value > 0.0 &&
+                  !_sidebarController.isAnimating) {
+                _sidebarController.value = 0.0;
+              } else if (canExtendRail &&
+                  !_sidebarCollapsed &&
+                  _sidebarController.value < 1.0 &&
+                  !_sidebarController.isAnimating) {
+                _sidebarController.value = 1.0;
+              }
+
+              final mainContent = Column(
+                children: [
+                  _TopCommandBar(
+                    compact: compactContent,
+                    destination: _destinations[_selectedIndex],
+                    server: _discoveredServer,
+                    account: _authenticatedServer,
+                    searchBarKey: _topSearchBarKey,
+                    onAccount: () => _selectDestination(3),
+                  ),
+                  Expanded(
+                    child: PeekIndexedTransitionStack(
+                      key: const ValueKey('main-page-view'),
+                      index: _selectedIndex,
+                      children: [
+                        _KeepAliveDestination(
+                          active: _selectedIndex == 0,
+                          child: _authenticatedServer == null
+                              ? _HomePage(
+                                  key: const ValueKey(
+                                    'connection-home',
+                                  ),
+                                  server: _discoveredServer,
+                                  account: null,
+                                  onAddServer:
+                                      _showAddServerDialog,
+                                  onLogin: _showLoginDialog,
+                                  onOpenLibrary: () {
+                                    _selectDestination(1);
+                                  },
+                                )
+                              : AuthenticatedHomePage(
+                                  key: _mediaHomePageKey,
+                                  account: _authenticatedServer!,
+                                  active: _selectedIndex == 0,
+                                  onOpenLibrary: () {
+                                    _selectDestination(1);
+                                  },
+                                  onSessionExpired:
+                                      _handleSessionExpired,
+                                ),
+                        ),
+                        _KeepAliveDestination(
+                          active: _selectedIndex == 1,
+                          child: _visitedDestinations.contains(1)
+                              ? MediaLibraryPage(
+                                  key: _libraryPageKey,
+                                  account: _authenticatedServer,
+                                  localLibraries: _localLibraries,
+                                  onAddLocalLibrary:
+                                      _addLocalLibrary,
+                                  onGoHome: () =>
+                                      _selectDestination(0),
+                                  onSessionExpired:
+                                      _handleSessionExpired,
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        _KeepAliveDestination(
+                          active: _selectedIndex == 2,
+                          child: _visitedDestinations.contains(2)
+                              ? FavoritesPage(
+                                  key: _favoritesPageKey,
+                                  account: _authenticatedServer,
+                                  onGoHome: () =>
+                                      _selectDestination(0),
+                                  onOpenLibrary: () =>
+                                      _selectDestination(1),
+                                  onSessionExpired:
+                                      _handleSessionExpired,
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        _KeepAliveDestination(
+                          active: _selectedIndex == 3,
+                          child: _visitedDestinations.contains(3)
+                              ? ServerAccountsPage(
+                                  key: const ValueKey(
+                                    'server-accounts',
+                                  ),
+                                  state: _accountState,
+                                  busyProfileId: _busyProfileId,
+                                  onAddServer:
+                                      _showAddServerDialog,
+                                  localLibraries: _localLibraries,
+                                  addingLocalLibrary:
+                                      _addingLocalLibrary,
+                                  busyLocalLibraryId:
+                                      _busyLocalLibraryId,
+                                  onAddLocalLibrary:
+                                      _addLocalLibrary,
+                                  onRemoveLocalLibrary:
+                                      _removeLocalLibrary,
+                                  onSwitch: _switchAccount,
+                                  onLogin: _loginAccount,
+                                  onLogout: _logoutAccount,
+                                  onRemove: _removeAccount,
+                                  onGoHome: () =>
+                                      _selectDestination(0),
+                                  playbackSettings:
+                                      _playbackSettings,
+                                  playbackSettingsLoading:
+                                      _playbackSettingsLoading,
+                                  playbackSettingsSaving:
+                                      _playbackSettingsSaving,
+                                  playbackSettingsError:
+                                      _playbackSettingsError,
+                                  onPlaybackBitrateChanged:
+                                      (bitrate) => unawaited(
+                                        _changePlaybackBitrate(
+                                          bitrate,
+                                        ),
+                                      ),
+                                  onEnableMiniPlayerChanged:
+                                      (enabled) => unawaited(
+                                        _changeEnableMiniPlayer(
+                                          enabled,
+                                        ),
+                                      ),
+                                  onUseExternalPlayerChanged:
+                                      (enabled) => unawaited(
+                                        _changeUseExternalPlayer(
+                                          enabled,
+                                        ),
+                                      ),
+                                  onExternalPlayerPathChanged:
+                                      (path) => unawaited(
+                                        _changeExternalPlayerPath(
+                                          path,
+                                        ),
+                                      ),
+                                  onHardwareDecodingModeChanged:
+                                      (mode) => unawaited(
+                                        _changeHardwareDecodingMode(
+                                          mode,
+                                        ),
+                                      ),
+                                  onLongPressSpeedChanged:
+                                      (speed) => unawaited(
+                                        _changeLongPressSpeed(
+                                          speed,
+                                        ),
+                                      ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        _KeepAliveDestination(
+                          active: _selectedIndex == 4,
+                          child: _visitedDestinations.contains(4)
+                              ? ActorsPage(
+                                  key: _actorsPageKey,
+                                  account: _authenticatedServer,
+                                  onOpenLibrary: () =>
+                                      _selectDestination(1),
+                                  onSessionExpired:
+                                      _handleSessionExpired,
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        _KeepAliveDestination(
+                          active: _selectedIndex == 5,
+                          child: _visitedDestinations.contains(5)
+                              ? const AnalyticsDashboardPage()
+                              : const SizedBox.shrink(),
+                        ),
+                        _KeepAliveDestination(
+                          active: _selectedIndex == 6,
+                          child: _visitedDestinations.contains(6)
+                              ? const DownloadsPage()
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               );
-              final sidebarCurve = extendedRail
-                  ? Curves.easeOutExpo
-                  : Curves.easeInOutCubic;
 
               return Scaffold(
                 backgroundColor: Colors.transparent,
                 body: AmbientBackdrop(
                   child: SafeArea(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        AnimatedPositioned(
-                          duration: sidebarDuration,
-                          curve: sidebarCurve,
-                          left: showRail ? (extendedRail ? 224 : 80) : 0,
-                          top: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: RepaintBoundary(
-                            key: const ValueKey('main-content-pane'),
-                            child: Column(
-                              children: [
-                                _TopCommandBar(
-                                  compact: compactContent,
-                                  destination: _destinations[_selectedIndex],
-                                  server: _discoveredServer,
-                                  account: _authenticatedServer,
-                                  searchBarKey: _topSearchBarKey,
-                                  onAccount: () => _selectDestination(3),
-                                ),
-                                Expanded(
-                                  child: PeekIndexedTransitionStack(
-                                    key: const ValueKey('main-page-view'),
-                                    index: _selectedIndex,
-                                    children: [
-                                      _KeepAliveDestination(
-                                        active: _selectedIndex == 0,
-                                        child: _authenticatedServer == null
-                                            ? _HomePage(
-                                                key: const ValueKey(
-                                                  'connection-home',
-                                                ),
-                                                server: _discoveredServer,
-                                                account: null,
-                                                onAddServer:
-                                                    _showAddServerDialog,
-                                                onLogin: _showLoginDialog,
-                                                onOpenLibrary: () {
-                                                  _selectDestination(1);
-                                                },
-                                              )
-                                            : AuthenticatedHomePage(
-                                                key: _mediaHomePageKey,
-                                                account: _authenticatedServer!,
-                                                active: _selectedIndex == 0,
-                                                onOpenLibrary: () {
-                                                  _selectDestination(1);
-                                                },
-                                                onSessionExpired:
-                                                    _handleSessionExpired,
-                                              ),
-                                      ),
-                                      _KeepAliveDestination(
-                                        active: _selectedIndex == 1,
-                                        child: _visitedDestinations.contains(1)
-                                            ? MediaLibraryPage(
-                                                key: _libraryPageKey,
-                                                account: _authenticatedServer,
-                                                localLibraries: _localLibraries,
-                                                onAddLocalLibrary:
-                                                    _addLocalLibrary,
-                                                onGoHome: () =>
-                                                    _selectDestination(0),
-                                                onSessionExpired:
-                                                    _handleSessionExpired,
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                      _KeepAliveDestination(
-                                        active: _selectedIndex == 2,
-                                        child: _visitedDestinations.contains(2)
-                                            ? FavoritesPage(
-                                                key: _favoritesPageKey,
-                                                account: _authenticatedServer,
-                                                onGoHome: () =>
-                                                    _selectDestination(0),
-                                                onOpenLibrary: () =>
-                                                    _selectDestination(1),
-                                                onSessionExpired:
-                                                    _handleSessionExpired,
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                      _KeepAliveDestination(
-                                        active: _selectedIndex == 3,
-                                        child: _visitedDestinations.contains(3)
-                                            ? ServerAccountsPage(
-                                                key: const ValueKey(
-                                                  'server-accounts',
-                                                ),
-                                                state: _accountState,
-                                                busyProfileId: _busyProfileId,
-                                                onAddServer:
-                                                    _showAddServerDialog,
-                                                localLibraries: _localLibraries,
-                                                addingLocalLibrary:
-                                                    _addingLocalLibrary,
-                                                busyLocalLibraryId:
-                                                    _busyLocalLibraryId,
-                                                onAddLocalLibrary:
-                                                    _addLocalLibrary,
-                                                onRemoveLocalLibrary:
-                                                    _removeLocalLibrary,
-                                                onSwitch: _switchAccount,
-                                                onLogin: _loginAccount,
-                                                onLogout: _logoutAccount,
-                                                onRemove: _removeAccount,
-                                                onGoHome: () =>
-                                                    _selectDestination(0),
-                                                playbackSettings:
-                                                    _playbackSettings,
-                                                playbackSettingsLoading:
-                                                    _playbackSettingsLoading,
-                                                playbackSettingsSaving:
-                                                    _playbackSettingsSaving,
-                                                playbackSettingsError:
-                                                    _playbackSettingsError,
-                                                onPlaybackBitrateChanged:
-                                                    (bitrate) => unawaited(
-                                                      _changePlaybackBitrate(
-                                                        bitrate,
-                                                      ),
-                                                    ),
-                                                onEnableMiniPlayerChanged:
-                                                    (enabled) => unawaited(
-                                                      _changeEnableMiniPlayer(
-                                                        enabled,
-                                                      ),
-                                                    ),
-                                                onUseExternalPlayerChanged:
-                                                    (enabled) => unawaited(
-                                                      _changeUseExternalPlayer(
-                                                        enabled,
-                                                      ),
-                                                    ),
-                                                onExternalPlayerPathChanged:
-                                                    (path) => unawaited(
-                                                      _changeExternalPlayerPath(
-                                                        path,
-                                                      ),
-                                                    ),
-                                                onHardwareDecodingModeChanged:
-                                                    (mode) => unawaited(
-                                                      _changeHardwareDecodingMode(
-                                                        mode,
-                                                      ),
-                                                    ),
-                                                onLongPressSpeedChanged:
-                                                    (speed) => unawaited(
-                                                      _changeLongPressSpeed(
-                                                        speed,
-                                                      ),
-                                                    ),
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                      _KeepAliveDestination(
-                                        active: _selectedIndex == 4,
-                                        child: _visitedDestinations.contains(4)
-                                            ? ActorsPage(
-                                                key: _actorsPageKey,
-                                                account: _authenticatedServer,
-                                                onOpenLibrary: () =>
-                                                    _selectDestination(1),
-                                                onSessionExpired:
-                                                    _handleSessionExpired,
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                      _KeepAliveDestination(
-                                        active: _selectedIndex == 5,
-                                        child: _visitedDestinations.contains(5)
-                                            ? const AnalyticsDashboardPage()
-                                            : const SizedBox.shrink(),
-                                      ),
-                                      _KeepAliveDestination(
-                                        active: _selectedIndex == 6,
-                                        child: _visitedDestinations.contains(6)
-                                            ? const DownloadsPage()
-                                            : const SizedBox.shrink(),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (showRail)
-                          Positioned(
-                            left: 0,
-                            top: 0,
-                            bottom: 0,
-                            child: RepaintBoundary(
-                              key: const ValueKey('app-rail-isolated-boundary'),
-                              child: _AppRail(
-                                extended: extendedRail,
-                                destinations: _destinations,
-                                selectedIndex: _selectedIndex,
-                                onSelected: _selectDestination,
-                                canToggle: canExtendRail,
-                                onToggle: _toggleSidebar,
+                    child: AnimatedBuilder(
+                      animation: _sidebarAnimation,
+                      builder: (context, child) {
+                        final progress = _sidebarAnimation.value;
+                        final currentRailWidth = showRail
+                            ? (80.0 + (144.0 * progress))
+                            : 0.0;
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Positioned(
+                              left: currentRailWidth,
+                              top: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: RepaintBoundary(
+                                key: const ValueKey('main-content-pane'),
+                                child: child!,
                               ),
                             ),
-                          ),
-                      ],
+                            if (showRail)
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: RepaintBoundary(
+                                  key: const ValueKey('app-rail-isolated-boundary'),
+                                  child: _AppRail(
+                                    extended: extendedRail,
+                                    progress: progress,
+                                    destinations: _destinations,
+                                    selectedIndex: _selectedIndex,
+                                    onSelected: _selectDestination,
+                                    canToggle: canExtendRail,
+                                    onToggle: _toggleSidebar,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                      child: mainContent,
                     ),
                   ),
                 ),
@@ -829,9 +874,10 @@ class _KeepAliveDestinationState extends State<_KeepAliveDestination>
   }
 }
 
-class _AppRail extends StatefulWidget {
+class _AppRail extends StatelessWidget {
   const _AppRail({
     required this.extended,
+    required this.progress,
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
@@ -840,6 +886,7 @@ class _AppRail extends StatefulWidget {
   });
 
   final bool extended;
+  final double progress;
   final List<_AppDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
@@ -847,124 +894,72 @@ class _AppRail extends StatefulWidget {
   final VoidCallback onToggle;
 
   @override
-  State<_AppRail> createState() => _AppRailState();
-}
-
-class _AppRailState extends State<_AppRail>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  bool _disableAnimations = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      value: widget.extended ? 1 : 0,
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final disableAnimations = MediaQuery.disableAnimationsOf(context);
-    if (_disableAnimations == disableAnimations) return;
-    _disableAnimations = disableAnimations;
-    if (disableAnimations) {
-      _controller.value = widget.extended ? 1 : 0;
-    }
-  }
-
-  @override
-  void didUpdateWidget(_AppRail oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.extended == widget.extended) return;
-    if (_disableAnimations) {
-      _controller.value = widget.extended ? 1 : 0;
-      return;
-    }
-    _controller.animateTo(
-      widget.extended ? 1 : 0,
-      duration: widget.extended ? AppMotion.slow : AppMotion.standard,
-      curve: widget.extended ? Curves.easeOutExpo : Curves.easeInOutCubic,
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final progress = _controller.value;
-        final width = 80 + (144 * progress);
-        return SizedBox(
-          key: const ValueKey('app-sidebar'),
-          width: width,
-          child: RepaintBoundary(
-            child: Container(
-              margin: EdgeInsets.zero,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.18),
-                    Colors.white.withValues(alpha: 0.06),
-                  ],
-                ),
-                borderRadius: AppRadius.borderRadius,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.34),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.38),
-                    blurRadius: 38,
-                    offset: const Offset(0, 16),
+    final width = 80.0 + (144.0 * progress);
+    return SizedBox(
+      key: const ValueKey('app-sidebar'),
+      width: width,
+      child: RepaintBoundary(
+        child: Container(
+          margin: EdgeInsets.zero,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.18),
+                Colors.white.withValues(alpha: 0.06),
+              ],
+            ),
+            borderRadius: AppRadius.borderRadius,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.34),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.38),
+                blurRadius: 38,
+                offset: const Offset(0, 16),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: AppRadius.borderRadius,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 224,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 38, sigmaY: 38),
+                    child: const SizedBox.expand(),
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: AppRadius.borderRadius,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 38, sigmaY: 38),
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: OverflowBox(
-                        alignment: Alignment.topLeft,
-                        minWidth: 208,
-                        maxWidth: 208,
-                        child: _AppRailContents(
-                          extended: widget.extended,
-                          progress: progress,
-                          destinations: widget.destinations,
-                          selectedIndex: widget.selectedIndex,
-                          onSelected: widget.onSelected,
-                          canToggle: widget.canToggle,
-                          onToggle: widget.onToggle,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
-              ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: OverflowBox(
+                    alignment: Alignment.topLeft,
+                    minWidth: 208,
+                    maxWidth: 208,
+                    child: _AppRailContents(
+                      extended: extended,
+                      progress: progress,
+                      destinations: destinations,
+                      selectedIndex: selectedIndex,
+                      onSelected: onSelected,
+                      canToggle: canToggle,
+                      onToggle: onToggle,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -1501,34 +1496,41 @@ class _TopCommandBar extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: AppRadius.borderRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
-          child: SizedBox(
-            height: 54,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _TopDestinationHeading(destination: destination),
-                  ),
-                  TopSearchBar(
-                    key: searchBarKey,
-                    account: account,
-                    compact: compact,
-                  ),
-                  SizedBox(width: compact ? 8 : 12),
-                  _AccountStatus(
-                    key: const ValueKey('top-account-status'),
-                    server: server,
-                    account: account,
-                    compact: compact,
-                    onTap: onAccount,
-                  ),
-                ],
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+                child: const SizedBox.expand(),
               ),
             ),
-          ),
+            SizedBox(
+              height: 54,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _TopDestinationHeading(destination: destination),
+                    ),
+                    TopSearchBar(
+                      key: searchBarKey,
+                      account: account,
+                      compact: compact,
+                    ),
+                    SizedBox(width: compact ? 8 : 12),
+                    _AccountStatus(
+                      key: const ValueKey('top-account-status'),
+                      server: server,
+                      account: account,
+                      compact: compact,
+                      onTap: onAccount,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

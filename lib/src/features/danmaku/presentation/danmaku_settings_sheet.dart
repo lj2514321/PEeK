@@ -126,15 +126,17 @@ class _DanmakuSettingsSheetState extends State<DanmakuSettingsSheet> {
               children: [
                 const Icon(Icons.comment_rounded, color: AppColors.spotlight),
                 const SizedBox(width: 10),
-                const Text(
-                  '弹幕设置 (Danmaku 2.0)',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                Expanded(
+                  child: const Text(
+                    '弹幕设置 (Danmaku 2.0)',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
-                const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, color: Colors.white70),
                   onPressed: () => Navigator.of(context).pop(),
