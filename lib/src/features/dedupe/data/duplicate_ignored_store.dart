@@ -18,7 +18,7 @@ abstract interface class DuplicateIgnoredStore {
 
 class MemoryDuplicateIgnoredStore implements DuplicateIgnoredStore {
   MemoryDuplicateIgnoredStore([Iterable<String> initial = const []])
-      : _ignored = initial.toSet();
+    : _ignored = initial.toSet();
 
   final Set<String> _ignored;
 
@@ -43,7 +43,7 @@ class MemoryDuplicateIgnoredStore implements DuplicateIgnoredStore {
 
 class JsonDuplicateIgnoredStore implements DuplicateIgnoredStore {
   JsonDuplicateIgnoredStore({Directory? directory})
-      : _directory = directory ?? _defaultDirectory();
+    : _directory = directory ?? _defaultDirectory();
 
   final Directory _directory;
   Set<String>? _cached;

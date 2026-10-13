@@ -123,56 +123,56 @@ class _OnlineSubtitleDialogState extends State<OnlineSubtitleDialog> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(child: Text(_error!))
-                      : _results.isEmpty
-                          ? const Center(
-                              child: Text(
-                                '未找到匹配的在线字幕',
-                                style: TextStyle(color: AppColors.textTertiary),
-                              ),
-                            )
-                          : PeekSmoothScroll(
-                              child: ListView.separated(
-                                itemCount: _results.length,
-                                separatorBuilder: (_, _) => const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  final item = _results[index];
-                                  final isDownloading = _downloadingId == item.id;
-                                  return ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    title: Text(
-                                      item.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      '${item.providerName} · ${item.format.toUpperCase()}${item.comment != null ? ' · ${item.comment}' : ''}',
-                                      style: const TextStyle(
-                                        color: AppColors.textTertiary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    trailing: isDownloading
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : FilledButton.tonal(
-                                            onPressed: () => _download(item),
-                                            child: const Text('下载并挂载'),
-                                          ),
-                                  );
-                                },
+                  ? Center(child: Text(_error!))
+                  : _results.isEmpty
+                  ? const Center(
+                      child: Text(
+                        '未找到匹配的在线字幕',
+                        style: TextStyle(color: AppColors.textTertiary),
+                      ),
+                    )
+                  : PeekSmoothScroll(
+                      child: ListView.separated(
+                        itemCount: _results.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final item = _results[index];
+                          final isDownloading = _downloadingId == item.id;
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            title: Text(
+                              item.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
                               ),
                             ),
+                            subtitle: Text(
+                              '${item.providerName} · ${item.format.toUpperCase()}${item.comment != null ? ' · ${item.comment}' : ''}',
+                              style: const TextStyle(
+                                color: AppColors.textTertiary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            trailing: isDownloading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : FilledButton.tonal(
+                                    onPressed: () => _download(item),
+                                    child: const Text('下载并挂载'),
+                                  ),
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
         ),

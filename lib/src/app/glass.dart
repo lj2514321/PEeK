@@ -217,14 +217,21 @@ class VisionGlassCapsuleIsland extends StatelessWidget {
       decoration: AppGlass.visionOSDecoration(radius: radius, elevated: true),
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
-          child: Padding(
-            padding:
-                padding ??
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: child,
-          ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Padding(
+              padding:
+                  padding ??
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: child,
+            ),
+          ],
         ),
       ),
     );
@@ -310,9 +317,16 @@ class GlassSurface extends StatelessWidget {
         clipBehavior: clipBehavior,
         child: blur <= 0
             ? content
-            : BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                child: content,
+            : Stack(
+                children: [
+                  Positioned.fill(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                  content,
+                ],
               ),
       ),
     );
@@ -398,6 +412,7 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
                                       uri: ambient.imageUri,
                                       headers: ambient.imageHeaders,
                                       kind: PeekMediaImageKind.backdrop,
+                                      memCacheWidth: 320,
                                       fit: BoxFit.cover,
                                     ),
                                   ),

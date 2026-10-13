@@ -57,6 +57,8 @@ class PeekMediaImage extends StatelessWidget {
     this.placeholderIconSize,
     this.placeholderIcon,
     this.cacheManager,
+    this.memCacheWidth,
+    this.memCacheHeight,
   });
 
   final Uri? uri;
@@ -71,6 +73,8 @@ class PeekMediaImage extends StatelessWidget {
   final double? placeholderIconSize;
   final IconData? placeholderIcon;
   final BaseCacheManager? cacheManager;
+  final int? memCacheWidth;
+  final int? memCacheHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -79,11 +83,16 @@ class PeekMediaImage extends StatelessWidget {
       return _placeholder(loading: false, failed: false);
     }
 
+    final targetMemWidth = memCacheWidth ?? _defaultMemCacheWidth(kind, width);
+    final targetMemHeight = memCacheHeight;
+
     if (imageUri.scheme == 'file') {
       return Image.file(
         File.fromUri(imageUri),
         width: width,
         height: height,
+        cacheWidth: targetMemWidth,
+        cacheHeight: targetMemHeight,
         fit: fit,
         alignment: alignment,
         filterQuality: FilterQuality.medium,
@@ -100,6 +109,8 @@ class PeekMediaImage extends StatelessWidget {
       cacheKey: PeekMediaImageCache.keyFor(imageUri),
       width: width,
       height: height,
+      memCacheWidth: targetMemWidth,
+      memCacheHeight: targetMemHeight,
       fit: fit,
       alignment: alignment,
       filterQuality: FilterQuality.medium,
@@ -162,5 +173,18 @@ double _iconSizeFor(PeekMediaImageKind kind) {
     PeekMediaImageKind.poster ||
     PeekMediaImageKind.episode ||
     PeekMediaImageKind.library => 38,
+  };
+}
+
+int? _defaultMemCacheWidth(PeekMediaImageKind kind, double? width) {
+  if (width != null && width > 0) {
+    return (width * 2.2).round().clamp(120, 1920);
+  }
+  return switch (kind) {
+    PeekMediaImageKind.poster => 440,
+    PeekMediaImageKind.backdrop => 960,
+    PeekMediaImageKind.episode => 600,
+    PeekMediaImageKind.person => 280,
+    PeekMediaImageKind.library => 400,
   };
 }

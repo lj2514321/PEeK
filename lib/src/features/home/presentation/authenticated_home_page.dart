@@ -658,9 +658,16 @@ class _VisionLiquidGlassPanel extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Padding(padding: padding ?? EdgeInsets.zero, child: child),
+          ],
         ),
       ),
     );

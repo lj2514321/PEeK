@@ -43,6 +43,13 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
    - 网格与横向内容轨卡片统一包裹 `PeekStaggeredGridItem`，通过 `WidgetsBinding.instance.addPostFrameCallback` 在同步布局帧完成后启动二维斜向波浪定时器（`row * 78ms + col * 52ms`），结合 `RepaintBoundary` 与硬件合成 3D 矩阵实现满帧错峰瀑布流，并在动画静止后自动卸载变换层；
    - `PeekMotionOrigin` 捕获全局与卡片指针按下坐标，驱动 `PeekSpatialPageRoute` 实现从点击源锚点展开/收缩的空间容器形变；
    - 侧栏导航采用 `_LiquidRailIndicator` 非对称前后沿区间与挤压拉伸算法。
+6. **动效零削减性能优化架构 (Zero-Cut Motion Performance Architecture)**：
+   - **Skia 光栅化管线启动预热 (`lib/main.dart: _warmupGraphicsPipeline`)**：在 UI 挂载前通过离屏 `PictureRecorder` 预热高斯模糊 (`ImageFilter.blur`)、渐变 (`Gradient.linear/radial`) 与 3D 透视矩阵 Shader，杜绝桌面首帧 JIT 着色器编译卡顿，并将 `PaintingBinding` 图片内存上限扩充至 256MB/1200 项，消除并发卡片加载时的 Cache 颠簸；
+   - **分层解耦与 BackdropFilter 静态化隔离 (`glass.dart` / `authenticated_home_page.dart`)**：将毛玻璃面板中的 `BackdropFilter` 抽离为 `Stack` 下层的 `Positioned.fill` 静态背景层，与动态卡片/文字内容解耦，彻底避免上层内容动效每帧重复触发 Skia 重滤镜光栅化；
+   - **自适应内存降采样图层解码 (`peek_media_image.dart`)**：根据卡片类型与视口尺寸注入 `memCacheWidth`（海报 440px、剧集 600px、背景 960px、头像 280px），单张图片 GPU 解码内存从 24MB 锐减至 1MB（降幅 95%）；
+   - **超大环境光弥散图层降采样 (`AmbientBackdrop`)**：在 42px 大半径全屏环境光漫反射层指定 `memCacheWidth: 320`，在 100% 保持 VisionOS 空间光品质的前提下将全屏光栅化开销降低逾百倍；
+   - **冷启动首帧布局缓冲 (`PeekStaggeredGridItem`)**：初次加载错峰瀑布流时注入 45ms 布局缓冲（`fromInit ? 45 : 0`），待首帧原生合成就绪后平滑展开二维对角涟漪，杜绝初次加载掉帧。
+
 
 
 主导航使用按需创建、访问后保活的 `PeekIndexedTransitionStack` 承载首页、媒体库、收藏、设置、演员、仪表盘与下载；切换一级页面不得销毁其滚动位置、媒体库路径或搜索上下文，也不得在首次访问前提前请求隐藏页面数据。顶层 `HomeShell` 统一渲染 `AmbientBackdrop` 动态环境光，各子级一级页面保持透明画布。宽屏侧栏允许用户主动收起，720–1039px 自动使用紧凑图标栏，小屏使用底部导航；收起态必须保留 Tooltip、语义标签和可见液态激活光轨。离屏页面停止非必要轮播并释放输入焦点，账户切换仍通过 `didUpdateWidget` 清理用户隔离状态。

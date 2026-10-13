@@ -23,21 +23,21 @@ class ViewingRecord {
   final String kind;
 
   Map<String, dynamic> toJson() => {
-        'dateString': dateString,
-        'minutes': minutes,
-        'kind': kind,
-      };
+    'dateString': dateString,
+    'minutes': minutes,
+    'kind': kind,
+  };
 }
 
 class ViewingHistoryStore {
   ViewingHistoryStore({Directory? directory})
-      : _directory = directory ?? _defaultDirectory();
+    : _directory = directory ?? _defaultDirectory();
 
   final Directory _directory;
 
   File get _file => File(
-        '${_directory.path}${Platform.pathSeparator}viewing_history_v1.json',
-      );
+    '${_directory.path}${Platform.pathSeparator}viewing_history_v1.json',
+  );
 
   static Directory _defaultDirectory() => AppStoragePath.defaultDirectory;
 

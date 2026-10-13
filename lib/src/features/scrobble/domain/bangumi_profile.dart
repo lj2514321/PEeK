@@ -34,13 +34,13 @@ class BangumiProfile {
   }
 
   Map<String, dynamic> toJson() => {
-        'userId': userId,
-        'username': username,
-        'nickname': nickname,
-        'avatarUrl': avatarUrl,
-        'accessToken': accessToken,
-        'autoScrobble': autoScrobble,
-      };
+    'userId': userId,
+    'username': username,
+    'nickname': nickname,
+    'avatarUrl': avatarUrl,
+    'accessToken': accessToken,
+    'autoScrobble': autoScrobble,
+  };
 
   factory BangumiProfile.fromJson(Map<String, dynamic> json) {
     return BangumiProfile(

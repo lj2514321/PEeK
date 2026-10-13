@@ -157,7 +157,7 @@ class _PeekStaggeredGridItemState extends State<PeekStaggeredGridItem>
     }
 
     final cols = widget.columns < 1 ? 1 : widget.columns;
-    final leadInMs = tabReplay ? 55 : 0;
+    final leadInMs = tabReplay ? 55 : (fromInit ? 45 : 0);
     final int delayMs;
     if (widget.horizontal) {
       delayMs = leadInMs + (batchIndex.clamp(0, 13) * 52).clamp(0, 480);

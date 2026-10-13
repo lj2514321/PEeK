@@ -8,8 +8,8 @@ final actorFavoritesStoreProvider = Provider<ActorFavoritesStore>((ref) {
 
 final actorFavoritesProvider =
     NotifierProvider<ActorFavoritesNotifier, AsyncValue<List<ActorFavorite>>>(
-  ActorFavoritesNotifier.new,
-);
+      ActorFavoritesNotifier.new,
+    );
 
 class ActorFavoritesNotifier extends Notifier<AsyncValue<List<ActorFavorite>>> {
   @override

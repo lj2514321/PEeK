@@ -6,13 +6,13 @@ import 'package:embyplayer/src/features/scrobble/domain/bangumi_profile.dart';
 
 class BangumiStore {
   BangumiStore({Directory? directory})
-      : _directory = directory ?? AppStoragePath.defaultDirectory;
+    : _directory = directory ?? AppStoragePath.defaultDirectory;
 
   final Directory _directory;
 
   File get _file => File(
-        '${_directory.path}${Platform.pathSeparator}bangumi_profile_v1.json',
-      );
+    '${_directory.path}${Platform.pathSeparator}bangumi_profile_v1.json',
+  );
 
   Future<BangumiProfile?> readProfile() async {
     try {
