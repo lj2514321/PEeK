@@ -425,10 +425,29 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           return;
       }
     }
+    final isUnvisited =
+        !_visitedDestinations.contains(index) && !AppMotion.isTest;
+
+    // Frame 0: Immediately update selectedIndex so the sidebar liquid rail,
+    // top command bar, and page transition initiate instantly without jank.
     setState(() {
-      _visitedDestinations.add(index);
       _selectedIndex = index;
+      if (!isUnvisited) {
+        _visitedDestinations.add(index);
+      }
     });
+
+    // Frame 1: For unvisited heavy destinations, defer their full widget tree instantiation
+    // by one frame so the sidebar's liquid rail spring is completely airborne and unblocked!
+    if (isUnvisited) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_visitedDestinations.contains(index)) {
+          setState(() {
+            _visitedDestinations.add(index);
+          });
+        }
+      });
+    }
   }
 
   void _openSearch() {
@@ -740,13 +759,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                             left: 0,
                             top: 0,
                             bottom: 0,
-                            child: _AppRail(
-                              extended: extendedRail,
-                              destinations: _destinations,
-                              selectedIndex: _selectedIndex,
-                              onSelected: _selectDestination,
-                              canToggle: canExtendRail,
-                              onToggle: _toggleSidebar,
+                            child: RepaintBoundary(
+                              key: const ValueKey('app-rail-isolated-boundary'),
+                              child: _AppRail(
+                                extended: extendedRail,
+                                destinations: _destinations,
+                                selectedIndex: _selectedIndex,
+                                onSelected: _selectDestination,
+                                canToggle: canExtendRail,
+                                onToggle: _toggleSidebar,
+                              ),
                             ),
                           ),
                       ],
@@ -911,25 +933,32 @@ class _AppRailState extends State<_AppRail>
               ),
               child: ClipRRect(
                 borderRadius: AppRadius.borderRadius,
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 38, sigmaY: 38),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: OverflowBox(
-                      alignment: Alignment.topLeft,
-                      minWidth: 208,
-                      maxWidth: 208,
-                      child: _AppRailContents(
-                        extended: widget.extended,
-                        progress: progress,
-                        destinations: widget.destinations,
-                        selectedIndex: widget.selectedIndex,
-                        onSelected: widget.onSelected,
-                        canToggle: widget.canToggle,
-                        onToggle: widget.onToggle,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 38, sigmaY: 38),
+                        child: const SizedBox.expand(),
                       ),
                     ),
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: OverflowBox(
+                        alignment: Alignment.topLeft,
+                        minWidth: 208,
+                        maxWidth: 208,
+                        child: _AppRailContents(
+                          extended: widget.extended,
+                          progress: progress,
+                          destinations: widget.destinations,
+                          selectedIndex: widget.selectedIndex,
+                          onSelected: widget.onSelected,
+                          canToggle: widget.canToggle,
+                          onToggle: widget.onToggle,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1117,11 +1146,13 @@ class _LiquidRailIndicatorState extends State<_LiquidRailIndicator>
           left: 0,
           width: widget.pillWidth,
           height: height,
-          child: Transform.scale(
-            scaleX: scaleX,
-            scaleY: 1.0,
-            alignment: Alignment.center,
-            child: child!,
+          child: RepaintBoundary(
+            child: Transform.scale(
+              scaleX: scaleX,
+              scaleY: 1.0,
+              alignment: Alignment.center,
+              child: child!,
+            ),
           ),
         );
       },

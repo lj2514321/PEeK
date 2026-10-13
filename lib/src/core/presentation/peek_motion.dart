@@ -443,11 +443,11 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer>
               ),
             );
 
-            if (blurSigma > 0.25) {
+            if (blurSigma > 0.8) {
               transformed = ImageFiltered(
                 imageFilter: ImageFilter.blur(
-                  sigmaX: blurSigma,
-                  sigmaY: blurSigma,
+                  sigmaX: blurSigma.clamp(0.0, 2.8),
+                  sigmaY: blurSigma.clamp(0.0, 2.8),
                   tileMode: TileMode.decal,
                 ),
                 child: transformed,
