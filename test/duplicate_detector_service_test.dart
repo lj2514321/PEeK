@@ -105,36 +105,39 @@ void main() {
       expect(group.selectedDeleteIds, {'item-a'});
     });
 
-    test('groups episodes with identical series, season and episode number', () {
-      const ep1 = MediaItem(
-        id: 'ep-1',
-        name: 'Breaking Bad S01E01 720p',
-        kind: MediaItemKind.episode,
-        seriesName: 'Breaking Bad',
-        parentIndexNumber: 1,
-        indexNumber: 1,
-        fileSize: 1 * 1024 * 1024 * 1024,
-      );
+    test(
+      'groups episodes with identical series, season and episode number',
+      () {
+        const ep1 = MediaItem(
+          id: 'ep-1',
+          name: 'Breaking Bad S01E01 720p',
+          kind: MediaItemKind.episode,
+          seriesName: 'Breaking Bad',
+          parentIndexNumber: 1,
+          indexNumber: 1,
+          fileSize: 1 * 1024 * 1024 * 1024,
+        );
 
-      const ep2 = MediaItem(
-        id: 'ep-2',
-        name: 'Breaking Bad S01E01 1080p',
-        kind: MediaItemKind.episode,
-        seriesName: 'Breaking Bad',
-        parentIndexNumber: 1,
-        indexNumber: 1,
-        width: 1920,
-        height: 1080,
-        fileSize: 3 * 1024 * 1024 * 1024,
-      );
+        const ep2 = MediaItem(
+          id: 'ep-2',
+          name: 'Breaking Bad S01E01 1080p',
+          kind: MediaItemKind.episode,
+          seriesName: 'Breaking Bad',
+          parentIndexNumber: 1,
+          indexNumber: 1,
+          width: 1920,
+          height: 1080,
+          fileSize: 3 * 1024 * 1024 * 1024,
+        );
 
-      final groups = service.findDuplicates([ep1, ep2]);
+        final groups = service.findDuplicates([ep1, ep2]);
 
-      expect(groups.length, 1);
-      final group = groups.first;
-      expect(group.matchReason, DuplicateMatchReason.episode);
-      expect(group.recommendedKeepId, 'ep-2');
-    });
+        expect(groups.length, 1);
+        final group = groups.first;
+        expect(group.matchReason, DuplicateMatchReason.episode);
+        expect(group.recommendedKeepId, 'ep-2');
+      },
+    );
 
     test('skips groups in ignoredGroupIds whitelist', () {
       const itemA = MediaItem(
@@ -185,18 +188,14 @@ void main() {
         id: 'cast-1',
         name: 'Big Tit Stepmom Nurses My Cock Problem 1080p',
         kind: MediaItemKind.video,
-        people: [
-          MediaPerson(id: 'p1', name: 'Lindsay Lee', type: 'Actor'),
-        ],
+        people: [MediaPerson(id: 'p1', name: 'Lindsay Lee', type: 'Actor')],
       );
 
       const item2 = MediaItem(
         id: 'cast-2',
         name: 'Big Tit Stepmom Nurses My Cock Problem 720p',
         kind: MediaItemKind.video,
-        people: [
-          MediaPerson(id: 'p1', name: 'Lindsay Lee', type: 'Actor'),
-        ],
+        people: [MediaPerson(id: 'p1', name: 'Lindsay Lee', type: 'Actor')],
       );
 
       final groups = service.findDuplicates([item1, item2]);

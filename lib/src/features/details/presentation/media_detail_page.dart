@@ -131,7 +131,10 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     return numbers.isEmpty ? [1] : numbers;
   }
 
-  Future<void> _loadDetails({bool forceRefresh = false, bool force = false}) async {
+  Future<void> _loadDetails({
+    bool forceRefresh = false,
+    bool force = false,
+  }) async {
     final account = widget.account;
     if (account == null || _item.isLocal) return;
     if (_loadingDetails && !force) return;
@@ -192,7 +195,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
         _item = details;
         if (details.mediaSources.isNotEmpty) {
           if (_selectedMediaSourceId == null ||
-              details.mediaSources.every((s) => s.id != _selectedMediaSourceId)) {
+              details.mediaSources.every(
+                (s) => s.id != _selectedMediaSourceId,
+              )) {
             _selectedMediaSourceId = details.mediaSources.first.id;
           }
         }
@@ -229,7 +234,8 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
       final livePos = fromBeginning
           ? Duration.zero
           : coordinator.getEffectivePosition(targetItem.id);
-      final effectiveTarget = (livePos != null && livePos > targetItem.resumePosition)
+      final effectiveTarget =
+          (livePos != null && livePos > targetItem.resumePosition)
           ? targetItem.copyWith(resumePosition: livePos)
           : targetItem;
       final prepared = await ref
@@ -239,7 +245,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
             effectiveTarget,
             fromBeginning: fromBeginning,
             startPosition: livePos,
-            mediaSourceId: targetItem.id == _item.id ? _selectedMediaSourceId : null,
+            mediaSourceId: targetItem.id == _item.id
+                ? _selectedMediaSourceId
+                : null,
           );
       if (!mounted) return;
 
@@ -372,10 +380,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     if (account == null || _item.isLocal) return;
     final updated = await peekShowDialog<bool>(
       context: context,
-      builder: (context) => IdentifyDialog(
-        account: account,
-        item: _item,
-      ),
+      builder: (context) => IdentifyDialog(account: account, item: _item),
     );
     if (updated == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -404,16 +409,20 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     if (count != null && count > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.surfaceHigh,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           content: Row(
             children: [
-              const Icon(Icons.check_circle_rounded, color: AppColors.spotlight, size: 20),
+              const Icon(
+                Icons.check_circle_rounded,
+                color: AppColors.spotlight,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Text(
                 '已添加 $count 个任务至离线下载中心',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ],
           ),
@@ -486,10 +495,8 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
           Navigator.of(dialogContext).pop();
           Navigator.of(context).push<void>(
             Peek3DPageRoute(
-              builder: (context) => MediaDetailPage(
-                account: widget.account,
-                initialItem: work,
-              ),
+              builder: (context) =>
+                  MediaDetailPage(account: widget.account, initialItem: work),
             ),
           );
         },
@@ -502,9 +509,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                     builder: (context) => MediaLibraryPage(
                       account: widget.account,
                       initialTag: tag,
-                      onGoHome: () => Navigator.of(context).popUntil(
-                        (route) => route.isFirst,
-                      ),
+                      onGoHome: () => Navigator.of(
+                        context,
+                      ).popUntil((route) => route.isFirst),
                     ),
                   ),
                 );
@@ -516,7 +523,8 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
-      final wasActive = prev?.mode == PlaybackPresentationMode.mini ||
+      final wasActive =
+          prev?.mode == PlaybackPresentationMode.mini ||
           prev?.mode == PlaybackPresentationMode.window ||
           prev?.mode == PlaybackPresentationMode.full;
       if (wasActive && next.mode == PlaybackPresentationMode.hidden) {
@@ -534,6 +542,16 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
         _seasonEpisodeMap[_selectedSeasonNumber] ??
         (_episodes.isNotEmpty ? _episodes : const <MediaItem>[]);
     final showScrolledTitle = _scrollOffset > 160;
+    final ambientUri = _item.backdropUri ?? _item.imageUri;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      SpatialAmbientController.instance.update(
+        itemId: _item.id,
+        imageUri: ambientUri,
+        imageHeaders: _item.imageHeaders,
+        paletteSeed: _item.id.hashCode.abs(),
+      );
+    });
 
     return PopScope<MediaItem>(
       canPop: false,
@@ -551,139 +569,139 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                 child: CustomScrollView(
                   controller: _scrollController,
                   slivers: [
-                  SliverToBoxAdapter(
-                    child: _DetailHero(
-                      item: _item,
-                      collectionName: _collections.firstOrNull?.name,
-                      onTapCollection: _scrollToCollection,
-                      onTapTag: _openTagWorks,
-                      loading: _loadingDetails,
-                      playable: _playable,
-                      planningPlayback:
-                          _planningPlayback &&
-                          (_planningEpisodeId == _item.id ||
-                              _planningEpisodeId == null),
-                      updatingFavorite: _updatingFavorite,
-                      updatingPlayed: _updatingPlayed,
-                      canMarkPlayed: _canMarkPlayed,
-                      showUserStateActions: !_item.isLocal,
-                      onPlay: () => _playItem(_item),
-                      onPlayFromBeginning: () =>
-                          _playItem(_item, fromBeginning: true),
-                      onPlayExternal: () =>
-                          _playItem(_item, forceExternalPlayer: true),
-                      onToggleFavorite: _toggleFavorite,
-                      onTogglePlayed: _togglePlayed,
-                      onIdentify: !_item.isLocal && widget.account != null
-                          ? _openIdentifyDialog
-                          : null,
-                      onDownload: !_item.isLocal && widget.account != null
-                          ? _openBatchDownloadDialog
-                          : null,
+                    SliverToBoxAdapter(
+                      child: _DetailHero(
+                        item: _item,
+                        collectionName: _collections.firstOrNull?.name,
+                        onTapCollection: _scrollToCollection,
+                        onTapTag: _openTagWorks,
+                        loading: _loadingDetails,
+                        playable: _playable,
+                        planningPlayback:
+                            _planningPlayback &&
+                            (_planningEpisodeId == _item.id ||
+                                _planningEpisodeId == null),
+                        updatingFavorite: _updatingFavorite,
+                        updatingPlayed: _updatingPlayed,
+                        canMarkPlayed: _canMarkPlayed,
+                        showUserStateActions: !_item.isLocal,
+                        onPlay: () => _playItem(_item),
+                        onPlayFromBeginning: () =>
+                            _playItem(_item, fromBeginning: true),
+                        onPlayExternal: () =>
+                            _playItem(_item, forceExternalPlayer: true),
+                        onToggleFavorite: _toggleFavorite,
+                        onTogglePlayed: _togglePlayed,
+                        onIdentify: !_item.isLocal && widget.account != null
+                            ? _openIdentifyDialog
+                            : null,
+                        onDownload: !_item.isLocal && widget.account != null
+                            ? _openBatchDownloadDialog
+                            : null,
+                      ),
                     ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1240),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 64),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (_detailError != null)
-                                _DetailNotice(
-                                  message: _detailError!,
-                                  actionLabel: '重新读取',
-                                  onAction: _loadDetails,
-                                ),
-                              if (_playbackError != null)
-                                _DetailNotice(
-                                  message: _playbackError!,
-                                  actionLabel: '重试播放',
-                                  onAction: () => _playItem(_item),
-                                  error: true,
-                                ),
-                              if (_detailError != null ||
-                                  _playbackError != null)
-                                const SizedBox(height: 20),
+                    SliverToBoxAdapter(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1240),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 64),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (_detailError != null)
+                                  _DetailNotice(
+                                    message: _detailError!,
+                                    actionLabel: '重新读取',
+                                    onAction: _loadDetails,
+                                  ),
+                                if (_playbackError != null)
+                                  _DetailNotice(
+                                    message: _playbackError!,
+                                    actionLabel: '重试播放',
+                                    onAction: () => _playItem(_item),
+                                    error: true,
+                                  ),
+                                if (_detailError != null ||
+                                    _playbackError != null)
+                                  const SizedBox(height: 20),
 
-                              // Season and Episode Picker (for Series / Seasons)
-                              if (_isSeriesOrSeason &&
-                                  _episodes.isNotEmpty) ...[
-                                _EpisodePickerSection(
+                                // Season and Episode Picker (for Series / Seasons)
+                                if (_isSeriesOrSeason &&
+                                    _episodes.isNotEmpty) ...[
+                                  _EpisodePickerSection(
+                                    item: _item,
+                                    seasonNumbers: _availableSeasonNumbers,
+                                    selectedSeason: _selectedSeasonNumber,
+                                    episodes: currentSeasonEpisodes,
+                                    planningEpisodeId: _planningEpisodeId,
+                                    onSelectSeason: (season) {
+                                      setState(
+                                        () => _selectedSeasonNumber = season,
+                                      );
+                                    },
+                                    onPlayEpisode: (ep) => _playItem(ep),
+                                  ),
+                                  const SizedBox(height: 32),
+                                ],
+
+                                // Synopsis & Technical Specs Bento Layout
+                                _OverviewAndSpecsBento(
                                   item: _item,
-                                  seasonNumbers: _availableSeasonNumbers,
-                                  selectedSeason: _selectedSeasonNumber,
-                                  episodes: currentSeasonEpisodes,
-                                  planningEpisodeId: _planningEpisodeId,
-                                  onSelectSeason: (season) {
-                                    setState(
-                                      () => _selectedSeasonNumber = season,
-                                    );
+                                  selectedMediaSourceId: _selectedMediaSourceId,
+                                  onTapTag: _openTagWorks,
+                                  onSelectMediaSource: (id) {
+                                    setState(() => _selectedMediaSourceId = id);
                                   },
-                                  onPlayEpisode: (ep) => _playItem(ep),
                                 ),
-                                const SizedBox(height: 32),
-                              ],
 
-                              // Synopsis & Technical Specs Bento Layout
-                              _OverviewAndSpecsBento(
-                                item: _item,
-                                selectedMediaSourceId: _selectedMediaSourceId,
-                                onTapTag: _openTagWorks,
-                                onSelectMediaSource: (id) {
-                                  setState(() => _selectedMediaSourceId = id);
-                                },
-                              ),
+                                // Collection (if media belongs to a BoxSet / Collection)
+                                if (_collections.isNotEmpty) ...[
+                                  const SizedBox(height: 32),
+                                  _CollectionSection(
+                                    key: _collectionSectionKey,
+                                    currentItem: _item,
+                                    collection: _collections.first,
+                                    items: _collectionItems,
+                                    onOpenItem: _openCollectionItem,
+                                  ),
+                                ],
 
-                              // Collection (if media belongs to a BoxSet / Collection)
-                              if (_collections.isNotEmpty) ...[
-                                const SizedBox(height: 32),
-                                _CollectionSection(
-                                  key: _collectionSectionKey,
-                                  currentItem: _item,
-                                  collection: _collections.first,
-                                  items: _collectionItems,
-                                  onOpenItem: _openCollectionItem,
-                                ),
-                              ],
+                                // Cast & Crew
+                                if (_item.people.isNotEmpty) ...[
+                                  const SizedBox(height: 32),
+                                  _CastSection(
+                                    people: _item.people,
+                                    onOpen: _openPerson,
+                                  ),
+                                ],
 
-                              // Cast & Crew
-                              if (_item.people.isNotEmpty) ...[
-                                const SizedBox(height: 32),
-                                _CastSection(
-                                  people: _item.people,
-                                  onOpen: _openPerson,
-                                ),
+                                // Similar Recommendations
+                                if (_similarItems.isNotEmpty) ...[
+                                  const SizedBox(height: 32),
+                                  _SimilarSection(
+                                    items: _similarItems,
+                                    onOpen: _openSimilar,
+                                  ),
+                                ] else if (_similarError != null) ...[
+                                  const SizedBox(height: 20),
+                                  _DetailNotice(
+                                    message: '相似推荐暂时无法读取：$_similarError',
+                                    actionLabel: '重试',
+                                    onAction: _loadDetails,
+                                  ),
+                                ],
                               ],
-
-                              // Similar Recommendations
-                              if (_similarItems.isNotEmpty) ...[
-                                const SizedBox(height: 32),
-                                _SimilarSection(
-                                  items: _similarItems,
-                                  onOpen: _openSimilar,
-                                ),
-                              ] else if (_similarError != null) ...[
-                                const SizedBox(height: 20),
-                                _DetailNotice(
-                                  message: '相似推荐暂时无法读取：$_similarError',
-                                  actionLabel: '重试',
-                                  onAction: _loadDetails,
-                                ),
-                              ],
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
 
-            // Top Floating Navigation Bar Overlay
+              // Top Floating Navigation Bar Overlay
               Positioned(
                 top: 0,
                 left: 0,
@@ -715,91 +733,118 @@ class _DetailFloatingNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rightMargin = defaultTargetPlatform == TargetPlatform.windows
+        ? AppChrome.windowControlsWidth + 10.0
+        : 16.0;
     return SafeArea(
       bottom: false,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        height: 58,
-        decoration: BoxDecoration(
-          color: showTitle
-              ? AppColors.canvas.withValues(alpha: 0.88)
-              : Colors.transparent,
-          border: showTitle
-              ? Border(
-                  bottom: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    width: 1,
-                  ),
-                )
-              : null,
-        ),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(
-              sigmaX: showTitle ? 20 : 0,
-              sigmaY: showTitle ? 20 : 0,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  // Floating Back Button
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        width: 1,
-                      ),
-                      boxShadow: const [
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(0, 0, rightMargin, 0),
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: showTitle ? 1.0 : 0.0),
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, _) {
+            return Container(
+              height: 54,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.18 * t),
+                    Colors.white.withValues(alpha: 0.06 * t),
+                  ],
+                ),
+                borderRadius: AppRadius.borderRadius,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.32 * t),
+                  width: 1.2,
+                ),
+                boxShadow: t > 0.02
+                    ? [
                         BoxShadow(
-                          color: Colors.black45,
-                          blurRadius: 10,
-                          offset: Offset(0, 3),
+                          color: Colors.black.withValues(alpha: 0.28 * t),
+                          blurRadius: 28,
+                          offset: const Offset(0, 10),
+                        ),
+                      ]
+                    : const [],
+              ),
+              child: ClipRRect(
+                borderRadius: AppRadius.borderRadius,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(
+                    sigmaX: t > 0.01 ? 28 : 0,
+                    sigmaY: t > 0.01 ? 28 : 0,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        // Floating Back Button
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(
+                              alpha: 0.14 + (0.06 * (1 - t)),
+                            ),
+                            borderRadius: AppRadius.borderRadius,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.30),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: 0.28 * (1 - t),
+                                ),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: IconButton(
+                            tooltip: '返回',
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: onBack,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+
+                        // Scrolled-in Title
+                        Expanded(
+                          child: IgnorePointer(
+                            ignoring: !showTitle,
+                            child: Opacity(
+                              opacity: t,
+                              child: Text(
+                                item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  color: Colors.white,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    child: IconButton(
-                      tooltip: '返回',
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      onPressed: onBack,
-                    ),
                   ),
-                  const SizedBox(width: 14),
-
-                  // Scrolled-in Title
-                  Expanded(
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: showTitle ? 1.0 : 0.0,
-                      child: Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: Colors.white,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  if (defaultTargetPlatform == TargetPlatform.windows)
-                    const SizedBox(width: AppChrome.windowControlsWidth),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -851,8 +896,24 @@ class _DetailHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Fluid Background Backdrop Layer with Smooth Fade
-        Positioned.fill(child: _Backdrop(item: item)),
+        // Fluid Background Backdrop Layer with Seamless Alpha Dissolve into AmbientBackdrop
+        Positioned.fill(
+          child: ShaderMask(
+            shaderCallback: (rect) => const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFFFFFFF),
+                Color(0xD9FFFFFF),
+                Color(0x59FFFFFF),
+                Colors.transparent,
+              ],
+              stops: [0.0, 0.45, 0.78, 1.0],
+            ).createShader(rect),
+            blendMode: BlendMode.dstIn,
+            child: _Backdrop(item: item),
+          ),
+        ),
         Positioned.fill(
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -860,12 +921,11 @@ class _DetailHero extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.65),
+                  Colors.black.withValues(alpha: 0.42),
+                  Colors.black.withValues(alpha: 0.16),
                   Colors.transparent,
-                  AppColors.canvas.withValues(alpha: 0.70),
-                  AppColors.canvas,
                 ],
-                stops: const [0.0, 0.28, 0.75, 1.0],
+                stops: const [0.0, 0.55, 1.0],
               ),
             ),
           ),
@@ -978,11 +1038,11 @@ class _DetailPoster extends StatelessWidget {
       aspectRatio: 2 / 3,
       child: PosterAmbientGlow(
         glowColor: const Color(0x454A90E2),
-        borderRadius: 22,
+        borderRadius: AppRadius.value,
         child: Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: AppRadius.borderRadius,
             border: Border.all(
               color: Colors.white.withValues(alpha: 0.28),
               width: 1.2,
@@ -1050,9 +1110,9 @@ class _DetailCopy extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
-      (s) => s.positionFor(item.id),
-    ));
+    final livePos = ref.watch(
+      globalPlaybackCoordinatorProvider.select((s) => s.positionFor(item.id)),
+    );
     final effectivePos = (livePos != null && livePos > Duration.zero)
         ? livePos
         : item.resumePosition;
@@ -1069,7 +1129,7 @@ class _DetailCopy extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AppColors.spotlight.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: AppRadius.borderRadius,
                 border: Border.all(
                   color: AppColors.spotlight.withValues(alpha: 0.35),
                   width: 1,
@@ -1089,12 +1149,15 @@ class _DetailCopy extends ConsumerWidget {
               const SizedBox(width: 8),
               InkWell(
                 onTap: onTapCollection,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: AppRadius.borderRadius,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.cyan.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: AppRadius.borderRadius,
                     border: Border.all(
                       color: AppColors.cyan.withValues(alpha: 0.4),
                       width: 1,
@@ -1197,10 +1260,13 @@ class _DetailCopy extends ConsumerWidget {
                 ),
               if (item.tags.length > 6)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: AppRadius.borderRadius,
                   ),
                   child: Text(
                     '+${item.tags.length - 6}',
@@ -1354,13 +1420,13 @@ class _SpecChip extends StatelessWidget {
                 alpha: 0.16,
               )
             : Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppRadius.borderRadius,
         border: Border.all(
           color: spec.isHighlight
               ? (spec.highlightColor ?? AppColors.spotlight).withValues(
                   alpha: 0.45,
                 )
-            : Colors.white.withValues(alpha: 0.12),
+              : Colors.white.withValues(alpha: 0.12),
           width: 1,
         ),
       ),
@@ -1379,11 +1445,7 @@ class _SpecChip extends StatelessWidget {
 }
 
 class _TagChip extends StatelessWidget {
-  const _TagChip({
-    super.key,
-    required this.tag,
-    this.onTap,
-  });
+  const _TagChip({super.key, required this.tag, this.onTap});
 
   final String tag;
   final VoidCallback? onTap;
@@ -1394,12 +1456,12 @@ class _TagChip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppRadius.borderRadius,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
           decoration: BoxDecoration(
             color: AppColors.spotlight.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: AppRadius.borderRadius,
             border: Border.all(
               color: AppColors.spotlight.withValues(alpha: 0.32),
               width: 1,
@@ -1631,9 +1693,7 @@ class _UserStateActions extends StatelessWidget {
         shape: const StadiumBorder(),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
         foregroundColor: AppColors.cyan,
-        side: BorderSide(
-          color: AppColors.cyan.withValues(alpha: 0.35),
-        ),
+        side: BorderSide(color: AppColors.cyan.withValues(alpha: 0.35)),
       ),
       icon: const Icon(Icons.downloading_rounded, size: 18),
       label: const Text('离线缓存'),
@@ -1646,9 +1706,7 @@ class _UserStateActions extends StatelessWidget {
         shape: const StadiumBorder(),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
         foregroundColor: Colors.white70,
-        side: BorderSide(
-          color: Colors.white.withValues(alpha: 0.2),
-        ),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
       ),
       icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
       label: const Text('修正识别'),
@@ -1707,7 +1765,6 @@ class _EpisodePickerSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: AppGlass.visionOSDecoration(
-        radius: 22,
         elevated: true,
         glowColor: const Color(0x304A90E2),
         borderOpacity: 0.25,
@@ -1802,9 +1859,11 @@ class _EpisodeCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
-      (s) => s.positionFor(episode.id),
-    ));
+    final livePos = ref.watch(
+      globalPlaybackCoordinatorProvider.select(
+        (s) => s.positionFor(episode.id),
+      ),
+    );
     final effectiveResume = (livePos != null && livePos > Duration.zero)
         ? livePos
         : episode.resumePosition;
@@ -1817,12 +1876,12 @@ class _EpisodeCard extends ConsumerWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppRadius.borderRadius,
           onTap: isPlanning ? null : onPlay,
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: AppRadius.borderRadius,
               border: Border.all(
                 color: Colors.white.withValues(alpha: 0.12),
                 width: 1,
@@ -1835,7 +1894,7 @@ class _EpisodeCard extends ConsumerWidget {
                 // 16:9 Thumbnail
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(15),
+                    top: AppRadius.circular,
                   ),
                   child: AspectRatio(
                     aspectRatio: 16 / 9,
@@ -1885,7 +1944,7 @@ class _EpisodeCard extends ConsumerWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: Colors.black.withValues(alpha: 0.75),
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: AppRadius.borderRadius,
                               ),
                               child: Text(
                                 epNum,
@@ -1979,10 +2038,7 @@ class _OverviewAndSpecsBento extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 900;
-        final overviewWidget = _OverviewCard(
-          item: item,
-          onTapTag: onTapTag,
-        );
+        final overviewWidget = _OverviewCard(item: item, onTapTag: onTapTag);
         final specsWidget = _MediaSpecsCard(
           item: item,
           selectedMediaSourceId: selectedMediaSourceId,
@@ -2012,10 +2068,7 @@ class _OverviewAndSpecsBento extends StatelessWidget {
               flex: 3,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  overviewWidget,
-                  bangumiCard,
-                ],
+                children: [overviewWidget, bangumiCard],
               ),
             ),
             const SizedBox(width: 20),
@@ -2028,10 +2081,7 @@ class _OverviewAndSpecsBento extends StatelessWidget {
 }
 
 class _OverviewCard extends StatefulWidget {
-  const _OverviewCard({
-    required this.item,
-    this.onTapTag,
-  });
+  const _OverviewCard({required this.item, this.onTapTag});
 
   final MediaItem item;
   final ValueChanged<String>? onTapTag;
@@ -2051,7 +2101,6 @@ class _OverviewCardState extends State<_OverviewCard> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: AppGlass.visionOSDecoration(
-        radius: 22,
         elevated: true,
         glowColor: const Color(0x204A90E2),
         borderOpacity: 0.22,
@@ -2102,7 +2151,7 @@ class _OverviewCardState extends State<_OverviewCard> {
           if (isLongText) ...[
             const SizedBox(height: 8),
             InkWell(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: AppRadius.borderRadius,
               onTap: () => setState(() => _expanded = !_expanded),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
@@ -2202,29 +2251,43 @@ class _MediaSpecsCard extends StatelessWidget {
     final hasActive = activeSource.id.isNotEmpty;
 
     final width = hasActive ? (activeSource.width ?? item.width) : item.width;
-    final height = hasActive ? (activeSource.height ?? item.height) : item.height;
-    final videoCodec = hasActive ? (activeSource.videoCodec ?? item.videoCodec) : item.videoCodec;
+    final height = hasActive
+        ? (activeSource.height ?? item.height)
+        : item.height;
+    final videoCodec = hasActive
+        ? (activeSource.videoCodec ?? item.videoCodec)
+        : item.videoCodec;
     final videoRange = hasActive ? activeSource.videoRange : null;
     final audioCodec = hasActive ? activeSource.audioCodec : null;
-    final bitrate = hasActive ? (activeSource.bitrate ?? item.bitrate) : item.bitrate;
-    final container = hasActive ? (activeSource.container ?? item.container) : item.container;
-    final fileSize = hasActive ? (activeSource.fileSize ?? item.fileSize) : item.fileSize;
-    final path = hasActive ? (activeSource.path ?? item.sourcePath) : item.sourcePath;
+    final bitrate = hasActive
+        ? (activeSource.bitrate ?? item.bitrate)
+        : item.bitrate;
+    final container = hasActive
+        ? (activeSource.container ?? item.container)
+        : item.container;
+    final fileSize = hasActive
+        ? (activeSource.fileSize ?? item.fileSize)
+        : item.fileSize;
+    final path = hasActive
+        ? (activeSource.path ?? item.sourcePath)
+        : item.sourcePath;
 
     final entries = <_SpecEntry>[
       if (width != null && height != null)
         _SpecEntry(
           icon: Icons.hd_rounded,
           label: '画面分辨率',
-          value:
-              '$width × $height${width >= 3800 ? " (4K UHD)" : ""}',
+          value: '$width × $height${width >= 3800 ? " (4K UHD)" : ""}',
         ),
       if (videoCodec != null && videoCodec.isNotEmpty)
         _SpecEntry(
           icon: Icons.movie_filter_rounded,
           label: '视频编码',
-          value: videoCodec.toUpperCase() +
-              (videoRange != null && videoRange.isNotEmpty ? ' · $videoRange' : ''),
+          value:
+              videoCodec.toUpperCase() +
+              (videoRange != null && videoRange.isNotEmpty
+                  ? ' · $videoRange'
+                  : ''),
         ),
       if (audioCodec != null && audioCodec.isNotEmpty)
         _SpecEntry(
@@ -2271,7 +2334,6 @@ class _MediaSpecsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: AppGlass.visionOSDecoration(
-        radius: 22,
         elevated: true,
         glowColor: const Color(0x204A90E2),
         borderOpacity: 0.22,
@@ -2332,7 +2394,8 @@ class _MediaSpecsCard extends StatelessWidget {
                 for (final src in item.mediaSources)
                   _buildVersionCapsule(
                     src,
-                    isSelected: src.id ==
+                    isSelected:
+                        src.id ==
                         (selectedMediaSourceId ?? item.mediaSources.first.id),
                     onTap: () => onSelectMediaSource?.call(src.id),
                   ),
@@ -2382,7 +2445,8 @@ class _MediaSpecsCard extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     final labelParts = <String>[];
-    if (source.resolutionLabel.isNotEmpty) labelParts.add(source.resolutionLabel);
+    if (source.resolutionLabel.isNotEmpty)
+      labelParts.add(source.resolutionLabel);
     if (source.videoCodec != null && source.videoCodec!.isNotEmpty) {
       labelParts.add(source.videoCodec!.toUpperCase());
     }
@@ -2393,7 +2457,7 @@ class _MediaSpecsCard extends StatelessWidget {
 
     return InkWell(
       key: ValueKey('version-source-${source.id}'),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: AppRadius.borderRadius,
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
@@ -2402,7 +2466,7 @@ class _MediaSpecsCard extends StatelessWidget {
           color: isSelected
               ? AppColors.spotlight.withValues(alpha: 0.18)
               : Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: AppRadius.borderRadius,
           border: Border.all(
             color: isSelected
                 ? AppColors.spotlight
@@ -2534,11 +2598,11 @@ class _PersonCard extends StatelessWidget {
           width: 128,
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: AppRadius.borderRadius,
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               key: ValueKey('person-card-${person.id}'),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: AppRadius.borderRadius,
               onTap: onOpen,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2550,7 +2614,7 @@ class _PersonCard extends StatelessWidget {
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         color: AppColors.surfaceHigh,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: AppRadius.borderRadius,
                         border: Border.all(
                           color: Colors.white.withValues(alpha: 0.12),
                           width: 1,
@@ -2656,7 +2720,7 @@ class _SimilarCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onOpen,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppRadius.borderRadius,
           child: Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Column(
@@ -2669,7 +2733,7 @@ class _SimilarCard extends StatelessWidget {
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
                       color: AppColors.surfaceHigh,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppRadius.borderRadius,
                       border: Border.all(
                         color: Colors.white.withValues(alpha: 0.12),
                         width: 1,
@@ -2779,7 +2843,7 @@ class _CollectionItemCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: isCurrent ? null : onOpen,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppRadius.borderRadius,
           child: Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Column(
@@ -2792,7 +2856,7 @@ class _CollectionItemCard extends StatelessWidget {
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
                       color: AppColors.surfaceHigh,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppRadius.borderRadius,
                       border: Border.all(
                         color: isCurrent
                             ? AppColors.spotlight
@@ -2802,7 +2866,9 @@ class _CollectionItemCard extends StatelessWidget {
                       boxShadow: isCurrent
                           ? [
                               BoxShadow(
-                                color: AppColors.spotlight.withValues(alpha: 0.35),
+                                color: AppColors.spotlight.withValues(
+                                  alpha: 0.35,
+                                ),
                                 blurRadius: 12,
                                 spreadRadius: 1,
                               ),
@@ -2828,9 +2894,11 @@ class _CollectionItemCard extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: Colors.black.withValues(alpha: 0.75),
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: AppRadius.borderRadius,
                                 border: Border.all(
-                                  color: AppColors.spotlight.withValues(alpha: 0.6),
+                                  color: AppColors.spotlight.withValues(
+                                    alpha: 0.6,
+                                  ),
                                   width: 1,
                                 ),
                               ),
@@ -2886,17 +2954,15 @@ class _CollectionBannerCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surfaceHigh.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-        ),
+        color: AppColors.surfaceLow,
+        borderRadius: AppRadius.borderRadius,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Row(
         children: [
           if (collection.imageUri != null) ...[
             ClipRRect(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: AppRadius.borderRadius,
               child: SizedBox(
                 width: 60,
                 height: 90,
@@ -2963,7 +3029,6 @@ class _DetailPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: AppGlass.visionOSDecoration(
-        radius: 22,
         elevated: true,
         glowColor: const Color(0x204A90E2),
         borderOpacity: 0.22,
@@ -3015,7 +3080,7 @@ class _DetailNotice extends StatelessWidget {
         color: error
             ? AppColors.error.withValues(alpha: 0.12)
             : AppColors.glassSurface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: AppRadius.borderRadius,
         border: Border.all(
           color: (error ? AppColors.error : AppColors.spotlight).withValues(
             alpha: 0.3,
@@ -3135,7 +3200,7 @@ class _TagWorksDialogState extends ConsumerState<_TagWorksDialog> {
         width: 720,
         constraints: const BoxConstraints(maxHeight: 620),
         padding: const EdgeInsets.all(24),
-        decoration: AppGlass.decoration(radius: 24, elevated: true),
+        decoration: AppGlass.decoration(elevated: true),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3174,8 +3239,8 @@ class _TagWorksDialogState extends ConsumerState<_TagWorksDialog> {
                         _loading
                             ? '正在读取相关作品…'
                             : _items.isEmpty
-                                ? '未找到相关作品'
-                                : '共找到 ${_items.length} 部相关媒体',
+                            ? '未找到相关作品'
+                            : '共找到 ${_items.length} 部相关媒体',
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.textTertiary,
@@ -3207,92 +3272,91 @@ class _TagWorksDialogState extends ConsumerState<_TagWorksDialog> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _error!,
+                            style: const TextStyle(color: AppColors.error),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: _loadWorks,
+                            child: const Text('重试'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _items.isEmpty
+                  ? const Center(
+                      child: Text(
+                        '暂无包含该标签的其他内容',
+                        style: TextStyle(color: AppColors.textTertiary),
+                      ),
+                    )
+                  : GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 140,
+                            childAspectRatio: 2 / 3.4,
+                            crossAxisSpacing: 14,
+                            mainAxisSpacing: 14,
+                          ),
+                      itemCount: _items.length,
+                      itemBuilder: (context, index) {
+                        final it = _items[index];
+                        return InkWell(
+                          key: ValueKey('tag-work-${it.id}'),
+                          onTap: () => widget.onOpenMedia(it),
+                          borderRadius: AppRadius.borderRadius,
                           child: Column(
-                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                _error!,
-                                style: const TextStyle(color: AppColors.error),
-                                textAlign: TextAlign.center,
+                              Expanded(
+                                child: Container(
+                                  clipBehavior: Clip.antiAlias,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceHigh,
+                                    borderRadius: AppRadius.borderRadius,
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: PeekMediaImage(
+                                    uri: it.imageUri,
+                                    headers: it.imageHeaders,
+                                    kind: PeekMediaImageKind.poster,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 12),
-                              OutlinedButton(
-                                onPressed: _loadWorks,
-                                child: const Text('重试'),
+                              const SizedBox(height: 6),
+                              Text(
+                                it.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                it.productionYear?.toString() ??
+                                    _kindLabel(it.kind),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: AppColors.textTertiary,
+                                ),
                               ),
                             ],
                           ),
-                        )
-                      : _items.isEmpty
-                          ? const Center(
-                              child: Text(
-                                '暂无包含该标签的其他内容',
-                                style: TextStyle(color: AppColors.textTertiary),
-                              ),
-                            )
-                          : GridView.builder(
-                              gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 140,
-                                childAspectRatio: 2 / 3.4,
-                                crossAxisSpacing: 14,
-                                mainAxisSpacing: 14,
-                              ),
-                              itemCount: _items.length,
-                              itemBuilder: (context, index) {
-                                final it = _items[index];
-                                return InkWell(
-                                  key: ValueKey('tag-work-${it.id}'),
-                                  onTap: () => widget.onOpenMedia(it),
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          clipBehavior: Clip.antiAlias,
-                                          decoration: BoxDecoration(
-                                            color: AppColors.surfaceHigh,
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: Colors.white
-                                                  .withValues(alpha: 0.12),
-                                              width: 1,
-                                            ),
-                                          ),
-                                          child: PeekMediaImage(
-                                            uri: it.imageUri,
-                                            headers: it.imageHeaders,
-                                            kind: PeekMediaImageKind.poster,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        it.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      Text(
-                                        it.productionYear?.toString() ??
-                                            _kindLabel(it.kind),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          color: AppColors.textTertiary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

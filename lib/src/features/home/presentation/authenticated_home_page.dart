@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 
+import 'package:embyplayer/src/app/app_routes.dart';
+import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
@@ -7,7 +10,6 @@ import 'package:embyplayer/src/core/presentation/peek_context_menu.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
-import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/home/domain/home_feed.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/data/playback_service.dart';
@@ -48,6 +50,8 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   String? _planningItemId;
   Timer? _dailyRecommendationTimer;
   bool _refreshingRecommendations = false;
+  int _activeHeroIndex = 0;
+  MediaItem? _hoveredAmbientItem;
 
   @override
   void initState() {
@@ -62,6 +66,8 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     if (oldWidget.account.userId != widget.account.userId ||
         oldWidget.account.server.serverId != widget.account.server.serverId) {
       _feed = null;
+      _activeHeroIndex = 0;
+      _hoveredAmbientItem = null;
       Future<void>.microtask(_load);
       _scheduleDailyRecommendationRefresh();
     }
@@ -99,7 +105,12 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
       final feed = await ref
           .read(homeFeedProvider)
           .load(widget.account, forceRefresh: forceRefresh);
-      if (mounted) setState(() => _feed = feed);
+      if (mounted) {
+        setState(() {
+          _feed = feed;
+          _activeHeroIndex = 0;
+        });
+      }
     } on MediaLibraryException catch (error) {
       if (error.authenticationExpired) {
         await widget.onSessionExpired();
@@ -142,13 +153,12 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     }
   }
 
+  static const _recommendationRefreshInterval = Duration(hours: 24);
+
   void _scheduleDailyRecommendationRefresh() {
     _dailyRecommendationTimer?.cancel();
-    final now = (widget.clock?.call() ?? DateTime.now()).toLocal();
-    final nextDay = DateTime(now.year, now.month, now.day + 1);
-    final delay = nextDay.difference(now);
     _dailyRecommendationTimer = Timer(
-      delay > Duration.zero ? delay : const Duration(days: 1),
+      _recommendationRefreshInterval,
       () => unawaited(_runDailyRecommendationRefresh()),
     );
   }
@@ -168,7 +178,12 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
       final feed = await ref
           .read(homeFeedProvider)
           .refreshRecommendations(widget.account, currentFeed);
-      if (mounted) setState(() => _feed = feed);
+      if (mounted) {
+        setState(() {
+          _feed = feed;
+          _activeHeroIndex = 0;
+        });
+      }
     } on MediaLibraryException catch (error) {
       if (error.authenticationExpired) {
         await widget.onSessionExpired();
@@ -264,10 +279,31 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     ).showSnackBar(SnackBar(content: Text('无法开始播放：$message')));
   }
 
+  MediaItem? _resolveAmbientItem(HomeFeed? feed) {
+    if (_hoveredAmbientItem != null) return _hoveredAmbientItem;
+    if (feed == null || feed.heroItems.isEmpty) return null;
+    final safeIndex = _activeHeroIndex.clamp(0, feed.heroItems.length - 1);
+    return feed.heroItems[safeIndex];
+  }
+
+  void _syncGlobalAmbient(MediaItem? item, int paletteSeed) {
+    final uri = item?.backdropUri ?? item?.imageUri;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      SpatialAmbientController.instance.update(
+        itemId: item?.id,
+        imageUri: uri,
+        imageHeaders: item?.imageHeaders ?? const {},
+        paletteSeed: paletteSeed,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
-      final wasActive = prev?.mode == PlaybackPresentationMode.mini ||
+      final wasActive =
+          prev?.mode == PlaybackPresentationMode.mini ||
           prev?.mode == PlaybackPresentationMode.window ||
           prev?.mode == PlaybackPresentationMode.full;
       if (wasActive && next.mode == PlaybackPresentationMode.hidden) {
@@ -280,30 +316,45 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
       }
     });
     final feed = _feed;
-    return RefreshIndicator(
-      onRefresh: () => _load(forceRefresh: true),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 720;
-          final horizontalPadding = compact ? 20.0 : 32.0;
-          return PeekSmoothScroll(
-            controller: _scrollController,
-            child: CustomScrollView(
-              key: const PageStorageKey('authenticated-home-scroll-view'),
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    compact ? 22 : 30,
-                    horizontalPadding,
-                    12,
-                  ),
-                  sliver: SliverToBoxAdapter(
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1280),
+    final ambientItem = _resolveAmbientItem(feed);
+    _syncGlobalAmbient(ambientItem, _activeHeroIndex);
+    final hasGlobalBackdrop = AmbientBackdropScope.hasAncestor(context);
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Fallback local backdrop only when pumped standalone outside HomeShell
+        if (!hasGlobalBackdrop)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: _VisionSpatialAmbientBackdrop(
+                item: ambientItem,
+                paletteSeed: _activeHeroIndex,
+              ),
+            ),
+          ),
+        // Layer 1: Spatial Liquid Glass Scroll Content
+        RefreshIndicator(
+          onRefresh: () => _load(forceRefresh: true),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 720;
+              final leftPadding = compact ? 0.0 : 28.0;
+              return PeekSmoothScroll(
+                controller: _scrollController,
+                child: CustomScrollView(
+                  key: const PageStorageKey('authenticated-home-scroll-view'),
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                      padding: EdgeInsets.fromLTRB(
+                        leftPadding,
+                        compact ? 8 : 12,
+                        0,
+                        10,
+                      ),
+                      sliver: SliverToBoxAdapter(
                         child: _HomeHeading(
                           account: widget.account,
                           refreshing: _refreshing,
@@ -311,23 +362,28 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                         ),
                       ),
                     ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                  sliver: SliverToBoxAdapter(
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1280),
+                    SliverPadding(
+                      padding: EdgeInsets.only(left: leftPadding),
+                      sliver: SliverToBoxAdapter(
                         child: _loading && feed == null
                             ? const _HomeHeroSkeleton()
                             : feed?.heroItems.isNotEmpty ?? false
                             ? _HomeHeroCarousel(
                                 items: feed!.heroItems,
+                                continueWatchingItems:
+                                    feed.continueWatching.items,
                                 dailyRecommendations:
                                     feed.dailyRecommendations.items.isNotEmpty,
                                 active: widget.active,
                                 planningItemId: _planningItemId,
+                                onActiveIndexChanged: (index) {
+                                  if (_activeHeroIndex != index) {
+                                    setState(() {
+                                      _activeHeroIndex = index;
+                                      _hoveredAmbientItem = null;
+                                    });
+                                  }
+                                },
                                 onPlay: (item) =>
                                     unawaited(_continuePlayback(item)),
                                 onDetails: (item) =>
@@ -341,63 +397,42 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                               ),
                       ),
                     ),
-                  ),
-                ),
-                if (_pageError != null && feed?.heroItem != null)
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(
-                      horizontalPadding,
-                      14,
-                      horizontalPadding,
-                      0,
-                    ),
-                    sliver: SliverToBoxAdapter(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1280),
+                    if (_pageError != null && feed?.heroItem != null)
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(leftPadding, 14, 0, 0),
+                        sliver: SliverToBoxAdapter(
                           child: _HomeSectionNotice(
                             message: _pageError!,
                             onRetry: () => unawaited(_load(forceRefresh: true)),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                if (_loading && feed == null)
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(
-                      horizontalPadding,
-                      28,
-                      horizontalPadding,
-                      48,
-                    ),
-                    sliver: SliverToBoxAdapter(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1280),
-                          child: const _HomeTracksSkeleton(),
+                    if (_loading && feed == null)
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(leftPadding, 24, 0, 0),
+                        sliver: const SliverToBoxAdapter(
+                          child: _HomeTracksSkeleton(),
                         ),
+                      )
+                    else if (feed != null)
+                      ..._feedSlivers(
+                        feed,
+                        leftPadding: leftPadding,
+                        compact: compact,
                       ),
-                    ),
-                  )
-                else if (feed != null)
-                  ..._feedSlivers(
-                    feed,
-                    horizontalPadding: horizontalPadding,
-                    compact: compact,
-                  ),
-                const SliverToBoxAdapter(child: SizedBox(height: 48)),
-              ],
-            ),
-          );
-        },
-      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
   List<Widget> _feedSlivers(
     HomeFeed feed, {
-    required double horizontalPadding,
+    required double leftPadding,
     required bool compact,
   }) {
     return [
@@ -408,7 +443,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           eyebrow: 'PICK UP WHERE YOU LEFT OFF',
           section: feed.continueWatching,
           portrait: false,
-          horizontalPadding: horizontalPadding,
+          leftPadding: leftPadding,
           compact: compact,
         ),
       for (final group in feed.latestMovies.groups)
@@ -418,7 +453,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
             eyebrow: 'RECENTLY ADDED MOVIES',
             section: group.section,
             portrait: true,
-            horizontalPadding: horizontalPadding,
+            leftPadding: leftPadding,
             compact: compact,
             railId: 'latest-movies-${group.library.id}',
             libraryActionLabel: '全部媒体库',
@@ -429,7 +464,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           eyebrow: 'NEW IN YOUR LIBRARY',
           section: HomeFeedSection(error: feed.latestMovies.error),
           portrait: true,
-          horizontalPadding: horizontalPadding,
+          leftPadding: leftPadding,
           compact: compact,
         ),
       if (!feed.latestEpisodes.isEmpty || feed.latestEpisodes.hasError)
@@ -438,7 +473,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           eyebrow: 'FRESH EPISODES',
           section: feed.latestEpisodes,
           portrait: false,
-          horizontalPadding: horizontalPadding,
+          leftPadding: leftPadding,
           compact: compact,
         ),
     ];
@@ -449,40 +484,183 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     required String eyebrow,
     required HomeFeedSection section,
     required bool portrait,
-    required double horizontalPadding,
+    required double leftPadding,
     required bool compact,
     String? railId,
     String libraryActionLabel = '查看媒体库',
   }) {
     return SliverPadding(
-      padding: EdgeInsets.fromLTRB(
-        horizontalPadding,
-        compact ? 26 : 34,
-        horizontalPadding,
-        0,
-      ),
+      padding: EdgeInsets.fromLTRB(leftPadding, compact ? 20 : 26, 0, 0),
       sliver: SliverToBoxAdapter(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1280),
-            child: section.items.isEmpty
-                ? _HomeSectionNotice(
-                    title: title,
-                    message: section.error ?? '这里暂时没有内容。',
-                    onRetry: () => unawaited(_load(forceRefresh: true)),
-                  )
-                : _MediaTrack(
-                    title: title,
-                    eyebrow: eyebrow,
-                    items: section.items,
-                    portrait: portrait,
-                    compact: compact,
-                    railId: railId ?? title,
-                    libraryActionLabel: libraryActionLabel,
-                    onOpen: (item) => unawaited(_openDetails(item)),
-                    onOpenLibrary: widget.onOpenLibrary,
-                  ),
+        child: section.items.isEmpty
+            ? _HomeSectionNotice(
+                title: title,
+                message: section.error ?? '这里暂时没有内容。',
+                onRetry: () => unawaited(_load(forceRefresh: true)),
+              )
+            : _MediaTrack(
+                title: title,
+                eyebrow: eyebrow,
+                items: section.items,
+                portrait: portrait,
+                compact: compact,
+                railId: railId ?? title,
+                libraryActionLabel: libraryActionLabel,
+                onOpen: (item) => unawaited(_openDetails(item)),
+                onHover: (item) {
+                  if (_hoveredAmbientItem?.id != item.id) {
+                    setState(() => _hoveredAmbientItem = item);
+                  }
+                },
+                onOpenLibrary: widget.onOpenLibrary,
+              ),
+      ),
+    );
+  }
+}
+
+/// VisionOS Full-Bleed Dynamic Ambient Light Backdrop.
+///
+/// Uses the active movie's artwork + multi-hue atmospheric color wash
+/// (`暖金环境光` / `赛博紫环境光` / `深空蓝环境光`) so all foreground liquid glass
+/// panels refract living movie colors.
+class _VisionSpatialAmbientBackdrop extends StatelessWidget {
+  const _VisionSpatialAmbientBackdrop({
+    required this.item,
+    required this.paletteSeed,
+  });
+
+  final MediaItem? item;
+  final int paletteSeed;
+
+  static const _ambientThemes = [
+    // 0: 暖金沙漠环境光 (Warm Dune Amber)
+    [Color(0xFF5C3A16), Color(0xFF2E1C10), Color(0xFF0E131F)],
+    // 1: 赛博霓虹紫环境光 (Cyberpunk Violet/Magenta)
+    [Color(0xFF4A1D66), Color(0xFF1A2552), Color(0xFF090D1A)],
+    // 2: 深空星云蓝环境光 (Interstellar Deep Nebula Blue)
+    [Color(0xFF124268), Color(0xFF1A2C4E), Color(0xFF080C16)],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final uri = item?.backdropUri ?? item?.imageUri;
+    final themeIndex =
+        ((item?.id.hashCode.abs() ?? paletteSeed) + paletteSeed) %
+        _ambientThemes.length;
+    final colors = _ambientThemes[themeIndex];
+
+    return AnimatedSwitcher(
+      duration: AppMotion.responsive(
+        context,
+        const Duration(milliseconds: 650),
+      ),
+      child: Stack(
+        key: ValueKey('ambient-${item?.id ?? 'none'}-$paletteSeed'),
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: colors,
+                stops: const [0.0, 0.52, 1.0],
+              ),
+            ),
           ),
+          if (uri != null)
+            Transform.scale(
+              scale: 1.14,
+              child: Opacity(
+                opacity: 0.58,
+                child: PeekMediaImage(
+                  uri: uri,
+                  headers: item?.imageHeaders ?? const {},
+                  kind: PeekMediaImageKind.backdrop,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 42, sigmaY: 42),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(-0.35, -0.45),
+                  radius: 1.25,
+                  colors: [
+                    colors.first.withValues(alpha: 0.42),
+                    Colors.black.withValues(alpha: 0.35),
+                    Colors.black.withValues(alpha: 0.62),
+                  ],
+                  stops: const [0.0, 0.55, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// VisionOS Liquid Glass Surface container with specular highlight rim.
+class _VisionLiquidGlassPanel extends StatelessWidget {
+  const _VisionLiquidGlassPanel({
+    required this.child,
+    this.radius = AppRadius.value,
+    this.padding,
+    this.blur = 34.0,
+    this.topAlpha = 0.17,
+    this.bottomAlpha = 0.06,
+    this.borderAlpha = 0.34,
+  });
+
+  final Widget child;
+  final double radius;
+  final EdgeInsetsGeometry? padding;
+  final double blur;
+  final double topAlpha;
+  final double bottomAlpha;
+  final double borderAlpha;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(radius);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: topAlpha),
+            Colors.white.withValues(alpha: bottomAlpha),
+          ],
+        ),
+        borderRadius: borderRadius,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: borderAlpha),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.38),
+            blurRadius: 42,
+            offset: const Offset(0, 18),
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.06),
+            blurRadius: 1,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
         ),
       ),
     );
@@ -510,41 +688,111 @@ class _HomeHeading extends StatelessWidget {
         : hour < 18
         ? '下午好'
         : '晚上好';
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showBadge = constraints.maxWidth >= 620;
+          return Row(
             children: [
-              Text(
-                '$greeting，${account.userName}',
-                style: Theme.of(context).textTheme.headlineMedium,
+              if (showBadge) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: AppRadius.borderRadius,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.34),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 13,
+                        color: Colors.white,
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'VisionOS Spatial Cinema',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '$greeting，${account.userName}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        account.server.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontFamily: 'Cascadia Mono',
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                account.server.name,
-                style: const TextStyle(
-                  color: AppColors.textTertiary,
-                  fontFamily: 'Cascadia Mono',
-                  fontSize: 10,
-                  letterSpacing: 0.6,
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: AppRadius.borderRadius,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.30),
+                  ),
+                ),
+                child: IconButton(
+                  key: const ValueKey('home-refresh'),
+                  tooltip: '刷新首页',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: refreshing ? null : onRefresh,
+                  icon: refreshing
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.refresh_rounded,
+                          size: 18,
+                          color: Colors.white,
+                        ),
                 ),
               ),
             ],
-          ),
-        ),
-        IconButton(
-          key: const ValueKey('home-refresh'),
-          tooltip: '刷新首页',
-          onPressed: refreshing ? null : onRefresh,
-          icon: refreshing
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.refresh_rounded),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 }
@@ -552,17 +800,21 @@ class _HomeHeading extends StatelessWidget {
 class _HomeHeroCarousel extends StatefulWidget {
   const _HomeHeroCarousel({
     required this.items,
+    required this.continueWatchingItems,
     required this.dailyRecommendations,
     required this.active,
     required this.planningItemId,
+    required this.onActiveIndexChanged,
     required this.onPlay,
     required this.onDetails,
   });
 
   final List<MediaItem> items;
+  final List<MediaItem> continueWatchingItems;
   final bool dailyRecommendations;
   final bool active;
   final String? planningItemId;
+  final ValueChanged<int> onActiveIndexChanged;
   final ValueChanged<MediaItem> onPlay;
   final ValueChanged<MediaItem> onDetails;
 
@@ -571,7 +823,7 @@ class _HomeHeroCarousel extends StatefulWidget {
 }
 
 class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
-  static const _autoAdvanceInterval = Duration(seconds: 5);
+  static const _autoAdvanceInterval = Duration(hours: 24);
 
   final _controller = PageController();
   Timer? _timer;
@@ -626,11 +878,16 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
     if (widget.items.length < 2 || !_controller.hasClients) return;
     final next = (_currentIndex + direction) % widget.items.length;
     final normalized = next < 0 ? widget.items.length - 1 : next;
+    await _jumpToIndex(normalized);
+  }
+
+  Future<void> _jumpToIndex(int index) async {
+    if (!_controller.hasClients) return;
     if (_disableAnimations) {
-      _controller.jumpToPage(normalized);
+      _controller.jumpToPage(index);
     } else {
       await _controller.animateToPage(
-        normalized,
+        index,
         duration: const Duration(milliseconds: 480),
         curve: const Cubic(0.12, 0.88, 0.22, 1.0),
       );
@@ -641,6 +898,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
 
   void _pageChanged(int index) {
     setState(() => _currentIndex = index);
+    widget.onActiveIndexChanged(index);
     _scheduleNext();
   }
 
@@ -649,6 +907,9 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 720;
+        final showSidePod = constraints.maxWidth >= 920;
+        const totalHeight = 420.0;
+
         return MouseRegion(
           onEnter: (_) {
             _hovering = true;
@@ -660,74 +921,371 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
           },
           child: SizedBox(
             key: const ValueKey('home-hero'),
-            height: compact ? 410 : 430,
-            child: Stack(
-              children: [
-                PageView.builder(
-                  key: const ValueKey('daily-recommendation-carousel'),
-                  controller: _controller,
-                  allowImplicitScrolling: true,
-                  itemCount: widget.items.length,
-                  onPageChanged: _pageChanged,
-                  itemBuilder: (context, index) {
-                    final item = widget.items[index];
-                    return AnimatedBuilder(
-                      animation: _controller,
-                      builder: (context, child) {
-                        double pageOffset = 0.0;
-                        if (_controller.position.haveDimensions) {
-                          pageOffset =
-                              (_controller.page ?? _currentIndex.toDouble()) -
-                              index;
-                        } else {
-                          pageOffset = (_currentIndex - index).toDouble();
-                        }
-                        final scale = (1.0 - (pageOffset.abs() * 0.06)).clamp(
-                          0.92,
-                          1.0,
-                        );
-                        final rotateY = (pageOffset * -0.08).clamp(-0.25, 0.25);
-                        final opacity = (1.0 - (pageOffset.abs() * 0.45)).clamp(
-                          0.4,
-                          1.0,
-                        );
-
-                        return Transform(
-                          transform: Matrix4.identity()
-                            ..setEntry(3, 2, 0.0006)
-                            ..scaleByDouble(scale, scale, 1.0, 1.0)
-                            ..rotateY(rotateY),
-                          alignment: Alignment.center,
-                          child: Opacity(opacity: opacity, child: child),
-                        );
-                      },
-                      child: _HomeHero(
-                        key: ValueKey('hero-slide-${item.id}'),
-                        item: item,
-                        dailyRecommendation: widget.dailyRecommendations,
-                        planning: widget.planningItemId == item.id,
-                        onPlay: () => widget.onPlay(item),
-                        onDetails: () => widget.onDetails(item),
+            height: totalHeight,
+            child: _VisionLiquidGlassPanel(
+              radius: AppRadius.value,
+              blur: 38,
+              topAlpha: 0.16,
+              bottomAlpha: 0.06,
+              borderAlpha: 0.36,
+              padding: EdgeInsets.all(compact ? 16 : 24),
+              child: Column(
+                children: [
+                  // Top Spatial Window Status Bar
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.22),
+                            borderRadius: AppRadius.borderRadius,
+                          ),
+                          child: Text(
+                            compact ? '✨ 空间主视窗' : '✨ 空间主视窗 · 每日精选推荐',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
-                    );
-                  },
-                ),
-                if (widget.items.length > 1)
-                  Positioned(
-                    top: compact ? 14 : 20,
-                    right: compact ? 14 : 20,
-                    child: _CarouselControls(
-                      currentIndex: _currentIndex,
-                      itemCount: widget.items.length,
-                      onPrevious: () => unawaited(_move(-1)),
-                      onNext: () => unawaited(_move(1)),
+                      const SizedBox(width: 8),
+                      if (showSidePod) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.28),
+                            borderRadius: AppRadius.borderRadius,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.18),
+                            ),
+                          ),
+                          child: const Text(
+                            'Spatial Audio · Dolby Vision',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'Cascadia Mono',
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      if (widget.items.length > 1)
+                        _CarouselControls(
+                          currentIndex: _currentIndex,
+                          itemCount: widget.items.length,
+                          onPrevious: () => unawaited(_move(-1)),
+                          onNext: () => unawaited(_move(1)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  // Center Split Stage: Left Spotlight Carousel + Right Spatial Resume Pod
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 7,
+                          child: PageView.builder(
+                            key: const ValueKey(
+                              'daily-recommendation-carousel',
+                            ),
+                            controller: _controller,
+                            allowImplicitScrolling: true,
+                            itemCount: widget.items.length,
+                            onPageChanged: _pageChanged,
+                            itemBuilder: (context, index) {
+                              final item = widget.items[index];
+                              return AnimatedBuilder(
+                                animation: _controller,
+                                builder: (context, child) {
+                                  double delta = 0.0;
+                                  if (_controller.hasClients &&
+                                      _controller.position.haveDimensions) {
+                                    final page =
+                                        _controller.page ??
+                                        _currentIndex.toDouble();
+                                    delta = (page - index).abs().clamp(
+                                      0.0,
+                                      1.0,
+                                    );
+                                  }
+                                  final scale = 1.0 - (delta * 0.038);
+                                  final opacity = 1.0 - (delta * 0.42);
+                                  return Transform.scale(
+                                    scale: scale,
+                                    child: Opacity(
+                                      opacity: opacity,
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: _HomeHero(
+                                  key: ValueKey('hero-slide-${item.id}'),
+                                  item: item,
+                                  dailyRecommendation:
+                                      widget.dailyRecommendations,
+                                  planning: widget.planningItemId == item.id,
+                                  onPlay: () => widget.onPlay(item),
+                                  onDetails: () => widget.onDetails(item),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        if (showSidePod) ...[
+                          const SizedBox(width: 18),
+                          Expanded(
+                            flex: 5,
+                            child: AnimatedSwitcher(
+                              duration: AppMotion.responsive(
+                                context,
+                                const Duration(milliseconds: 360),
+                              ),
+                              switchInCurve: const Cubic(0.16, 1.0, 0.3, 1.0),
+                              switchOutCurve: Curves.easeOutCubic,
+                              child: _VisionContinueWatchingPod(
+                                key: ValueKey(
+                                  'continue-pod-${widget.continueWatchingItems.isNotEmpty ? widget.continueWatchingItems.first.id : widget.items[_currentIndex.clamp(0, widget.items.length - 1)].id}',
+                                ),
+                                resumeItem:
+                                    widget.continueWatchingItems.isNotEmpty
+                                    ? widget.continueWatchingItems.first
+                                    : null,
+                                fallbackItem:
+                                    widget.items[_currentIndex.clamp(
+                                      0,
+                                      widget.items.length - 1,
+                                    )],
+                                onPlay: widget.onPlay,
+                                onDetails: widget.onDetails,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Right-hand VisionOS Floating Continue Watching Pod inside the Spatial Stage.
+class _VisionContinueWatchingPod extends ConsumerWidget {
+  const _VisionContinueWatchingPod({
+    super.key,
+    required this.resumeItem,
+    required this.fallbackItem,
+    required this.onPlay,
+    required this.onDetails,
+  });
+
+  final MediaItem? resumeItem;
+  final MediaItem fallbackItem;
+  final ValueChanged<MediaItem> onPlay;
+  final ValueChanged<MediaItem> onDetails;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final target = resumeItem ?? fallbackItem;
+    final livePos = ref.watch(
+      globalPlaybackCoordinatorProvider.select((s) => s.positionFor(target.id)),
+    );
+    final effectivePos = (livePos != null && livePos > Duration.zero)
+        ? livePos
+        : target.resumePosition;
+    final progress = target.runTime == null || target.runTime == Duration.zero
+        ? (resumeItem != null ? 0.65 : 0.0)
+        : (effectivePos.inMilliseconds / target.runTime!.inMilliseconds).clamp(
+            0.0,
+            1.0,
+          );
+    final pct = (progress * 100).round();
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.16),
+            Colors.white.withValues(alpha: 0.06),
+          ],
+        ),
+        borderRadius: AppRadius.borderRadius,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.30),
+          width: 1.1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    resumeItem != null ? '空间续播舱' : '空间焦点预览',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                resumeItem != null ? '$pct%' : '4K HDR',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'Cascadia Mono',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: ClipRRect(
+                borderRadius: AppRadius.borderRadius,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    PeekMediaImage(
+                      uri: target.backdropUri ?? target.imageUri,
+                      headers: target.imageHeaders,
+                      kind: PeekMediaImageKind.backdrop,
+                      fit: BoxFit.cover,
+                    ),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.72),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 10,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _itemMetadata(target),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                if (effectivePos > Duration.zero)
+                                  Text(
+                                    '已看 ${_time(effectivePos)}',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => onPlay(target),
+                            borderRadius: AppRadius.borderRadius,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: AppRadius.borderRadius,
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.play_arrow_rounded,
+                                    size: 16,
+                                    color: Colors.black,
+                                  ),
+                                  SizedBox(width: 2),
+                                  Text(
+                                    '续播',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: AppRadius.borderRadius,
+            child: LinearProgressIndicator(
+              value: progress > 0 ? progress : 0.35,
+              minHeight: 5,
+              color: Colors.white,
+              backgroundColor: Colors.white.withValues(alpha: 0.22),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -750,9 +1308,9 @@ class _CarouselControls extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.52),
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: AppRadius.borderRadius,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
       ),
       child: Material(
         color: Colors.transparent,
@@ -762,11 +1320,11 @@ class _CarouselControls extends StatelessWidget {
             InkWell(
               key: const ValueKey('hero-previous'),
               borderRadius: const BorderRadius.horizontal(
-                left: Radius.circular(99),
+                left: AppRadius.circular,
               ),
               onTap: onPrevious,
               child: const Padding(
-                padding: EdgeInsets.fromLTRB(12, 8, 8, 8),
+                padding: EdgeInsets.fromLTRB(12, 6, 8, 6),
                 child: Icon(
                   Icons.chevron_left_rounded,
                   size: 18,
@@ -781,21 +1339,21 @@ class _CarouselControls extends StatelessWidget {
                 '${(currentIndex + 1).toString().padLeft(2, '0')} / '
                 '${itemCount.toString().padLeft(2, '0')}',
                 style: const TextStyle(
-                  color: AppColors.textSecondary,
+                  color: Colors.white,
                   fontFamily: 'Cascadia Mono',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
             InkWell(
               key: const ValueKey('hero-next'),
               borderRadius: const BorderRadius.horizontal(
-                right: Radius.circular(99),
+                right: AppRadius.circular,
               ),
               onTap: onNext,
               child: const Padding(
-                padding: EdgeInsets.fromLTRB(8, 8, 12, 8),
+                padding: EdgeInsets.fromLTRB(8, 6, 12, 6),
                 child: Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
@@ -828,144 +1386,179 @@ class _HomeHero extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
-      (s) => s.positionFor(item.id),
-    ));
+    final livePos = ref.watch(
+      globalPlaybackCoordinatorProvider.select((s) => s.positionFor(item.id)),
+    );
     final effectivePos = (livePos != null && livePos > Duration.zero)
         ? livePos
         : item.resumePosition;
     final resumable = effectivePos > Duration.zero;
     final progress = item.runTime == null || item.runTime == Duration.zero
         ? 0.0
-        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds)
-              .clamp(0.0, 1.0);
+        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds).clamp(
+            0.0,
+            1.0,
+          );
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 720;
+        final compact = constraints.maxWidth < 520;
         return Container(
-          height: compact ? 410 : 430,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: AppColors.surfaceLow,
-            borderRadius: BorderRadius.circular(24),
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: AppRadius.borderRadius,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.26),
+              width: 1.1,
+            ),
           ),
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _HeroArtwork(item: item),
+              Opacity(opacity: 0.48, child: _HeroArtwork(item: item)),
               DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    begin: compact
-                        ? Alignment.topCenter
-                        : Alignment.centerRight,
-                    end: compact
-                        ? Alignment.bottomCenter
-                        : Alignment.centerLeft,
-                    colors: compact
-                        ? const [
-                            Color(0x1908090D),
-                            Color(0xA608090D),
-                            Color(0xFA08090D),
-                          ]
-                        : const [
-                            Color(0x1908090D),
-                            Color(0xB508090D),
-                            Color(0xFC08090D),
-                          ],
-                    stops: compact
-                        ? const [0, 0.48, 0.82]
-                        : const [0, 0.52, 0.88],
+                    begin: Alignment.centerRight,
+                    end: Alignment.centerLeft,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.15),
+                      Colors.black.withValues(alpha: 0.55),
+                      Colors.black.withValues(alpha: 0.78),
+                    ],
+                    stops: const [0.0, 0.52, 1.0],
                   ),
                 ),
               ),
-              Align(
-                alignment: compact
-                    ? Alignment.bottomLeft
-                    : Alignment.centerLeft,
-                child: Padding(
-                  padding: EdgeInsets.all(compact ? 24 : 42),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: compact ? 560 : 620),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              Padding(
+                padding: EdgeInsets.all(compact ? 18 : 26),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.20),
+                        borderRadius: AppRadius.borderRadius,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.32),
+                        ),
+                      ),
+                      child: Text(
+                        dailyRecommendation
+                            ? 'SPOTLIGHT // DAILY RECOMMENDATION'
+                            : resumable
+                            ? 'SPOTLIGHT // CONTINUE WATCHING'
+                            : 'SPOTLIGHT // NEW IN YOUR LIBRARY',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'Cascadia Mono',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Flexible(
+                      child: Text(
+                        item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.displayLarge
+                            ?.copyWith(
+                              fontSize: compact ? 26 : 38,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _itemMetadata(item),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (!compact && item.overview != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        item.overview!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                    if (resumable) ...[
+                      const SizedBox(height: 10),
+                      _ProjectionProgress(
+                        value: progress,
+                        position: effectivePos,
+                        duration: item.runTime,
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
                       children: [
-                        Text(
-                          dailyRecommendation
-                              ? 'DAILY RECOMMENDATION'
-                              : resumable
-                              ? 'CONTINUE WATCHING'
-                              : 'NEW IN YOUR LIBRARY',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(color: AppColors.spotlight),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          item.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.displayLarge
-                              ?.copyWith(fontSize: compact ? 34 : 48),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          _itemMetadata(item),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                        if (!compact && item.overview != null) ...[
-                          const SizedBox(height: 14),
-                          Text(
-                            item.overview!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              height: 1.55,
+                        FilledButton.icon(
+                          key: const ValueKey('home-hero-play'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF0A0C12),
+                            shape: AppRadius.shape,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 22,
+                              vertical: 13,
                             ),
                           ),
-                        ],
-                        if (resumable) ...[
-                          const SizedBox(height: 20),
-                          _ProjectionProgress(
-                            value: progress,
-                            position: effectivePos,
-                            duration: item.runTime,
+                          onPressed: planning ? null : onPlay,
+                          icon: planning
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.play_arrow_rounded),
+                          label: Text(
+                            resumable ? '继续播放' : '立即播放',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
-                        ],
-                        const SizedBox(height: 22),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            FilledButton.icon(
-                              key: const ValueKey('home-hero-play'),
-                              onPressed: planning ? null : onPlay,
-                              icon: planning
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.play_arrow_rounded),
-                              label: Text(resumable ? '继续播放' : '立即播放'),
+                        ),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.14,
                             ),
-                            TextButton.icon(
-                              onPressed: planning ? null : onDetails,
-                              icon: const Icon(Icons.info_outline_rounded),
-                              label: const Text('查看详情'),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.34),
                             ),
-                          ],
+                            shape: AppRadius.shape,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 13,
+                            ),
+                          ),
+                          onPressed: planning ? null : onDetails,
+                          icon: const Icon(Icons.info_outline_rounded),
+                          label: const Text('查看详情'),
                         ),
                       ],
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -1014,22 +1607,22 @@ class _ProjectionProgress extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(99),
+            borderRadius: AppRadius.borderRadius,
             child: LinearProgressIndicator(
               key: const ValueKey('home-hero-progress'),
               value: value,
-              minHeight: 3,
-              color: AppColors.spotlight,
-              backgroundColor: Colors.white.withValues(alpha: 0.16),
+              minHeight: 4,
+              color: Colors.white,
+              backgroundColor: Colors.white.withValues(alpha: 0.24),
             ),
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 5),
           Text(
             '看到 ${_time(position)}${duration == null ? '' : ' / ${_time(duration!)}'}',
             style: const TextStyle(
-              color: AppColors.textTertiary,
+              color: Colors.white70,
               fontFamily: 'Cascadia Mono',
-              fontSize: 10,
+              fontSize: 12,
             ),
           ),
         ],
@@ -1048,6 +1641,7 @@ class _MediaTrack extends StatelessWidget {
     required this.railId,
     required this.libraryActionLabel,
     required this.onOpen,
+    required this.onHover,
     required this.onOpenLibrary,
   });
 
@@ -1059,52 +1653,92 @@ class _MediaTrack extends StatelessWidget {
   final String railId;
   final String libraryActionLabel;
   final ValueChanged<MediaItem> onOpen;
+  final ValueChanged<MediaItem> onHover;
   final VoidCallback onOpenLibrary;
 
   @override
   Widget build(BuildContext context) {
     final width = portrait
-        ? (compact ? 136.0 : 164.0)
-        : (compact ? 238.0 : 290.0);
+        ? (compact ? 142.0 : 170.0)
+        : (compact ? 244.0 : 294.0);
     final height = portrait
-        ? (compact ? 258.0 : 310.0)
-        : (compact ? 190.0 : 218.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(eyebrow, style: Theme.of(context).textTheme.labelSmall),
-                  const SizedBox(height: 5),
-                  Text(title, style: Theme.of(context).textTheme.titleLarge),
-                ],
+        ? (compact ? 264.0 : 316.0)
+        : (compact ? 196.0 : 224.0);
+    return _VisionLiquidGlassPanel(
+      radius: AppRadius.value,
+      blur: 30,
+      topAlpha: 0.13,
+      bottomAlpha: 0.05,
+      borderAlpha: 0.28,
+      padding: EdgeInsets.all(compact ? 16 : 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: AppRadius.borderRadius,
+                      ),
+                      child: Text(
+                        eyebrow,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'Cascadia Mono',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            TextButton(
-              onPressed: onOpenLibrary,
-              child: Text(libraryActionLabel),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        PeekHorizontalRail(
-          railId: 'home-track-$railId',
-          semanticLabel: title,
-          height: height,
-          itemCount: items.length,
-          itemExtent: width,
-          itemBuilder: (context, index) => _HomeMediaCard(
-            item: items[index],
-            portrait: portrait,
-            onOpen: () => onOpen(items[index]),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white.withValues(alpha: 0.12),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.28)),
+                  shape: AppRadius.shape,
+                ),
+                onPressed: onOpenLibrary,
+                child: Text(libraryActionLabel),
+              ),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 16),
+          PeekHorizontalRail(
+            railId: 'home-track-$railId',
+            semanticLabel: title,
+            height: height,
+            itemCount: items.length,
+            itemExtent: width,
+            itemBuilder: (context, index) => _HomeMediaCard(
+              item: items[index],
+              portrait: portrait,
+              onOpen: () => onOpen(items[index]),
+              onHover: () => onHover(items[index]),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1114,89 +1748,122 @@ class _HomeMediaCard extends ConsumerWidget {
     required this.item,
     required this.portrait,
     required this.onOpen,
+    required this.onHover,
   });
 
   final MediaItem item;
   final bool portrait;
   final VoidCallback onOpen;
+  final VoidCallback onHover;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
-      (s) => s.positionFor(item.id),
-    ));
+    final livePos = ref.watch(
+      globalPlaybackCoordinatorProvider.select((s) => s.positionFor(item.id)),
+    );
     final effectivePos = (livePos != null && livePos > Duration.zero)
         ? livePos
         : item.resumePosition;
     final progress = item.runTime == null || item.runTime == Duration.zero
         ? 0.0
-        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds)
-              .clamp(0.0, 1.0);
-    return PeekContextMenuRegion(
-      items: (context) => [
-        PeekContextMenuItem(
-          id: 'open',
-          label: '查看详情',
-          icon: Icons.info_outline_rounded,
-          onTap: onOpen,
-        ),
-      ],
-      child: Semantics(
-        button: true,
-        label: '${item.name}，${_kindLabel(item.kind)}',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Peek3DCard(
-                onTap: onOpen,
-                borderRadius: 16,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _CardArtwork(item: item, portrait: portrait),
-                    if (item.played)
-                      const Positioned(
-                        top: 9,
-                        right: 9,
-                        child: Icon(
-                          Icons.check_circle_rounded,
-                          color: AppColors.success,
-                          size: 20,
-                        ),
-                      ),
-                    if (progress > 0)
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 3,
-                          color: AppColors.spotlight,
-                          backgroundColor: Colors.white.withValues(alpha: 0.16),
-                        ),
-                      ),
-                  ],
+        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds).clamp(
+            0.0,
+            1.0,
+          );
+    return MouseRegion(
+      onEnter: (_) => onHover(),
+      child: PeekContextMenuRegion(
+        items: (context) => [
+          PeekContextMenuItem(
+            id: 'open',
+            label: '查看详情',
+            icon: Icons.info_outline_rounded,
+            onTap: onOpen,
+          ),
+        ],
+        child: Semantics(
+          button: true,
+          label: '${item.name}，${_kindLabel(item.kind)}',
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.16),
+                  Colors.white.withValues(alpha: 0.06),
+                ],
+              ),
+              borderRadius: AppRadius.borderRadius,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.26),
+                width: 1.1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Peek3DCard(
+                    onTap: onOpen,
+                    borderRadius: AppRadius.value,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _CardArtwork(item: item, portrait: portrait),
+                        if (item.played)
+                          const Positioned(
+                            top: 9,
+                            right: 9,
+                            child: Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.success,
+                              size: 20,
+                            ),
+                          ),
+                        if (progress > 0)
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 4,
+                              color: Colors.white,
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.24,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    _itemMetadata(item),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 9),
-            Text(
-              item.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              _itemMetadata(item),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textTertiary,
-                fontSize: 11,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1238,54 +1905,60 @@ class _HomeEmptyHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 310),
+    return _VisionLiquidGlassPanel(
+      radius: AppRadius.value,
       padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceLow,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            error == null
-                ? Icons.video_library_outlined
-                : Icons.cloud_off_outlined,
-            size: 42,
-            color: AppColors.textTertiary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            error == null ? '片库已经准备好' : '首页内容暂时无法读取',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            error ?? '播放过的内容和最近添加项目会出现在这里。',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            alignment: WrapAlignment.center,
-            children: [
-              if (error != null)
-                OutlinedButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('重新读取'),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 280),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              error == null
+                  ? Icons.video_library_outlined
+                  : Icons.cloud_off_outlined,
+              size: 42,
+              color: Colors.white70,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              error == null ? '片库已经准备好' : '首页内容暂时无法读取',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error ?? '播放过的内容和最近添加项目会出现在这里。',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: [
+                if (error != null)
+                  OutlinedButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('重新读取'),
+                  ),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    shape: AppRadius.shape,
+                  ),
+                  onPressed: onOpenLibrary,
+                  icon: const Icon(Icons.video_library_rounded),
+                  label: const Text('打开媒体库'),
                 ),
-              FilledButton.icon(
-                onPressed: onOpenLibrary,
-                icon: const Icon(Icons.video_library_rounded),
-                label: const Text('打开媒体库'),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1304,24 +1977,21 @@ class _HomeSectionNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return _VisionLiquidGlassPanel(
+      radius: AppRadius.value,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceLow,
-        borderRadius: BorderRadius.circular(14),
-      ),
       child: Row(
         children: [
           const Icon(
             Icons.info_outline_rounded,
-            color: AppColors.textTertiary,
+            color: Colors.white70,
             size: 20,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               title == null ? message : '$title：$message',
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: const TextStyle(color: Colors.white),
             ),
           ),
           TextButton(onPressed: onRetry, child: const Text('重试')),
@@ -1340,8 +2010,9 @@ class _HomeHeroSkeleton extends StatelessWidget {
       key: const ValueKey('home-hero-loading'),
       height: 430,
       decoration: BoxDecoration(
-        color: AppColors.surfaceLow,
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: AppRadius.borderRadius,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
       ),
       alignment: Alignment.bottomLeft,
       padding: const EdgeInsets.all(36),
@@ -1381,8 +2052,8 @@ class _HomeTracksSkeleton extends StatelessWidget {
             itemBuilder: (_, _) => Container(
               width: 260,
               decoration: BoxDecoration(
-                color: AppColors.surfaceLow,
-                borderRadius: BorderRadius.circular(16),
+                color: Colors.white.withValues(alpha: 0.10),
+                borderRadius: AppRadius.borderRadius,
               ),
             ),
           ),
@@ -1404,8 +2075,8 @@ class _SkeletonBar extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: AppRadius.borderRadius,
       ),
     );
   }

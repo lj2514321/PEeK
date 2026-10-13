@@ -15,8 +15,11 @@ abstract interface class MediaCacheStore {
 
   Future<void> write(String key, Map<String, dynamic> payload);
 
-  Future<void> clear();
+  Future<void> clear({bool preserveRecommendations = false});
 }
+
+bool _isRecommendationCacheKey(String key) =>
+    key.contains('/Items/Suggestions?') || key.contains('SortBy=Random');
 
 class MemoryMediaCacheStore implements MediaCacheStore {
   MemoryMediaCacheStore({DateTime Function()? clock})
@@ -44,7 +47,13 @@ class MemoryMediaCacheStore implements MediaCacheStore {
   }
 
   @override
-  Future<void> clear() async => _entries.clear();
+  Future<void> clear({bool preserveRecommendations = false}) async {
+    if (preserveRecommendations) {
+      _entries.removeWhere((key, _) => !_isRecommendationCacheKey(key));
+    } else {
+      _entries.clear();
+    }
+  }
 }
 
 class JsonFileMediaCacheStore implements MediaCacheStore {
@@ -97,9 +106,13 @@ class JsonFileMediaCacheStore implements MediaCacheStore {
   }
 
   @override
-  Future<void> clear() async {
+  Future<void> clear({bool preserveRecommendations = false}) async {
     final entries = await _load();
-    entries.clear();
+    if (preserveRecommendations) {
+      entries.removeWhere((key, _) => !_isRecommendationCacheKey(key));
+    } else {
+      entries.clear();
+    }
     await _persist(entries);
   }
 

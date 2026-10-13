@@ -67,10 +67,7 @@ void main() {
                   data: {
                     'AccessToken': 'mock-token-xyz',
                     'ServerId': 'jellyfin-server-id',
-                    'User': {
-                      'Id': 'user-guid-123',
-                      'Name': 'Alice',
-                    },
+                    'User': {'Id': 'user-guid-123', 'Name': 'Alice'},
                   },
                 ),
               );
@@ -111,11 +108,13 @@ void main() {
       expect(authHeader, contains('DeviceId='));
       expect(authHeader, contains('Version="0.1.0"'));
 
-      final legacyHeader = interceptedHeaders!['X-Emby-Authorization'] as String?;
+      final legacyHeader =
+          interceptedHeaders!['X-Emby-Authorization'] as String?;
       expect(legacyHeader, isNotNull);
       expect(legacyHeader, contains('MediaBrowser'));
 
-      final mediaBrowserHeader = interceptedHeaders!['X-MediaBrowser-Authorization'] as String?;
+      final mediaBrowserHeader =
+          interceptedHeaders!['X-MediaBrowser-Authorization'] as String?;
       expect(mediaBrowserHeader, isNotNull);
     });
 
@@ -133,10 +132,7 @@ void main() {
                   data: {
                     'AccessToken': 'emby-token-abc',
                     'ServerId': 'emby-server-id',
-                    'User': {
-                      'Id': 'user-emby-456',
-                      'Name': 'Bob',
-                    },
+                    'User': {'Id': 'user-emby-456', 'Name': 'Bob'},
                   },
                 ),
               );
@@ -177,7 +173,10 @@ void main() {
                   response: Response(
                     requestOptions: options,
                     statusCode: 401,
-                    data: {'Message': 'User is temporarily locked out due to too many failed attempts.'},
+                    data: {
+                      'Message':
+                          'User is temporarily locked out due to too many failed attempts.',
+                    },
                   ),
                 ),
               );
@@ -207,46 +206,50 @@ void main() {
       );
     });
 
-    test('401 error without server message includes brute force reminder', () async {
-      final dio = Dio()
-        ..interceptors.add(
-          InterceptorsWrapper(
-            onRequest: (options, handler) {
-              handler.reject(
-                DioException(
-                  requestOptions: options,
-                  response: Response(
+    test(
+      '401 error without server message includes brute force reminder',
+      () async {
+        final dio = Dio()
+          ..interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                handler.reject(
+                  DioException(
                     requestOptions: options,
-                    statusCode: 401,
-                    data: null,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 401,
+                      data: null,
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
+                );
+              },
+            ),
+          );
+
+        final tokenStore = SecureTokenStore(const FailingSecureStorage());
+        final service = ServerAuthenticationService(dio, tokenStore);
+        final server = DiscoveredServer(
+          kind: ServerKind.jellyfin,
+          name: 'Test',
+          version: '10.10.0',
+          serverId: 'test',
+          apiBaseUri: Uri.parse('http://127.0.0.1:8096'),
         );
 
-      final tokenStore = SecureTokenStore(const FailingSecureStorage());
-      final service = ServerAuthenticationService(dio, tokenStore);
-      final server = DiscoveredServer(
-        kind: ServerKind.jellyfin,
-        name: 'Test',
-        version: '10.10.0',
-        serverId: 'test',
-        apiBaseUri: Uri.parse('http://127.0.0.1:8096'),
-      );
-
-      expect(
-        () => service.login(server: server, username: 'test', password: '123'),
-        throwsA(
-          isA<ServerAuthenticationException>().having(
-            (e) => e.message,
-            'message',
-            contains('防暴力破解临时锁定'),
+        expect(
+          () =>
+              service.login(server: server, username: 'test', password: '123'),
+          throwsA(
+            isA<ServerAuthenticationException>().having(
+              (e) => e.message,
+              'message',
+              contains('防暴力破解临时锁定'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
     test('403 error informs user about restricted account', () async {
       final dio = Dio()
@@ -289,14 +292,17 @@ void main() {
       );
     });
 
-    test('SecureTokenStore recovers in-memory when FlutterSecureStorage throws', () async {
-      final store = SecureTokenStore(const FailingSecureStorage());
-      final deviceId = await store.getOrCreateDeviceId();
-      expect(deviceId, isNotEmpty);
+    test(
+      'SecureTokenStore recovers in-memory when FlutterSecureStorage throws',
+      () async {
+        final store = SecureTokenStore(const FailingSecureStorage());
+        final deviceId = await store.getOrCreateDeviceId();
+        expect(deviceId, isNotEmpty);
 
-      // Verify that calling getOrCreateDeviceId again returns the cached memory fallback ID
-      final deviceId2 = await store.getOrCreateDeviceId();
-      expect(deviceId2, deviceId);
-    });
+        // Verify that calling getOrCreateDeviceId again returns the cached memory fallback ID
+        final deviceId2 = await store.getOrCreateDeviceId();
+        expect(deviceId2, deviceId);
+      },
+    );
   });
 }

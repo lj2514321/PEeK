@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('DownloadsPage displays header, tabs, and empty states', (tester) async {
+  testWidgets('DownloadsPage displays header, tabs, and empty states', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -13,9 +15,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark(),
-        home: const Scaffold(
-          body: DownloadsPage(),
-        ),
+        home: const Scaffold(body: DownloadsPage()),
       ),
     );
     await tester.pumpAndSettle();

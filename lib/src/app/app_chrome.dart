@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 abstract final class AppChrome {
-  static const windowControlsWidth = 138.0;
-  static const windowControlsHeight = 38.0;
+  static const windowControlsWidth = 136.0;
+  static const windowControlsHeight = 54.0;
 
   static final immersive = ValueNotifier<bool>(false);
 
@@ -23,4 +23,3 @@ abstract final class AppChrome {
     }
   }
 }
-

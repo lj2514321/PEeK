@@ -49,7 +49,9 @@ void main() {
     });
 
     test('extracts and returns shader file paths for active presets', () async {
-      final tempDir = await Directory.systemTemp.createTemp('peek_shader_test_');
+      final tempDir = await Directory.systemTemp.createTemp(
+        'peek_shader_test_',
+      );
       try {
         final service = ShaderManagerService(shadersDirectory: tempDir);
         final paths = await service.getShaderPaths(VideoShaderPreset.cas);

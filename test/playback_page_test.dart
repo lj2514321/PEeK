@@ -200,8 +200,13 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byKey(const ValueKey('player-seek-feedback')), findsOneWidget);
-      final pillCenter = tester.getCenter(find.byKey(const ValueKey('player-seek-feedback')));
+      expect(
+        find.byKey(const ValueKey('player-seek-feedback')),
+        findsOneWidget,
+      );
+      final pillCenter = tester.getCenter(
+        find.byKey(const ValueKey('player-seek-feedback')),
+      );
       expect(pillCenter.dy, lessThan(250));
 
       await tester.pump(const Duration(milliseconds: 150));

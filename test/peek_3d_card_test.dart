@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Peek3DCard renders and responds to hover gesture', (tester) async {
+  testWidgets('Peek3DCard renders and responds to hover gesture', (
+    tester,
+  ) async {
     bool tapped = false;
 
     await tester.pumpWidget(

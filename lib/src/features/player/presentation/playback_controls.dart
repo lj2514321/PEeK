@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:window_manager/window_manager.dart';
 
-
 class PlaybackControls extends StatefulWidget {
   const PlaybackControls({
     super.key,
@@ -1257,52 +1256,52 @@ class _MethodBadge extends StatelessWidget {
             key: const ValueKey('player-quality'),
             borderRadius: BorderRadius.circular(99),
             onTap: onPressed,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(11, 6, 9, 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (showMethod) ...[
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(11, 6, 9, 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (showMethod) ...[
+                    Text(
+                      methodLabel,
+                      style: const TextStyle(
+                        color: AppColors.textTertiary,
+                        fontFamily: 'Cascadia Mono',
+                        fontSize: 9,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 11,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      color: Colors.white.withValues(alpha: 0.16),
+                    ),
+                  ],
                   Text(
-                    methodLabel,
+                    quality.compactLabel,
                     style: const TextStyle(
-                      color: AppColors.textTertiary,
+                      color: AppColors.spotlight,
                       fontFamily: 'Cascadia Mono',
                       fontSize: 9,
-                      letterSpacing: 0.6,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
                     ),
                   ),
-                  Container(
-                    width: 1,
-                    height: 11,
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
-                    color: Colors.white.withValues(alpha: 0.16),
+                  const SizedBox(width: 3),
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 14,
+                    color: AppColors.textTertiary,
                   ),
                 ],
-                Text(
-                  quality.compactLabel,
-                  style: const TextStyle(
-                    color: AppColors.spotlight,
-                    fontFamily: 'Cascadia Mono',
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-                const SizedBox(width: 3),
-                const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 14,
-                  color: AppColors.textTertiary,
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _BufferingIndicator extends StatelessWidget {

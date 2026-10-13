@@ -163,8 +163,9 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
         if (widget.duration.inMilliseconds <= 0) return;
         // 100px drag = ~30 seconds seek
         final secondsDelta = (delta.dx / constraints.maxWidth) * 120;
-        final targetMs = (_seekStartOrigin.inMilliseconds + (secondsDelta * 1000).toInt())
-            .clamp(0, widget.duration.inMilliseconds);
+        final targetMs =
+            (_seekStartOrigin.inMilliseconds + (secondsDelta * 1000).toInt())
+                .clamp(0, widget.duration.inMilliseconds);
         setState(() {
           _targetSeekPosition = Duration(milliseconds: targetMs);
         });
@@ -178,7 +179,9 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
           _currentBrightness = newBrightness;
         });
         try {
-          ScreenBrightness.instance.setApplicationScreenBrightness(newBrightness);
+          ScreenBrightness.instance.setApplicationScreenBrightness(
+            newBrightness,
+          );
         } catch (_) {}
         break;
 
@@ -239,7 +242,8 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
                     widget.onToggleControls();
                   }
                 },
-                onDoubleTapDown: (details) => _onDoubleTapDown(details, constraints),
+                onDoubleTapDown: (details) =>
+                    _onDoubleTapDown(details, constraints),
                 onPanStart: (details) => _onPanStart(details, constraints),
                 onPanUpdate: (details) => _onPanUpdate(details, constraints),
                 onPanEnd: _onPanEnd,
@@ -287,11 +291,7 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
             // Gesture HUD (Brightness, Volume, Seek)
             if (_showHud)
               Positioned.fill(
-                child: IgnorePointer(
-                  child: Center(
-                    child: _buildHud(),
-                  ),
-                ),
+                child: IgnorePointer(child: Center(child: _buildHud())),
               ),
 
             // Floating Lock Toggle (especially for mobile touch safety)
@@ -350,15 +350,14 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          decoration: AppGlass.visionOSDecoration(
-            radius: 20,
-            elevated: true,
-          ),
+          decoration: AppGlass.visionOSDecoration(radius: 20, elevated: true),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isForward ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
+                isForward
+                    ? Icons.fast_forward_rounded
+                    : Icons.fast_rewind_rounded,
                 size: 36,
                 color: AppColors.spotlight,
               ),
@@ -391,8 +390,8 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
           icon: _currentBrightness > 0.5
               ? Icons.brightness_high_rounded
               : (_currentBrightness > 0.2
-                  ? Icons.brightness_medium_rounded
-                  : Icons.brightness_low_rounded),
+                    ? Icons.brightness_medium_rounded
+                    : Icons.brightness_low_rounded),
           label: '亮度',
           percent: percent,
           value: _currentBrightness,
@@ -404,8 +403,8 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
           icon: _currentVolume <= 0
               ? Icons.volume_off_rounded
               : (_currentVolume > 0.5
-                  ? Icons.volume_up_rounded
-                  : Icons.volume_down_rounded),
+                    ? Icons.volume_up_rounded
+                    : Icons.volume_down_rounded),
           label: '音量',
           percent: percent,
           value: _currentVolume,
@@ -425,10 +424,7 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
     return Container(
       width: 140,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: AppGlass.visionOSDecoration(
-        radius: 20,
-        elevated: true,
-      ),
+      decoration: AppGlass.visionOSDecoration(radius: 20, elevated: true),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -448,7 +444,9 @@ class _PlaybackGestureOverlayState extends State<PlaybackGestureOverlay> {
             child: LinearProgressIndicator(
               value: value,
               backgroundColor: Colors.white.withValues(alpha: 0.15),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.spotlight),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.spotlight,
+              ),
               minHeight: 4,
             ),
           ),

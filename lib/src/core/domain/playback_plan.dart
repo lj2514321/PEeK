@@ -175,13 +175,21 @@ class PlaybackPlan {
           ? Duration(milliseconds: json['durationMs'] as int)
           : null,
       audioTracks: (json['audioTracks'] as List? ?? const [])
-          .map((t) => PlaybackTrackInfo.fromJson(Map<String, dynamic>.from(t as Map)))
+          .map(
+            (t) =>
+                PlaybackTrackInfo.fromJson(Map<String, dynamic>.from(t as Map)),
+          )
           .toList(),
       subtitleTracks: (json['subtitleTracks'] as List? ?? const [])
-          .map((t) => PlaybackTrackInfo.fromJson(Map<String, dynamic>.from(t as Map)))
+          .map(
+            (t) =>
+                PlaybackTrackInfo.fromJson(Map<String, dynamic>.from(t as Map)),
+          )
           .toList(),
       chapters: (json['chapters'] as List? ?? const [])
-          .map((c) => MediaChapter.fromJson(Map<String, dynamic>.from(c as Map)))
+          .map(
+            (c) => MediaChapter.fromJson(Map<String, dynamic>.from(c as Map)),
+          )
           .toList(),
       audioStreamIndex: json['audioStreamIndex'] as int?,
       subtitleStreamIndex: json['subtitleStreamIndex'] as int?,

@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/cinematic_scroll_behavior.dart';
@@ -22,17 +24,16 @@ class EmbyPlayerApp extends StatelessWidget {
       theme: AppTheme.dark(),
       scrollBehavior: const CinematicScrollBehavior(),
       builder: (context, child) {
-        final content = PeekSmoothScroll(child: child ?? const SizedBox.shrink());
+        final content = PeekSmoothScroll(
+          child: child ?? const SizedBox.shrink(),
+        );
         if (defaultTargetPlatform != TargetPlatform.windows) {
           return Overlay(
             initialEntries: [
               OverlayEntry(
                 builder: (context) => Stack(
                   fit: StackFit.expand,
-                  children: [
-                    content,
-                    const FloatingMiniPlayer(),
-                  ],
+                  children: [content, const FloatingMiniPlayer()],
                 ),
               ),
             ],
@@ -44,9 +45,22 @@ class EmbyPlayerApp extends StatelessWidget {
             if (immersive) {
               return ColoredBox(color: AppColors.canvas, child: content);
             }
-            return ColoredBox(
-              color: AppColors.canvas,
-              child: _FramelessWindowSurface(child: content),
+            return ClipRRect(
+              borderRadius: AppRadius.borderRadius,
+              child: DecoratedBox(
+                position: DecorationPosition.foreground,
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.borderRadius,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    width: 1.0,
+                  ),
+                ),
+                child: ColoredBox(
+                  color: AppColors.canvas,
+                  child: _FramelessWindowSurface(child: content),
+                ),
+              ),
             );
           },
         );
@@ -77,14 +91,18 @@ class _FramelessWindowSurface extends StatelessWidget {
                   children: [
                     child,
                     if (canShowDragArea)
-                      const Positioned(
+                      Positioned(
                         top: 0,
-                        left: 260,
-                        right: AppChrome.windowControlsWidth,
-                        height: AppChrome.windowControlsHeight,
-                        child: DragToMoveArea(child: SizedBox.expand()),
+                        left: 0,
+                        right: AppChrome.windowControlsWidth + 8,
+                        height: 12,
+                        child: const DragToMoveArea(child: SizedBox.expand()),
                       ),
-                    const Positioned(top: 0, right: 0, child: _WindowControls()),
+                    const Positioned(
+                      top: 0,
+                      right: 0,
+                      child: _WindowControls(),
+                    ),
                     const FloatingMiniPlayer(),
                   ],
                 ),
@@ -105,35 +123,63 @@ class _WindowControls extends StatelessWidget {
     return Container(
       width: AppChrome.windowControlsWidth,
       height: AppChrome.windowControlsHeight,
-      padding: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          _WindowCaptionAction(
-            icon: Icons.remove_rounded,
-            tooltip: '最小化',
-            onTap: () => windowManager.minimize(),
-          ),
-          const SizedBox(width: 2),
-          _WindowCaptionAction(
-            icon: Icons.crop_square_rounded,
-            tooltip: '最大化/还原',
-            onTap: () async {
-              if (await windowManager.isMaximized()) {
-                await windowManager.unmaximize();
-              } else {
-                await windowManager.maximize();
-              }
-            },
-          ),
-          const SizedBox(width: 2),
-          _WindowCaptionAction(
-            icon: Icons.close_rounded,
-            tooltip: '关闭',
-            isClose: true,
-            onTap: () => windowManager.close(),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.18),
+            Colors.white.withValues(alpha: 0.06),
+          ],
+        ),
+        borderRadius: AppRadius.borderRadius,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.32),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
           ),
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: AppRadius.borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _WindowCaptionAction(
+                  icon: Icons.remove_rounded,
+                  tooltip: '最小化',
+                  onTap: () => windowManager.minimize(),
+                ),
+                _WindowCaptionAction(
+                  icon: Icons.crop_square_rounded,
+                  tooltip: '最大化/还原',
+                  onTap: () async {
+                    if (await windowManager.isMaximized()) {
+                      await windowManager.unmaximize();
+                    } else {
+                      await windowManager.maximize();
+                    }
+                  },
+                ),
+                _WindowCaptionAction(
+                  icon: Icons.close_rounded,
+                  tooltip: '关闭',
+                  isClose: true,
+                  onTap: () => windowManager.close(),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -162,13 +208,13 @@ class _WindowCaptionActionState extends State<_WindowCaptionAction> {
   @override
   Widget build(BuildContext context) {
     final hoverColor = widget.isClose
-        ? const Color(0xFFE81123)
-        : Colors.white.withValues(alpha: 0.12);
+        ? const Color(0xFFE81123).withValues(alpha: 0.88)
+        : Colors.white.withValues(alpha: 0.22);
     final iconColor = _hovered
         ? Colors.white
         : (widget.isClose
-            ? Colors.white.withValues(alpha: 0.85)
-            : Colors.white.withValues(alpha: 0.70));
+              ? Colors.white.withValues(alpha: 0.90)
+              : Colors.white.withValues(alpha: 0.78));
 
     return Tooltip(
       message: widget.tooltip,
@@ -180,18 +226,20 @@ class _WindowCaptionActionState extends State<_WindowCaptionAction> {
           behavior: HitTestBehavior.opaque,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
-            width: 38,
-            height: 28,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: _hovered ? hoverColor : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: AppRadius.borderRadius,
+              border: _hovered
+                  ? Border.all(
+                      color: Colors.white.withValues(alpha: 0.36),
+                      width: 1,
+                    )
+                  : null,
             ),
             alignment: Alignment.center,
-            child: Icon(
-              widget.icon,
-              size: 15,
-              color: iconColor,
-            ),
+            child: Icon(widget.icon, size: 16, color: iconColor),
           ),
         ),
       ),

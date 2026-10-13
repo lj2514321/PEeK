@@ -66,10 +66,7 @@ class _PlaybackDropTargetState extends State<PlaybackDropTarget> {
                       horizontal: 32,
                       vertical: 24,
                     ),
-                    decoration: AppGlass.decoration(
-                      radius: 20,
-                      selected: true,
-                    ),
+                    decoration: AppGlass.decoration(radius: 20, selected: true),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [

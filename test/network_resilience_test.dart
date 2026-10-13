@@ -18,65 +18,71 @@ void main() {
     apiBaseUri: Uri.parse('http://127.0.0.1:8096'),
   );
 
-  test('Network Resilience: Handles HTTP 401 Unauthenticated exception smoothly', () async {
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            handler.reject(
-              DioException(
-                requestOptions: options,
-                response: Response(
+  test(
+    'Network Resilience: Handles HTTP 401 Unauthenticated exception smoothly',
+    () async {
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.reject(
+                DioException(
                   requestOptions: options,
-                  statusCode: 401,
-                  statusMessage: 'Unauthorized token expired',
+                  response: Response(
+                    requestOptions: options,
+                    statusCode: 401,
+                    statusMessage: 'Unauthorized token expired',
+                  ),
+                  type: DioExceptionType.badResponse,
                 ),
-                type: DioExceptionType.badResponse,
-              ),
-            );
-          },
+              );
+            },
+          ),
+        );
+
+      final service = ServerAuthenticationService(dio, SecureTokenStore());
+
+      expect(
+        () => service.login(
+          server: server,
+          username: 'admin',
+          password: 'wrong-password',
         ),
+        throwsA(isA<ServerAuthenticationException>()),
       );
+    },
+  );
 
-    final service = ServerAuthenticationService(dio, SecureTokenStore());
+  test(
+    'Network Resilience: Maps DioException to MediaLibraryException on network timeout',
+    () async {
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.connectionTimeout,
+                ),
+              );
+            },
+          ),
+        );
 
-    expect(
-      () => service.login(
+      final service = MediaLibraryService(dio);
+      final account = AuthenticatedServer(
         server: server,
-        username: 'admin',
-        password: 'wrong-password',
-      ),
-      throwsA(isA<ServerAuthenticationException>()),
-    );
-  });
-
-  test('Network Resilience: Maps DioException to MediaLibraryException on network timeout', () async {
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            handler.reject(
-              DioException(
-                requestOptions: options,
-                type: DioExceptionType.connectionTimeout,
-              ),
-            );
-          },
-        ),
+        userId: 'user-1',
+        userName: 'admin',
+        deviceId: 'device-1',
+        accessToken: 'token-123',
       );
 
-    final service = MediaLibraryService(dio);
-    final account = AuthenticatedServer(
-      server: server,
-      userId: 'user-1',
-      userName: 'admin',
-      deviceId: 'device-1',
-      accessToken: 'token-123',
-    );
-
-    expect(
-      () => service.getLibraries(account, forceRefresh: true),
-      throwsA(isA<MediaLibraryException>()),
-    );
-  });
+      expect(
+        () => service.getLibraries(account, forceRefresh: true),
+        throwsA(isA<MediaLibraryException>()),
+      );
+    },
+  );
 }

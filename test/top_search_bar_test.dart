@@ -60,9 +60,7 @@ void main() {
     tester,
   ) async {
     final service = _FakeSearchService();
-    await tester.pumpWidget(
-      _testApp(account: account, service: service),
-    );
+    await tester.pumpWidget(_testApp(account: account, service: service));
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -79,31 +77,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tapping a person in search results opens PersonWorksPage instead of MediaDetailPage', (
-    tester,
-  ) async {
-    final service = _FakeSearchService();
-    await tester.pumpWidget(_testApp(account: account, service: service));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'tapping a person in search results opens PersonWorksPage instead of MediaDetailPage',
+    (tester) async {
+      final service = _FakeSearchService();
+      await tester.pumpWidget(_testApp(account: account, service: service));
+      await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const ValueKey('top-search-field')),
-      '示例',
-    );
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('top-search-field')),
+        '示例',
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
 
-    expect(find.text('示例演员'), findsOneWidget);
+      expect(find.text('示例演员'), findsOneWidget);
 
-    // Tap on person item
-    await tester.tap(find.text('示例演员'));
-    await tester.pumpAndSettle();
+      // Tap on person item
+      await tester.tap(find.text('示例演员'));
+      await tester.pumpAndSettle();
 
-    // Verify PersonWorksPage is opened, and MediaDetailPage is NOT opened
-    expect(find.byType(PersonWorksPage), findsOneWidget);
-    expect(find.byType(MediaDetailPage), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+      // Verify PersonWorksPage is opened, and MediaDetailPage is NOT opened
+      expect(find.byType(PersonWorksPage), findsOneWidget);
+      expect(find.byType(MediaDetailPage), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('tapping a movie in search results opens MediaDetailPage', (
     tester,
@@ -164,9 +163,7 @@ Widget _testApp({
     child: MaterialApp(
       theme: AppTheme.dark(),
       home: Scaffold(
-        body: Center(
-          child: TopSearchBar(account: account),
-        ),
+        body: Center(child: TopSearchBar(account: account)),
       ),
     ),
   );
@@ -237,11 +234,7 @@ class _FakeSearchService extends MediaLibraryService {
   }) async {
     return const MediaPage(
       items: [
-        MediaItem(
-          id: 'work-1',
-          name: '参演代表作',
-          kind: MediaItemKind.movie,
-        ),
+        MediaItem(id: 'work-1', name: '参演代表作', kind: MediaItemKind.movie),
       ],
       totalRecordCount: 1,
       nextStartIndex: 1,

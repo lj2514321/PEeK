@@ -5,35 +5,35 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   final serverUri = Uri.parse('http://127.0.0.1:8096');
 
-  test('initiateQuickConnect sends POST request and parses code and secret', () async {
-    RequestOptions? request;
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            request = options;
-            handler.resolve(
-              Response<Map<String, dynamic>>(
-                requestOptions: options,
-                statusCode: 200,
-                data: {
-                  'Code': '1234',
-                  'Secret': 'secret-xyz',
-                },
-              ),
-            );
-          },
-        ),
-      );
+  test(
+    'initiateQuickConnect sends POST request and parses code and secret',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
+              handler.resolve(
+                Response<Map<String, dynamic>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {'Code': '1234', 'Secret': 'secret-xyz'},
+                ),
+              );
+            },
+          ),
+        );
 
-    final service = MediaLibraryService(dio);
-    final result = await service.initiateQuickConnect(serverUri);
+      final service = MediaLibraryService(dio);
+      final result = await service.initiateQuickConnect(serverUri);
 
-    expect(request?.method, 'POST');
-    expect(request?.uri.path, '/QuickConnect/Initiate');
-    expect(result?.code, '1234');
-    expect(result?.secret, 'secret-xyz');
-  });
+      expect(request?.method, 'POST');
+      expect(request?.uri.path, '/QuickConnect/Initiate');
+      expect(result?.code, '1234');
+      expect(result?.secret, 'secret-xyz');
+    },
+  );
 
   test('checkQuickConnectState checks authorization status', () async {
     RequestOptions? request;
@@ -50,10 +50,7 @@ void main() {
                   'Authenticated': true,
                   'AuthenticationResult': {
                     'AccessToken': 'token-quick',
-                    'User': {
-                      'Id': 'user-quick',
-                      'Name': 'QuickUser',
-                    },
+                    'User': {'Id': 'user-quick', 'Name': 'QuickUser'},
                   },
                 },
               ),

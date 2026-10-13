@@ -74,9 +74,7 @@ void main() {
     });
 
     testWidgets('filters out blocked keywords', (tester) async {
-      const prefs = DanmakuPreferences(
-        blockedKeywords: ['剧透'],
-      );
+      const prefs = DanmakuPreferences(blockedKeywords: ['剧透']);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -100,9 +98,7 @@ void main() {
 
     testWidgets('applies timeline calibration offset', (tester) async {
       // With +2000ms offset, position 8s becomes 10s effective time -> '第一条弹幕' (at 10s) is now active!
-      const prefs = DanmakuPreferences(
-        offsetMilliseconds: 2000,
-      );
+      const prefs = DanmakuPreferences(offsetMilliseconds: 2000);
 
       await tester.pumpWidget(
         MaterialApp(

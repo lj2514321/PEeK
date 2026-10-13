@@ -22,7 +22,10 @@ class ServerAuthenticationService {
 
     try {
       final authHeader = _authorizationHeader(server.kind, deviceId);
-      final mediaBrowserHeader = _authorizationHeader(ServerKind.jellyfin, deviceId);
+      final mediaBrowserHeader = _authorizationHeader(
+        ServerKind.jellyfin,
+        deviceId,
+      );
       final response = await _dio.postUri<Map<String, dynamic>>(
         _appendPath(server.apiBaseUri, 'Users/AuthenticateByName'),
         data: {'Username': normalizedUsername, 'Pw': password},
@@ -39,10 +42,7 @@ class ServerAuthenticationService {
       final data = response.data;
       final user = data?['User'];
       final token = data?['AccessToken'];
-      if (data == null ||
-          user is! Map ||
-          token is! String ||
-          token.isEmpty) {
+      if (data == null || user is! Map || token is! String || token.isEmpty) {
         throw const ServerAuthenticationException('服务器返回了无法识别的登录结果。');
       }
 

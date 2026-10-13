@@ -119,7 +119,8 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
     var total = 0;
     for (final g in _groups) {
       for (final it in g.items) {
-        if (g.selectedDeleteIds.contains(it.item.id) && it.item.fileSize != null) {
+        if (g.selectedDeleteIds.contains(it.item.id) &&
+            it.item.fileSize != null) {
           total += it.item.fileSize!;
         }
       }
@@ -247,8 +248,9 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
     setState(() {
       for (var i = 0; i < _groups.length; i++) {
         final g = _groups[i];
-        final updatedItems =
-            g.items.where((it) => !deletedIds.contains(it.item.id)).toList();
+        final updatedItems = g.items
+            .where((it) => !deletedIds.contains(it.item.id))
+            .toList();
         if (updatedItems.length < 2) {
           _groups.removeAt(i);
           i--;
@@ -362,7 +364,9 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
       setState(() {
         for (var i = 0; i < _groups.length; i++) {
           final g = _groups[i];
-          final updatedItems = g.items.where((it) => it.item.id != item.id).toList();
+          final updatedItems = g.items
+              .where((it) => it.item.id != item.id)
+              .toList();
           if (updatedItems.length < 2) {
             _groups.removeAt(i);
             i--;
@@ -377,7 +381,9 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
               recommendedKeepId: g.recommendedKeepId == item.id
                   ? updatedItems.first.item.id
                   : g.recommendedKeepId,
-              selectedDeleteIds: g.selectedDeleteIds.where((id) => id != item.id).toSet(),
+              selectedDeleteIds: g.selectedDeleteIds
+                  .where((id) => id != item.id)
+                  .toSet(),
             );
           }
         }
@@ -397,20 +403,14 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
       if (mounted) {
         ScaffoldMessenger.of(context)
           ..removeCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(content: Text('删除失败：$e')),
-          );
+          ..showSnackBar(SnackBar(content: Text('删除失败：$e')));
       }
     }
   }
 
   void _openDetail(MediaItem item) {
     if (widget.account == null) return;
-    AppRoutes.openMediaDetail(
-      context,
-      account: widget.account,
-      item: item,
-    );
+    AppRoutes.openMediaDetail(context, account: widget.account, item: item);
   }
 
   Future<void> _openPreviewPlayback(MediaItem item) async {
@@ -436,9 +436,7 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
       if (mounted) {
         ScaffoldMessenger.of(context)
           ..removeCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(content: Text('无法开始播放：$e')),
-          );
+          ..showSnackBar(SnackBar(content: Text('无法开始播放：$e')));
       }
     }
   }
@@ -451,9 +449,11 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
         return g.items.any((it) => it.item.kind == MediaItemKind.movie);
       }
       if (_selectedFilter == 'series') {
-        return g.items.any((it) =>
-            it.item.kind == MediaItemKind.series ||
-            it.item.kind == MediaItemKind.episode);
+        return g.items.any(
+          (it) =>
+              it.item.kind == MediaItemKind.series ||
+              it.item.kind == MediaItemKind.episode,
+        );
       }
       if (_selectedFilter == 'local') {
         return g.items.any((it) => it.item.isLocal);
@@ -505,7 +505,8 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
                                   child: LinearProgressIndicator(
-                                    value: (_scannedItemCount / _totalItemCount).clamp(0.0, 1.0),
+                                    value: (_scannedItemCount / _totalItemCount)
+                                        .clamp(0.0, 1.0),
                                     minHeight: 6,
                                   ),
                                 ),
@@ -524,18 +525,19 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                         ),
                       )
                     : filteredGroups.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.separated(
-                            key: const ValueKey('dedupe-groups-list'),
-                            controller: _scrollController,
-                            padding: const EdgeInsets.fromLTRB(28, 12, 28, 48),
-                            itemCount: filteredGroups.length,
-                            separatorBuilder: (context, _) => const SizedBox(height: 24),
-                            itemBuilder: (context, index) {
-                              final group = filteredGroups[index];
-                              return _buildGroupCard(group);
-                            },
-                          ),
+                    ? _buildEmptyState()
+                    : ListView.separated(
+                        key: const ValueKey('dedupe-groups-list'),
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(28, 12, 28, 48),
+                        itemCount: filteredGroups.length,
+                        separatorBuilder: (context, _) =>
+                            const SizedBox(height: 24),
+                        itemBuilder: (context, index) {
+                          final group = filteredGroups[index];
+                          return _buildGroupCard(group);
+                        },
+                      ),
               ),
             ],
           ),
@@ -643,7 +645,8 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
           const SizedBox(width: 14),
           _buildMetricCard(
             title: '已选待清理',
-            value: '$_totalSelectedDeleteCount 项 · $_formattedSelectedDeleteBytes',
+            value:
+                '$_totalSelectedDeleteCount 项 · $_formattedSelectedDeleteBytes',
             icon: Icons.delete_sweep_rounded,
             color: _totalSelectedDeleteCount > 0
                 ? AppColors.error
@@ -684,7 +687,10 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textTertiary,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -763,7 +769,11 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.copy_all_rounded, size: 20, color: AppColors.spotlight),
+              const Icon(
+                Icons.copy_all_rounded,
+                size: 20,
+                color: AppColors.spotlight,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Row(
@@ -840,15 +850,15 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
         color: isKeep
             ? AppColors.success.withValues(alpha: 0.08)
             : (isSelectedDelete
-                ? AppColors.error.withValues(alpha: 0.06)
-                : Colors.white.withValues(alpha: 0.04)),
+                  ? AppColors.error.withValues(alpha: 0.06)
+                  : Colors.white.withValues(alpha: 0.04)),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isKeep
               ? AppColors.success.withValues(alpha: 0.45)
               : (isSelectedDelete
-                  ? AppColors.error.withValues(alpha: 0.45)
-                  : Colors.white.withValues(alpha: 0.12)),
+                    ? AppColors.error.withValues(alpha: 0.45)
+                    : Colors.white.withValues(alpha: 0.12)),
           width: 1.2,
         ),
       ),
@@ -882,7 +892,10 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                   children: [
                     if (isKeep)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.success,
                           borderRadius: BorderRadius.circular(6),
@@ -898,7 +911,10 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                       )
                     else
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.redAccent.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(6),
@@ -959,7 +975,10 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                 if (metrics.advantageTags.isNotEmpty)
                   Text(
                     '亮点: ${metrics.advantageTags.join(" · ")}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 const SizedBox(height: 10),
                 // Actions
@@ -967,7 +986,10 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                   children: [
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         minimumSize: const Size(0, 32),
                       ),
                       onPressed: () => _openPreviewPlayback(item),
@@ -983,7 +1005,8 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                           children: [
                             Checkbox(
                               value: isSelectedDelete,
-                              onChanged: (_) => _toggleDeleteSelection(group.id, item.id),
+                              onChanged: (_) =>
+                                  _toggleDeleteSelection(group.id, item.id),
                             ),
                             const Text('标记', style: TextStyle(fontSize: 11)),
                             const SizedBox(width: 8),
@@ -992,13 +1015,24 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
                       ),
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.error.withValues(alpha: 0.85),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          backgroundColor: AppColors.error.withValues(
+                            alpha: 0.85,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           minimumSize: const Size(0, 32),
                         ),
                         onPressed: () => _deleteItem(item),
-                        icon: const Icon(Icons.delete_outline_rounded, size: 14),
-                        label: const Text('清理删除', style: TextStyle(fontSize: 11)),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 14,
+                        ),
+                        label: const Text(
+                          '清理删除',
+                          style: TextStyle(fontSize: 11),
+                        ),
                       ),
                     ],
                   ],

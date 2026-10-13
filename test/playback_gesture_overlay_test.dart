@@ -42,28 +42,35 @@ void main() {
     );
   }
 
-  testWidgets('PlaybackGestureOverlay handles single tap for toggling controls', (tester) async {
-    var toggleCount = 0;
-    await tester.pumpWidget(buildTestApp(
-      onToggleControls: () => toggleCount++,
-    ));
+  testWidgets(
+    'PlaybackGestureOverlay handles single tap for toggling controls',
+    (tester) async {
+      var toggleCount = 0;
+      await tester.pumpWidget(
+        buildTestApp(onToggleControls: () => toggleCount++),
+      );
 
-    await tester.tap(find.byType(PlaybackGestureOverlay));
-    await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.byType(PlaybackGestureOverlay));
+      await tester.pump(const Duration(milliseconds: 400));
 
-    expect(toggleCount, 1);
-  });
+      expect(toggleCount, 1);
+    },
+  );
 
-  testWidgets('PlaybackGestureOverlay handles double tap zones correctly', (tester) async {
+  testWidgets('PlaybackGestureOverlay handles double tap zones correctly', (
+    tester,
+  ) async {
     var seekBackCount = 0;
     var seekForwardCount = 0;
     var playPauseCount = 0;
 
-    await tester.pumpWidget(buildTestApp(
-      onSeekBack10: () => seekBackCount++,
-      onSeekForward10: () => seekForwardCount++,
-      onPlayPause: () => playPauseCount++,
-    ));
+    await tester.pumpWidget(
+      buildTestApp(
+        onSeekBack10: () => seekBackCount++,
+        onSeekForward10: () => seekForwardCount++,
+        onPlayPause: () => playPauseCount++,
+      ),
+    );
 
     final overlay = find.byType(PlaybackGestureOverlay);
 
@@ -92,15 +99,19 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
-  testWidgets('PlaybackGestureOverlay ignores gestures when isLocked is true', (tester) async {
+  testWidgets('PlaybackGestureOverlay ignores gestures when isLocked is true', (
+    tester,
+  ) async {
     var toggleCount = 0;
     var seekBackCount = 0;
 
-    await tester.pumpWidget(buildTestApp(
-      isLocked: true,
-      onToggleControls: () => toggleCount++,
-      onSeekBack10: () => seekBackCount++,
-    ));
+    await tester.pumpWidget(
+      buildTestApp(
+        isLocked: true,
+        onToggleControls: () => toggleCount++,
+        onSeekBack10: () => seekBackCount++,
+      ),
+    );
 
     await tester.tap(find.byType(PlaybackGestureOverlay));
     await tester.pump(const Duration(milliseconds: 400));

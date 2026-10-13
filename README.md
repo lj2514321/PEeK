@@ -148,7 +148,7 @@ Core Domain (lib/src/core/domain/)
 Infrastructure
   ├── Dio + Jellyfin/Emby Gateway + 本地文件系统
   ├── Windows Secure Storage + JSON Cache/Catalog
-  ├── PeekSmoothScroll 全局平滑滚动引擎 + PeekMotion
+  ├── PeekSmoothScroll 全局平滑滚动引擎 + PeekMotion 四合一空间流体动效体系
   ├── PlaybackRuntime → media_kit / libmpv
   └── Windows SMTC / WASAPI Audio Session
 ```
@@ -161,12 +161,12 @@ Infrastructure
 
 ```text
 lib/src/
-├── app/                  # 主题、玻璃拟态组件、窗口外壳、路由门面 (AppRoutes) 与装配中心 (AppProviders)
+├── app/                  # 主题、VisionOS 空间流体玻璃组件、窗口外壳、路由门面 (AppRoutes) 与装配中心 (AppProviders)
 ├── core/                 # 核心基础设施与公共领域层
 │   ├── domain/           # 核心公共领域模型 (MediaItem, ServerAccount, PlaybackPlan, PlaybackSettings)
 │   ├── network/          # 底层 Dio 网络客户端与会话失效协调器 (SessionExpiryCoordinator)
 │   ├── storage/          # 系统安全凭据、媒体与历史 JSON 本地存储
-│   └── presentation/     # 全局平滑滚动引擎 (PeekSmoothScroll)、动效系统 (PeekMotion) 与图片组件
+│   └── presentation/     # 全局平滑滚动引擎 (PeekSmoothScroll)、四合一空间动效系统 (PeekMotion) 与图片组件
 └── features/             # 业务特性模块（单向依赖 Core，模块间彻底消除循环依赖）
     ├── home/             # 首页轮播、继续观看与主导航 Shell
     ├── library/          # 媒体库浏览、多维过滤与批量管理

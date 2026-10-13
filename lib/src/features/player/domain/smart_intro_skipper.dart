@@ -41,7 +41,9 @@ abstract final class SmartIntroSkipper {
       for (var i = 0; i < chapters.length; i++) {
         final chapter = chapters[i];
         if (_introRegex.hasMatch(chapter.name)) {
-          final nextChapter = (i + 1 < chapters.length) ? chapters[i + 1] : null;
+          final nextChapter = (i + 1 < chapters.length)
+              ? chapters[i + 1]
+              : null;
           final end = nextChapter != null
               ? nextChapter.startPosition
               : (chapter.startPosition + Duration(seconds: fallbackSeconds));

@@ -48,7 +48,9 @@ class _FakeMiniRuntime implements PlaybackRuntime {
   Tracks get tracks => const Tracks();
 
   @override
-  Widget buildVideoSurface({required SubtitleViewConfiguration subtitleConfiguration}) {
+  Widget buildVideoSurface({
+    required SubtitleViewConfiguration subtitleConfiguration,
+  }) {
     return const SizedBox(
       key: ValueKey('fake-mini-video-surface'),
       width: 360,
@@ -57,7 +59,11 @@ class _FakeMiniRuntime implements PlaybackRuntime {
   }
 
   @override
-  Future<void> open(PlaybackPlan plan, {required bool play, Duration? startPosition}) async {}
+  Future<void> open(
+    PlaybackPlan plan, {
+    required bool play,
+    Duration? startPosition,
+  }) async {}
   @override
   Future<void> play() async => isPlaying = true;
   @override
@@ -92,70 +98,76 @@ class _FakeMiniRuntime implements PlaybackRuntime {
 }
 
 void main() {
-  testWidgets('renders FloatingMiniPlayer when mode is mini and handles controls', (tester) async {
-    final runtime = _FakeMiniRuntime();
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+  testWidgets(
+    'renders FloatingMiniPlayer when mode is mini and handles controls',
+    (tester) async {
+      final runtime = _FakeMiniRuntime();
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
 
-    const testItem = MediaItem(
-      id: 'mini-1',
-      name: 'Interstellar',
-      kind: MediaItemKind.movie,
-    );
-    final testPlan = PlaybackPlan(
-      itemId: 'mini-1',
-      mediaSourceId: 'src-1',
-      playSessionId: 'sess-1',
-      streamUri: Uri.parse('http://localhost/test.mp4'),
-      method: PlaybackMethod.directPlay,
-    );
+      const testItem = MediaItem(
+        id: 'mini-1',
+        name: 'Interstellar',
+        kind: MediaItemKind.movie,
+      );
+      final testPlan = PlaybackPlan(
+        itemId: 'mini-1',
+        mediaSourceId: 'src-1',
+        playSessionId: 'sess-1',
+        streamUri: Uri.parse('http://localhost/test.mp4'),
+        method: PlaybackMethod.directPlay,
+      );
 
-    final coordinator = container.read(globalPlaybackCoordinatorProvider.notifier);
-    coordinator.registerActivePlayback(
-      account: null,
-      item: testItem,
-      plan: testPlan,
-      runtime: runtime,
-    );
+      final coordinator = container.read(
+        globalPlaybackCoordinatorProvider.notifier,
+      );
+      coordinator.registerActivePlayback(
+        account: null,
+        item: testItem,
+        plan: testPlan,
+        runtime: runtime,
+      );
 
-    // Minimize to trigger floating player
-    container.read(globalPlaybackCoordinatorProvider.notifier).state =
-        container.read(globalPlaybackCoordinatorProvider).copyWith(
-              mode: PlaybackPresentationMode.mini,
-            );
+      // Minimize to trigger floating player
+      container
+          .read(globalPlaybackCoordinatorProvider.notifier)
+          .state = container
+          .read(globalPlaybackCoordinatorProvider)
+          .copyWith(mode: PlaybackPresentationMode.mini);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                FloatingMiniPlayer(),
-              ],
-            ),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: Stack(children: [FloatingMiniPlayer()])),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.byKey(const ValueKey('fake-mini-video-surface')), findsOneWidget);
-    expect(find.text('Interstellar'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('fake-mini-video-surface')),
+        findsOneWidget,
+      );
+      expect(find.text('Interstellar'), findsOneWidget);
 
-    // Hover over mini player to reveal controls
-    final miniPlayer = find.byType(FloatingMiniPlayer);
-    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await gesture.addPointer(location: Offset.zero);
-    await gesture.moveTo(tester.getCenter(miniPlayer));
-    await tester.pumpAndSettle();
+      // Hover over mini player to reveal controls
+      final miniPlayer = find.byType(FloatingMiniPlayer);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      await gesture.moveTo(tester.getCenter(miniPlayer));
+      await tester.pumpAndSettle();
 
-    // Tap Close Button
-    final closeBtn = find.byTooltip('关闭播放');
-    expect(closeBtn, findsOneWidget);
-    await tester.tap(closeBtn);
-    await tester.pumpAndSettle();
+      // Tap Close Button
+      final closeBtn = find.byTooltip('关闭播放');
+      expect(closeBtn, findsOneWidget);
+      await tester.tap(closeBtn);
+      await tester.pumpAndSettle();
 
-    expect(container.read(globalPlaybackCoordinatorProvider).mode, PlaybackPresentationMode.hidden);
-    expect(runtime.isDisposed, isTrue);
-  });
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).mode,
+        PlaybackPresentationMode.hidden,
+      );
+      expect(runtime.isDisposed, isTrue);
+    },
+  );
 }

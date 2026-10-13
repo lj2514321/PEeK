@@ -2,7 +2,9 @@ import 'package:embyplayer/src/features/dedupe/domain/duplicate_media_group.dart
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final duplicateDetectorServiceProvider = Provider<DuplicateDetectorService>((ref) {
+final duplicateDetectorServiceProvider = Provider<DuplicateDetectorService>((
+  ref,
+) {
   return const DuplicateDetectorService();
 });
 
@@ -65,13 +67,15 @@ class DuplicateDetectorService {
     final size = item.fileSize;
 
     // Resolution detection
-    final is4K = width >= 3840 ||
+    final is4K =
+        width >= 3840 ||
         height >= 2160 ||
         title.contains('4k') ||
         title.contains('2160');
-    final is1080p = !is4K &&
-        (width >= 1920 || height >= 1080 || title.contains('1080'));
-    final is720p = !is4K &&
+    final is1080p =
+        !is4K && (width >= 1920 || height >= 1080 || title.contains('1080'));
+    final is720p =
+        !is4K &&
         !is1080p &&
         (width >= 1280 || height >= 720 || title.contains('720'));
 
@@ -92,7 +96,8 @@ class DuplicateDetectorService {
     }
 
     // HDR detection
-    final isHDR = title.contains('hdr') ||
+    final isHDR =
+        title.contains('hdr') ||
         title.contains('dv') ||
         title.contains('dolby vision');
     final hdrScore = isHDR ? 25 : 0;
@@ -147,7 +152,13 @@ class DuplicateDetectorService {
     // User preference affinity (played or favorite)
     final historyScore = (item.played ? 10 : 0) + (item.favorite ? 15 : 0);
 
-    final totalScore = resScore + hdrScore + codecScore + audioScore + sizeScore + historyScore;
+    final totalScore =
+        resScore +
+        hdrScore +
+        codecScore +
+        audioScore +
+        sizeScore +
+        historyScore;
 
     // Advantage tags for UI
     final tags = <String>[];
@@ -178,10 +189,12 @@ class DuplicateDetectorService {
     Set<String> ignoredGroupIds = const {},
   }) {
     // Exclude folders and persons
-    final mediaList = items.where((item) {
-      return item.kind != MediaItemKind.folder &&
-          item.kind != MediaItemKind.person;
-    }).toList(growable: false);
+    final mediaList = items
+        .where((item) {
+          return item.kind != MediaItemKind.folder &&
+              item.kind != MediaItemKind.person;
+        })
+        .toList(growable: false);
 
     final n = mediaList.length;
     if (n < 2) return const [];
@@ -233,7 +246,12 @@ class DuplicateDetectorService {
       final tmdb = item.providerIds['Tmdb'];
       if (tmdb != null && tmdb.isNotEmpty) {
         if (tmdbMap.containsKey(tmdb)) {
-          union(i, tmdbMap[tmdb]!, DuplicateMatchReason.providerId, 'TMDb ID: $tmdb');
+          union(
+            i,
+            tmdbMap[tmdb]!,
+            DuplicateMatchReason.providerId,
+            'TMDb ID: $tmdb',
+          );
         } else {
           tmdbMap[tmdb] = i;
         }
@@ -242,7 +260,12 @@ class DuplicateDetectorService {
       final imdb = item.providerIds['Imdb'];
       if (imdb != null && imdb.isNotEmpty) {
         if (imdbMap.containsKey(imdb)) {
-          union(i, imdbMap[imdb]!, DuplicateMatchReason.providerId, 'IMDb ID: $imdb');
+          union(
+            i,
+            imdbMap[imdb]!,
+            DuplicateMatchReason.providerId,
+            'IMDb ID: $imdb',
+          );
         } else {
           imdbMap[imdb] = i;
         }
@@ -252,7 +275,12 @@ class DuplicateDetectorService {
       final code = extractMediaCode(item.name);
       if (code != null && code.isNotEmpty) {
         if (codeMap.containsKey(code)) {
-          union(i, codeMap[code]!, DuplicateMatchReason.mediaCode, '识别码: ${code.toUpperCase()}');
+          union(
+            i,
+            codeMap[code]!,
+            DuplicateMatchReason.mediaCode,
+            '识别码: ${code.toUpperCase()}',
+          );
         } else {
           codeMap[code] = i;
         }
@@ -272,12 +300,19 @@ class DuplicateDetectorService {
       if (item.kind == MediaItemKind.episode &&
           item.indexNumber != null &&
           (item.seriesName != null || item.seriesId != null)) {
-        final seriesKey = (item.seriesName ?? item.seriesId ?? '').toLowerCase().trim();
+        final seriesKey = (item.seriesName ?? item.seriesId ?? '')
+            .toLowerCase()
+            .trim();
         final season = item.parentIndexNumber ?? 1;
         final ep = item.indexNumber!;
         final epKey = '$seriesKey:s$season:e$ep';
         if (episodeMap.containsKey(epKey)) {
-          union(i, episodeMap[epKey]!, DuplicateMatchReason.episode, '同一剧集单集 (S${season}E$ep)');
+          union(
+            i,
+            episodeMap[epKey]!,
+            DuplicateMatchReason.episode,
+            '同一剧集单集 (S${season}E$ep)',
+          );
         } else {
           episodeMap[epKey] = i;
         }
@@ -304,30 +339,58 @@ class DuplicateDetectorService {
           final itemB = mediaList[idxB];
 
           // Check Cast overlap
-          final castA = itemA.people.map((p) => p.name.trim().toLowerCase()).where((n) => n.isNotEmpty).toSet();
-          final castB = itemB.people.map((p) => p.name.trim().toLowerCase()).where((n) => n.isNotEmpty).toSet();
+          final castA = itemA.people
+              .map((p) => p.name.trim().toLowerCase())
+              .where((n) => n.isNotEmpty)
+              .toSet();
+          final castB = itemB.people
+              .map((p) => p.name.trim().toLowerCase())
+              .where((n) => n.isNotEmpty)
+              .toSet();
           final sharedCast = castA.intersection(castB);
 
           if (sharedCast.isNotEmpty) {
-            final actorName = itemA.people.firstWhere((p) => sharedCast.contains(p.name.trim().toLowerCase())).name;
-            union(idxA, idxB, DuplicateMatchReason.titleAndCast, '同名且主演阵容一致 ($actorName 等)');
+            final actorName = itemA.people
+                .firstWhere(
+                  (p) => sharedCast.contains(p.name.trim().toLowerCase()),
+                )
+                .name;
+            union(
+              idxA,
+              idxB,
+              DuplicateMatchReason.titleAndCast,
+              '同名且主演阵容一致 ($actorName 等)',
+            );
             continue;
           }
 
           // Check Runtime similarity (within 3 minutes or 5%)
           if (itemA.runTime != null && itemB.runTime != null) {
-            final diffSecs = (itemA.runTime!.inSeconds - itemB.runTime!.inSeconds).abs();
-            if (diffSecs <= 180 || diffSecs / (itemA.runTime!.inSeconds + 1) < 0.05) {
-              union(idxA, idxB, DuplicateMatchReason.titleAndRuntime, '同名且片长一致 (~${itemA.runTime!.inMinutes}分钟)');
+            final diffSecs =
+                (itemA.runTime!.inSeconds - itemB.runTime!.inSeconds).abs();
+            if (diffSecs <= 180 ||
+                diffSecs / (itemA.runTime!.inSeconds + 1) < 0.05) {
+              union(
+                idxA,
+                idxB,
+                DuplicateMatchReason.titleAndRuntime,
+                '同名且片长一致 (~${itemA.runTime!.inMinutes}分钟)',
+              );
               continue;
             }
           }
 
           // Check Year match
           if (itemA.productionYear != null && itemB.productionYear != null) {
-            final yearDiff = (itemA.productionYear! - itemB.productionYear!).abs();
+            final yearDiff = (itemA.productionYear! - itemB.productionYear!)
+                .abs();
             if (yearDiff <= 1) {
-              union(idxA, idxB, DuplicateMatchReason.titleAndYear, '规范化标题与年份一致 (${itemA.productionYear})');
+              union(
+                idxA,
+                idxB,
+                DuplicateMatchReason.titleAndYear,
+                '规范化标题与年份一致 (${itemA.productionYear})',
+              );
               continue;
             }
           }
@@ -363,10 +426,10 @@ class DuplicateDetectorService {
       final groupId = tmdb != null && tmdb.isNotEmpty
           ? 'tmdb:$tmdb'
           : (code != null && code.isNotEmpty
-              ? 'code:$code'
-              : (firstItem.imageTag != null && firstItem.imageTag!.isNotEmpty
-                  ? 'img:${firstItem.imageTag}'
-                  : 'title:${normalizeTitle(firstItem.name)}'));
+                ? 'code:$code'
+                : (firstItem.imageTag != null && firstItem.imageTag!.isNotEmpty
+                      ? 'img:${firstItem.imageTag}'
+                      : 'title:${normalizeTitle(firstItem.name)}'));
 
       if (ignoredGroupIds.contains(groupId)) continue;
 
@@ -377,7 +440,9 @@ class DuplicateDetectorService {
       }).toList();
 
       // Sort descending by qualityScore
-      scoredItems.sort((a, b) => b.metrics.qualityScore.compareTo(a.metrics.qualityScore));
+      scoredItems.sort(
+        (a, b) => b.metrics.qualityScore.compareTo(a.metrics.qualityScore),
+      );
 
       final bestItem = scoredItems.first;
       final recommendedKeepId = bestItem.item.id;
@@ -387,13 +452,15 @@ class DuplicateDetectorService {
           .map((i) => i.item.id)
           .toSet();
 
-      final duplicateItems = scoredItems.map((scored) {
-        return DuplicateGroupItem(
-          item: scored.item,
-          metrics: scored.metrics,
-          isRecommendedKeep: scored.item.id == recommendedKeepId,
-        );
-      }).toList(growable: false);
+      final duplicateItems = scoredItems
+          .map((scored) {
+            return DuplicateGroupItem(
+              item: scored.item,
+              metrics: scored.metrics,
+              isRecommendedKeep: scored.item.id == recommendedKeepId,
+            );
+          })
+          .toList(growable: false);
 
       resultGroups.add(
         DuplicateMediaGroup(
@@ -410,7 +477,9 @@ class DuplicateDetectorService {
     }
 
     // Sort groups by potential savings descending
-    resultGroups.sort((a, b) => b.potentialSavingsBytes.compareTo(a.potentialSavingsBytes));
+    resultGroups.sort(
+      (a, b) => b.potentialSavingsBytes.compareTo(a.potentialSavingsBytes),
+    );
 
     return resultGroups;
   }

@@ -74,7 +74,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     _AppDestination('设置', Icons.tune_outlined, Icons.tune_rounded),
     _AppDestination('演员', Icons.people_outline_rounded, Icons.people_rounded),
     _AppDestination('仪表盘', Icons.analytics_outlined, Icons.analytics_rounded),
-    _AppDestination('下载', Icons.downloading_outlined, Icons.downloading_rounded),
+    _AppDestination(
+      '下载',
+      Icons.downloading_outlined,
+      Icons.downloading_rounded,
+    ),
   ];
 
   @override
@@ -513,6 +517,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       },
       child: Listener(
         onPointerDown: (event) {
+          PeekMotionOrigin.recordTap(context, event.position);
           if (event.buttons == kBackMouseButton) {
             final nav = Navigator.maybeOf(context);
             if (nav != null && nav.canPop()) {
@@ -522,257 +527,262 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         },
         child: Focus(
           autofocus: true,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final showRail = constraints.maxWidth >= 720;
-            final canExtendRail = constraints.maxWidth >= 1040;
-            final extendedRail = canExtendRail && !_sidebarCollapsed;
-            final compactContent = constraints.maxWidth < 900;
-            final sidebarDuration = AppMotion.responsive(
-              context,
-              extendedRail ? AppMotion.slow : AppMotion.standard,
-            );
-            final sidebarCurve = extendedRail
-                ? Curves.easeOutExpo
-                : Curves.easeInOutCubic;
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final showRail = constraints.maxWidth >= 720;
+              final canExtendRail = constraints.maxWidth >= 1040;
+              final extendedRail = canExtendRail && !_sidebarCollapsed;
+              final compactContent = constraints.maxWidth < 900;
+              final sidebarDuration = AppMotion.responsive(
+                context,
+                extendedRail ? AppMotion.slow : AppMotion.standard,
+              );
+              final sidebarCurve = extendedRail
+                  ? Curves.easeOutExpo
+                  : Curves.easeInOutCubic;
 
-            return Scaffold(
-              backgroundColor: Colors.transparent,
-              body: AmbientBackdrop(
-                child: SafeArea(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      AnimatedPositioned(
-                        duration: sidebarDuration,
-                        curve: sidebarCurve,
-                        left: showRail ? (extendedRail ? 224 : 80) : 0,
-                        top: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: RepaintBoundary(
-                          key: const ValueKey('main-content-pane'),
-                          child: Column(
-                            children: [
-                              _TopCommandBar(
-                                compact: compactContent,
-                                destination: _destinations[_selectedIndex],
-                                server: _discoveredServer,
-                                account: _authenticatedServer,
-                                searchBarKey: _topSearchBarKey,
-                                onAccount: () => _selectDestination(3),
-                              ),
-                              Expanded(
-                                child: PeekIndexedTransitionStack(
-                                  key: const ValueKey('main-page-view'),
-                                  index: _selectedIndex,
-                                  children: [
-                                    _KeepAliveDestination(
-                                      active: _selectedIndex == 0,
-                                      child: _authenticatedServer == null
-                                          ? _HomePage(
-                                              key: const ValueKey(
-                                                'connection-home',
-                                              ),
-                                              server: _discoveredServer,
-                                              account: null,
-                                              onAddServer: _showAddServerDialog,
-                                              onLogin: _showLoginDialog,
-                                              onOpenLibrary: () {
-                                                _selectDestination(1);
-                                              },
-                                            )
-                                          : AuthenticatedHomePage(
-                                              key: _mediaHomePageKey,
-                                              account: _authenticatedServer!,
-                                              active: _selectedIndex == 0,
-                                              onOpenLibrary: () {
-                                                _selectDestination(1);
-                                              },
-                                              onSessionExpired:
-                                                  _handleSessionExpired,
-                                            ),
-                                    ),
-                                    _KeepAliveDestination(
-                                      active: _selectedIndex == 1,
-                                      child: _visitedDestinations.contains(1)
-                                          ? MediaLibraryPage(
-                                              key: _libraryPageKey,
-                                              account: _authenticatedServer,
-                                              localLibraries: _localLibraries,
-                                              onAddLocalLibrary:
-                                                  _addLocalLibrary,
-                                              onGoHome: () =>
-                                                  _selectDestination(0),
-                                              onSessionExpired:
-                                                  _handleSessionExpired,
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
-                                    _KeepAliveDestination(
-                                      active: _selectedIndex == 2,
-                                      child: _visitedDestinations.contains(2)
-                                          ? FavoritesPage(
-                                              key: _favoritesPageKey,
-                                              account: _authenticatedServer,
-                                              onGoHome: () =>
-                                                  _selectDestination(0),
-                                              onOpenLibrary: () =>
-                                                  _selectDestination(1),
-                                              onSessionExpired:
-                                                  _handleSessionExpired,
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
-                                    _KeepAliveDestination(
-                                      active: _selectedIndex == 3,
-                                      child: _visitedDestinations.contains(3)
-                                          ? ServerAccountsPage(
-                                              key: const ValueKey(
-                                                'server-accounts',
-                                              ),
-                                              state: _accountState,
-                                              busyProfileId: _busyProfileId,
-                                              onAddServer: _showAddServerDialog,
-                                              localLibraries: _localLibraries,
-                                              addingLocalLibrary:
-                                                  _addingLocalLibrary,
-                                              busyLocalLibraryId:
-                                                  _busyLocalLibraryId,
-                                              onAddLocalLibrary:
-                                                  _addLocalLibrary,
-                                              onRemoveLocalLibrary:
-                                                  _removeLocalLibrary,
-                                              onSwitch: _switchAccount,
-                                              onLogin: _loginAccount,
-                                              onLogout: _logoutAccount,
-                                              onRemove: _removeAccount,
-                                              onGoHome: () =>
-                                                  _selectDestination(0),
-                                              playbackSettings:
-                                                  _playbackSettings,
-                                              playbackSettingsLoading:
-                                                  _playbackSettingsLoading,
-                                              playbackSettingsSaving:
-                                                  _playbackSettingsSaving,
-                                              playbackSettingsError:
-                                                  _playbackSettingsError,
-                                              onPlaybackBitrateChanged:
-                                                  (bitrate) => unawaited(
-                                                    _changePlaybackBitrate(
-                                                      bitrate,
-                                                    ),
-                                                  ),
-                                              onEnableMiniPlayerChanged:
-                                                  (enabled) => unawaited(
-                                                    _changeEnableMiniPlayer(
-                                                      enabled,
-                                                    ),
-                                                  ),
-                                              onUseExternalPlayerChanged:
-                                                  (enabled) => unawaited(
-                                                    _changeUseExternalPlayer(
-                                                      enabled,
-                                                    ),
-                                                  ),
-                                              onExternalPlayerPathChanged:
-                                                  (path) => unawaited(
-                                                    _changeExternalPlayerPath(
-                                                      path,
-                                                    ),
-                                                  ),
-                                              onHardwareDecodingModeChanged:
-                                                  (mode) => unawaited(
-                                                    _changeHardwareDecodingMode(
-                                                      mode,
-                                                    ),
-                                                  ),
-                                              onLongPressSpeedChanged:
-                                                  (speed) => unawaited(
-                                                    _changeLongPressSpeed(
-                                                      speed,
-                                                    ),
-                                                  ),
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
-                                    _KeepAliveDestination(
-                                      active: _selectedIndex == 4,
-                                      child: _visitedDestinations.contains(4)
-                                          ? ActorsPage(
-                                              key: _actorsPageKey,
-                                              account: _authenticatedServer,
-                                              onOpenLibrary: () =>
-                                                  _selectDestination(1),
-                                              onSessionExpired:
-                                                  _handleSessionExpired,
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
-                                    _KeepAliveDestination(
-                                      active: _selectedIndex == 5,
-                                      child: _visitedDestinations.contains(5)
-                                          ? const AnalyticsDashboardPage()
-                                          : const SizedBox.shrink(),
-                                    ),
-                                    _KeepAliveDestination(
-                                      active: _selectedIndex == 6,
-                                      child: _visitedDestinations.contains(6)
-                                          ? const DownloadsPage()
-                                          : const SizedBox.shrink(),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (showRail)
-                        Positioned(
-                          left: 0,
+              return Scaffold(
+                backgroundColor: Colors.transparent,
+                body: AmbientBackdrop(
+                  child: SafeArea(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        AnimatedPositioned(
+                          duration: sidebarDuration,
+                          curve: sidebarCurve,
+                          left: showRail ? (extendedRail ? 224 : 80) : 0,
                           top: 0,
+                          right: 0,
                           bottom: 0,
-                          child: _AppRail(
-                            extended: extendedRail,
-                            destinations: _destinations,
-                            selectedIndex: _selectedIndex,
-                            onSelected: _selectDestination,
-                            canToggle: canExtendRail,
-                            onToggle: _toggleSidebar,
+                          child: RepaintBoundary(
+                            key: const ValueKey('main-content-pane'),
+                            child: Column(
+                              children: [
+                                _TopCommandBar(
+                                  compact: compactContent,
+                                  destination: _destinations[_selectedIndex],
+                                  server: _discoveredServer,
+                                  account: _authenticatedServer,
+                                  searchBarKey: _topSearchBarKey,
+                                  onAccount: () => _selectDestination(3),
+                                ),
+                                Expanded(
+                                  child: PeekIndexedTransitionStack(
+                                    key: const ValueKey('main-page-view'),
+                                    index: _selectedIndex,
+                                    children: [
+                                      _KeepAliveDestination(
+                                        active: _selectedIndex == 0,
+                                        child: _authenticatedServer == null
+                                            ? _HomePage(
+                                                key: const ValueKey(
+                                                  'connection-home',
+                                                ),
+                                                server: _discoveredServer,
+                                                account: null,
+                                                onAddServer:
+                                                    _showAddServerDialog,
+                                                onLogin: _showLoginDialog,
+                                                onOpenLibrary: () {
+                                                  _selectDestination(1);
+                                                },
+                                              )
+                                            : AuthenticatedHomePage(
+                                                key: _mediaHomePageKey,
+                                                account: _authenticatedServer!,
+                                                active: _selectedIndex == 0,
+                                                onOpenLibrary: () {
+                                                  _selectDestination(1);
+                                                },
+                                                onSessionExpired:
+                                                    _handleSessionExpired,
+                                              ),
+                                      ),
+                                      _KeepAliveDestination(
+                                        active: _selectedIndex == 1,
+                                        child: _visitedDestinations.contains(1)
+                                            ? MediaLibraryPage(
+                                                key: _libraryPageKey,
+                                                account: _authenticatedServer,
+                                                localLibraries: _localLibraries,
+                                                onAddLocalLibrary:
+                                                    _addLocalLibrary,
+                                                onGoHome: () =>
+                                                    _selectDestination(0),
+                                                onSessionExpired:
+                                                    _handleSessionExpired,
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                      _KeepAliveDestination(
+                                        active: _selectedIndex == 2,
+                                        child: _visitedDestinations.contains(2)
+                                            ? FavoritesPage(
+                                                key: _favoritesPageKey,
+                                                account: _authenticatedServer,
+                                                onGoHome: () =>
+                                                    _selectDestination(0),
+                                                onOpenLibrary: () =>
+                                                    _selectDestination(1),
+                                                onSessionExpired:
+                                                    _handleSessionExpired,
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                      _KeepAliveDestination(
+                                        active: _selectedIndex == 3,
+                                        child: _visitedDestinations.contains(3)
+                                            ? ServerAccountsPage(
+                                                key: const ValueKey(
+                                                  'server-accounts',
+                                                ),
+                                                state: _accountState,
+                                                busyProfileId: _busyProfileId,
+                                                onAddServer:
+                                                    _showAddServerDialog,
+                                                localLibraries: _localLibraries,
+                                                addingLocalLibrary:
+                                                    _addingLocalLibrary,
+                                                busyLocalLibraryId:
+                                                    _busyLocalLibraryId,
+                                                onAddLocalLibrary:
+                                                    _addLocalLibrary,
+                                                onRemoveLocalLibrary:
+                                                    _removeLocalLibrary,
+                                                onSwitch: _switchAccount,
+                                                onLogin: _loginAccount,
+                                                onLogout: _logoutAccount,
+                                                onRemove: _removeAccount,
+                                                onGoHome: () =>
+                                                    _selectDestination(0),
+                                                playbackSettings:
+                                                    _playbackSettings,
+                                                playbackSettingsLoading:
+                                                    _playbackSettingsLoading,
+                                                playbackSettingsSaving:
+                                                    _playbackSettingsSaving,
+                                                playbackSettingsError:
+                                                    _playbackSettingsError,
+                                                onPlaybackBitrateChanged:
+                                                    (bitrate) => unawaited(
+                                                      _changePlaybackBitrate(
+                                                        bitrate,
+                                                      ),
+                                                    ),
+                                                onEnableMiniPlayerChanged:
+                                                    (enabled) => unawaited(
+                                                      _changeEnableMiniPlayer(
+                                                        enabled,
+                                                      ),
+                                                    ),
+                                                onUseExternalPlayerChanged:
+                                                    (enabled) => unawaited(
+                                                      _changeUseExternalPlayer(
+                                                        enabled,
+                                                      ),
+                                                    ),
+                                                onExternalPlayerPathChanged:
+                                                    (path) => unawaited(
+                                                      _changeExternalPlayerPath(
+                                                        path,
+                                                      ),
+                                                    ),
+                                                onHardwareDecodingModeChanged:
+                                                    (mode) => unawaited(
+                                                      _changeHardwareDecodingMode(
+                                                        mode,
+                                                      ),
+                                                    ),
+                                                onLongPressSpeedChanged:
+                                                    (speed) => unawaited(
+                                                      _changeLongPressSpeed(
+                                                        speed,
+                                                      ),
+                                                    ),
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                      _KeepAliveDestination(
+                                        active: _selectedIndex == 4,
+                                        child: _visitedDestinations.contains(4)
+                                            ? ActorsPage(
+                                                key: _actorsPageKey,
+                                                account: _authenticatedServer,
+                                                onOpenLibrary: () =>
+                                                    _selectDestination(1),
+                                                onSessionExpired:
+                                                    _handleSessionExpired,
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                      _KeepAliveDestination(
+                                        active: _selectedIndex == 5,
+                                        child: _visitedDestinations.contains(5)
+                                            ? const AnalyticsDashboardPage()
+                                            : const SizedBox.shrink(),
+                                      ),
+                                      _KeepAliveDestination(
+                                        active: _selectedIndex == 6,
+                                        child: _visitedDestinations.contains(6)
+                                            ? const DownloadsPage()
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                    ],
+                        if (showRail)
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            child: _AppRail(
+                              extended: extendedRail,
+                              destinations: _destinations,
+                              selectedIndex: _selectedIndex,
+                              onSelected: _selectDestination,
+                              canToggle: canExtendRail,
+                              onToggle: _toggleSidebar,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              bottomNavigationBar: showRail
-                  ? null
-                  : VisionGlassCapsuleIsland(
-                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                      child: NavigationBar(
-                        backgroundColor: Colors.transparent,
-                        elevation: 0,
-                        selectedIndex: _selectedIndex,
-                        onDestinationSelected: _selectDestination,
-                        destinations: [
-                          for (final destination in _destinations)
-                            NavigationDestination(
-                              icon: Icon(destination.icon),
-                              selectedIcon: Icon(destination.selectedIcon),
-                              label: destination.label,
-                            ),
-                        ],
+                bottomNavigationBar: showRail
+                    ? null
+                    : VisionGlassCapsuleIsland(
+                        margin: EdgeInsets.zero,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 2,
+                        ),
+                        child: NavigationBar(
+                          backgroundColor: Colors.transparent,
+                          elevation: 0,
+                          selectedIndex: _selectedIndex,
+                          onDestinationSelected: _selectDestination,
+                          destinations: [
+                            for (final destination in _destinations)
+                              NavigationDestination(
+                                icon: Icon(destination.icon),
+                                selectedIcon: Icon(destination.selectedIcon),
+                                label: destination.label,
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _KeepAliveDestination extends StatefulWidget {
@@ -875,24 +885,40 @@ class _AppRailState extends State<_AppRail>
           key: const ValueKey('app-sidebar'),
           width: width,
           child: RepaintBoundary(
-            child: ClipRect(
-              child: OverflowBox(
-                alignment: Alignment.topLeft,
-                minWidth: 224,
-                maxWidth: 224,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    border: Border(
-                      right: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.16),
-                        width: 1.2,
-                      ),
-                    ),
+            child: Container(
+              margin: EdgeInsets.zero,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.18),
+                    Colors.white.withValues(alpha: 0.06),
+                  ],
+                ),
+                borderRadius: AppRadius.borderRadius,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.34),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.38),
+                    blurRadius: 38,
+                    offset: const Offset(0, 16),
                   ),
-                  child: ClipRRect(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: AppRadius.borderRadius,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 38, sigmaY: 38),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: OverflowBox(
+                      alignment: Alignment.topLeft,
+                      minWidth: 208,
+                      maxWidth: 208,
                       child: _AppRailContents(
                         extended: widget.extended,
                         progress: progress,
@@ -935,6 +961,7 @@ class _AppRailContents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pillWidth = 48.0 + (144.0 * progress);
     return Column(
       children: [
         _RailBrand(progress: _motionInterval(progress, 0.1, 0.55)),
@@ -944,51 +971,27 @@ class _AppRailContents extends StatelessWidget {
           enabled: canToggle,
           onPressed: onToggle,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         Expanded(
           child: PeekSmoothScroll(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               children: [
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    AnimatedPositioned(
-                      duration: AppMotion.responsive(
-                        context,
-                        const Duration(milliseconds: 260),
-                      ),
-                      curve: PeekCurves.spatialEnter,
-                      top: selectedIndex * 60.0,
-                      left: 0,
-                      right: 0,
-                      height: 52.0,
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: AppColors.glassSelected,
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.16),
-                              width: 1.0,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.spotlight.withValues(
-                                  alpha: 0.08,
-                                ),
-                                blurRadius: 18,
-                                spreadRadius: -2,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    _LiquidRailIndicator(
+                      selectedIndex: selectedIndex,
+                      pillWidth: pillWidth,
                     ),
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        for (var index = 0; index < destinations.length; index++)
+                        for (
+                          var index = 0;
+                          index < destinations.length;
+                          index++
+                        )
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: _RailDestination(
@@ -1012,6 +1015,142 @@ class _AppRailContents extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Apple Dynamic Island-inspired Asymmetric Liquid Stretch Indicator.
+///
+/// When moving between rail items, the leading edge shoots ahead while the
+/// trailing edge follows with elastic tension, causing the glass capsule to
+/// stretch like a liquid droplet across the gap before snapping into place.
+class _LiquidRailIndicator extends StatefulWidget {
+  const _LiquidRailIndicator({
+    required this.selectedIndex,
+    required this.pillWidth,
+  });
+
+  final int selectedIndex;
+  final double pillWidth;
+
+  @override
+  State<_LiquidRailIndicator> createState() => _LiquidRailIndicatorState();
+}
+
+class _LiquidRailIndicatorState extends State<_LiquidRailIndicator>
+    with SingleTickerProviderStateMixin {
+  static const double _itemStride = 60.0;
+  static const double _pillHeight = 52.0;
+
+  late final AnimationController _controller;
+  late double _fromTop;
+  late double _toTop;
+
+  @override
+  void initState() {
+    super.initState();
+    _fromTop = widget.selectedIndex * _itemStride;
+    _toTop = _fromTop;
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 440),
+      value: 1.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(_LiquidRailIndicator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedIndex == oldWidget.selectedIndex) return;
+
+    final targetTop = widget.selectedIndex * _itemStride;
+    if (AppMotion.isTest || MediaQuery.disableAnimationsOf(context)) {
+      _fromTop = targetTop;
+      _toTop = targetTop;
+      _controller.value = 1.0;
+      return;
+    }
+
+    _fromTop = _currentTopEdge;
+    _toTop = targetTop;
+    _controller.forward(from: 0.0);
+  }
+
+  double get _currentTopEdge {
+    final raw = _controller.value;
+    final movingDown = _toTop >= _fromTop;
+    final curve = movingDown
+        ? const Interval(0.14, 1.0, curve: Cubic(0.28, 1.32, 0.52, 1.0))
+        : const Interval(0.0, 0.48, curve: Curves.easeOutCubic);
+    return _fromTop + ((_toTop - _fromTop) * curve.transform(raw));
+  }
+
+  double get _currentBottomEdge {
+    final raw = _controller.value;
+    final fromBottom = _fromTop + _pillHeight;
+    final toBottom = _toTop + _pillHeight;
+    final movingDown = _toTop >= _fromTop;
+    final curve = movingDown
+        ? const Interval(0.0, 0.48, curve: Curves.easeOutCubic)
+        : const Interval(0.14, 1.0, curve: Cubic(0.28, 1.32, 0.52, 1.0));
+    return fromBottom + ((toBottom - fromBottom) * curve.transform(raw));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final top = _currentTopEdge;
+        final bottom = _currentBottomEdge;
+        final height = (bottom - top).clamp(43.0, _pillHeight * 3.2);
+        final stretchRatio = height / _pillHeight;
+        final scaleX = (1.0 / math.sqrt(stretchRatio)).clamp(0.84, 1.07);
+        return Positioned(
+          top: top,
+          left: 0,
+          width: widget.pillWidth,
+          height: height,
+          child: Transform.scale(
+            scaleX: scaleX,
+            scaleY: 1.0,
+            alignment: Alignment.center,
+            child: child!,
+          ),
+        );
+      },
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.34),
+                Colors.white.withValues(alpha: 0.14),
+              ],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.54),
+              width: 1.2,
+            ),
+            borderRadius: AppRadius.borderRadius,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.18),
+                blurRadius: 22,
+                spreadRadius: -2,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1043,87 +1182,66 @@ class _RailDestination extends StatelessWidget {
         curve: PeekCurves.spatialEnter,
         builder: (context, selection, child) {
           final foreground = Color.lerp(
-            AppColors.textTertiary,
-            AppColors.spotlight,
+            Colors.white.withValues(alpha: 0.68),
+            Colors.white,
             selection,
           );
           return Material(
             key: ValueKey('sidebar-destination-${destination.label}'),
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: AppRadius.borderRadius,
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: onTap,
-              borderRadius: BorderRadius.circular(12),
-              hoverColor: Colors.white.withValues(alpha: 0.04),
+              borderRadius: AppRadius.borderRadius,
+              hoverColor: Colors.white.withValues(alpha: 0.08),
               child: SizedBox(
                 height: 52,
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 56,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.center,
-                          children: [
-                            Transform.scale(
-                              scale: 1 + (0.08 * selection),
-                              child: Icon(
-                                selected
-                                    ? destination.selectedIcon
-                                    : destination.icon,
-                                color: foreground,
-                                size: 22,
-                              ),
-                            ),
-                            Positioned(
-                              left: 0,
-                              child: Opacity(
-                                opacity: selection,
-                                child: Transform.scale(
-                                  scaleY: 0.35 + (0.65 * selection),
-                                  child: Container(
-                                    width: 3,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.spotlight,
-                                      borderRadius: BorderRadius.circular(99),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _RailReveal(
-                          progress: revealProgress,
-                          child: Text(
-                            destination.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.clip,
-                            style: TextStyle(
-                              color: Color.lerp(
-                                AppColors.textTertiary,
-                                AppColors.textPrimary,
-                                selection,
-                              ),
-                              fontWeight: selected
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
-                            ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 48,
+                      child: Center(
+                        child: Transform.scale(
+                          scale: 1 + (0.08 * selection),
+                          child: Icon(
+                            selected
+                                ? destination.selectedIcon
+                                : destination.icon,
+                            color: foreground,
+                            size: 22,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _RailReveal(
+                        progress: revealProgress,
+                        child: Text(
+                          destination.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                          style: TextStyle(
+                            color: Color.lerp(
+                              Colors.white.withValues(alpha: 0.72),
+                              Colors.white,
+                              selection,
+                            ),
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
                 ),
               ),
-            );
-          },
+            ),
+          );
+        },
       ),
     );
     return extended ? item : Tooltip(message: destination.label, child: item);
@@ -1138,9 +1256,9 @@ class _RailBrand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 18, 16, 12),
+      padding: const EdgeInsets.fromLTRB(10, 16, 12, 10),
       child: SizedBox(
-        height: 56,
+        height: 54,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1157,7 +1275,8 @@ class _RailBrand extends StatelessWidget {
                       'PEeK',
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
                       ),
                     ),
                     Text(
@@ -1165,7 +1284,7 @@ class _RailBrand extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.clip,
                       style: TextStyle(
-                        color: AppColors.textTertiary,
+                        color: Colors.white70,
                         fontFamily: 'Cascadia Mono',
                         fontSize: 9,
                         letterSpacing: 0.8,
@@ -1193,19 +1312,27 @@ class _BrandMark extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: AppColors.spotlight,
-          borderRadius: BorderRadius.circular(12),
+          shape: BoxShape.circle,
+          gradient: const RadialGradient(
+            center: Alignment(-0.3, -0.3),
+            radius: 0.9,
+            colors: [Colors.white, Color(0xFFBAE6FD), Color(0xFF60A5FA)],
+          ),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.85),
+            width: 1.2,
+          ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.spotlight.withValues(alpha: 0.12),
-              blurRadius: 20,
+              color: Colors.white.withValues(alpha: 0.28),
+              blurRadius: 18,
             ),
           ],
         ),
         child: const Icon(
           Icons.play_arrow_rounded,
-          color: AppColors.onSpotlight,
-          size: 28,
+          color: Color(0xFF0A0F1D),
+          size: 26,
         ),
       ),
     );
@@ -1244,11 +1371,11 @@ class _RailToggle extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         children: [
           button,
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           Expanded(
             child: _RailReveal(
               progress: revealProgress,
@@ -1312,34 +1439,48 @@ class _TopCommandBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final horizontalPadding = compact ? 16.0 : 28.0;
-    final captionInset = defaultTargetPlatform == TargetPlatform.windows
-        ? AppChrome.windowControlsWidth
+    final horizontalMargin = compact ? 0.0 : 18.0;
+    final captionMargin = defaultTargetPlatform == TargetPlatform.windows
+        ? AppChrome.windowControlsWidth + 10.0
         : 0.0;
     return Container(
       key: const ValueKey('top-command-bar'),
+      margin: EdgeInsets.fromLTRB(horizontalMargin, 0, captionMargin, 4),
       decoration: BoxDecoration(
-        color: AppColors.canvas.withValues(alpha: 0.70),
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 1.0,
-          ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.18),
+            Colors.white.withValues(alpha: 0.06),
+          ],
         ),
+        borderRadius: AppRadius.borderRadius,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.32),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: ClipRRect(
+        borderRadius: AppRadius.borderRadius,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          filter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
           child: SizedBox(
-            height: 60,
+            height: 54,
             child: Padding(
-              padding: EdgeInsets.only(
-                left: horizontalPadding,
-                right: horizontalPadding + captionInset,
-              ),
+              padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
               child: Row(
                 children: [
-                  Expanded(child: _TopDestinationHeading(destination: destination)),
+                  Expanded(
+                    child: _TopDestinationHeading(destination: destination),
+                  ),
                   TopSearchBar(
                     key: searchBarKey,
                     account: account,
@@ -1381,20 +1522,20 @@ class _TopDestinationHeading extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
-                  color: AppColors.spotlight.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
+                  color: Colors.white.withValues(alpha: 0.20),
+                  borderRadius: AppRadius.borderRadius,
                   border: Border.all(
-                    color: AppColors.spotlight.withValues(alpha: 0.28),
+                    color: Colors.white.withValues(alpha: 0.38),
                     width: 1,
                   ),
                 ),
                 child: Icon(
                   destination.selectedIcon,
                   size: 17,
-                  color: AppColors.spotlight,
+                  color: Colors.white,
                 ),
               ),
               const SizedBox(width: 10),
@@ -1407,7 +1548,7 @@ class _TopDestinationHeading extends StatelessWidget {
                       'CURRENT VIEW',
                       maxLines: 1,
                       style: TextStyle(
-                        color: AppColors.textTertiary,
+                        color: Colors.white70,
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 1.1,
@@ -1420,8 +1561,8 @@ class _TopDestinationHeading extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: -0.2,
                         color: Colors.white,
                       ),
@@ -1445,29 +1586,32 @@ class _TopDestinationHeading extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
-                color: AppColors.spotlight.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(10),
+                color: Colors.white.withValues(alpha: 0.20),
+                borderRadius: AppRadius.borderRadius,
                 border: Border.all(
-                  color: AppColors.spotlight.withValues(alpha: 0.28),
+                  color: Colors.white.withValues(alpha: 0.38),
                   width: 1,
                 ),
               ),
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                switchInCurve: PeekCurves.spatialEnter,
+                duration: const Duration(milliseconds: 300),
+                switchInCurve: PeekCurves.springSnap,
                 switchOutCurve: Curves.easeInQuad,
                 transitionBuilder: (child, animation) => ScaleTransition(
-                  scale: Tween<double>(begin: 0.82, end: 1.0).animate(animation),
+                  scale: Tween<double>(
+                    begin: 0.72,
+                    end: 1.0,
+                  ).animate(animation),
                   child: FadeTransition(opacity: animation, child: child),
                 ),
                 child: Icon(
                   destination.selectedIcon,
                   key: ValueKey('top-heading-icon-${destination.label}'),
                   size: 17,
-                  color: AppColors.spotlight,
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -1481,7 +1625,7 @@ class _TopDestinationHeading extends StatelessWidget {
                     'CURRENT VIEW',
                     maxLines: 1,
                     style: TextStyle(
-                      color: AppColors.textTertiary,
+                      color: Colors.white70,
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.1,
@@ -1491,19 +1635,16 @@ class _TopDestinationHeading extends StatelessWidget {
                   KeyedSubtree(
                     key: const ValueKey('top-destination-title'),
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 240),
+                      duration: const Duration(milliseconds: 300),
                       switchInCurve: PeekCurves.spatialEnter,
                       switchOutCurve: Curves.easeInQuad,
                       layoutBuilder: (currentChild, previousChildren) => Stack(
                         alignment: Alignment.centerLeft,
-                        children: [
-                          ...previousChildren,
-                          ?currentChild,
-                        ],
+                        children: [...previousChildren, ?currentChild],
                       ),
                       transitionBuilder: (child, animation) => SlideTransition(
                         position: Tween<Offset>(
-                          begin: const Offset(0.0, 0.25),
+                          begin: const Offset(0.0, 0.45),
                           end: Offset.zero,
                         ).animate(animation),
                         child: FadeTransition(opacity: animation, child: child),
@@ -1514,8 +1655,8 @@ class _TopDestinationHeading extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: -0.2,
                           color: Colors.white,
                         ),
@@ -1565,36 +1706,34 @@ class _AccountStatus extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: AppRadius.borderRadius,
             child: Container(
               height: 36,
-              padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
+              padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(18),
+                color: Colors.white.withValues(alpha: 0.14),
+                borderRadius: AppRadius.borderRadius,
                 border: Border.all(
-                  color: (connected ? AppColors.success : Colors.white).withValues(alpha: 0.15),
-                  width: 1,
+                  color: Colors.white.withValues(alpha: 0.32),
+                  width: 1.0,
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 18,
-                    height: 18,
+                    width: 20,
+                    height: 20,
                     decoration: BoxDecoration(
                       color: connected
-                          ? AppColors.success.withValues(alpha: 0.20)
-                          : AppColors.surfaceHigh,
+                          ? AppColors.success.withValues(alpha: 0.25)
+                          : Colors.white.withValues(alpha: 0.18),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       connected ? Icons.person_rounded : Icons.dns_outlined,
-                      size: 11,
-                      color: connected
-                          ? AppColors.success
-                          : AppColors.textTertiary,
+                      size: 12,
+                      color: connected ? AppColors.success : Colors.white,
                     ),
                   ),
                   if (!compact) ...[
@@ -1602,9 +1741,9 @@ class _AccountStatus extends StatelessWidget {
                     Text(
                       label,
                       style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -1638,15 +1777,10 @@ class _HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final horizontalPadding = constraints.maxWidth < 720 ? 20.0 : 32.0;
+        final leftPadding = constraints.maxWidth < 720 ? 0.0 : 32.0;
         return PeekSmoothScroll(
           child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              horizontalPadding,
-              32,
-              horizontalPadding,
-              48,
-            ),
+            padding: EdgeInsets.fromLTRB(leftPadding, 32, 0, 0),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1280),
@@ -1905,10 +2039,7 @@ class _PlaybackRouteVisual extends StatelessWidget {
     final duration = AppMotion.responsive(context, AppMotion.standard);
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-      decoration: AppGlass.decoration(
-        radius: 20,
-        tint: AppColors.glassSurface.withValues(alpha: 0.82),
-      ),
+      decoration: AppGlass.decoration(radius: 20, tint: AppColors.glassSurface),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1967,7 +2098,7 @@ class _PlaybackRouteVisual extends StatelessWidget {
             height: 52,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.72),
+              color: AppColors.surfaceLow,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -2360,7 +2491,7 @@ class _CapabilityChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(99),
-        color: AppColors.surfaceLow.withValues(alpha: 0.5),
+        color: AppColors.surfaceLow,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

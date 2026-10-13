@@ -11,8 +11,8 @@ export 'package:embyplayer/src/features/download/domain/download_task_item.dart'
 
 class DownloadManagerService {
   DownloadManagerService({Dio? dio, Directory? downloadDir})
-      : _dio = dio ?? Dio(),
-        _downloadDir = downloadDir ?? AppStoragePath.downloadsDirectory;
+    : _dio = dio ?? Dio(),
+      _downloadDir = downloadDir ?? AppStoragePath.downloadsDirectory;
 
   static DownloadManagerService? _instance;
   static DownloadManagerService get instance =>
@@ -28,8 +28,8 @@ class DownloadManagerService {
   bool _initialized = false;
 
   File get _registryFile => File(
-        '${_downloadDir.path}${Platform.pathSeparator}download_tasks_v1.json',
-      );
+    '${_downloadDir.path}${Platform.pathSeparator}download_tasks_v1.json',
+  );
 
   List<DownloadTaskItem> get tasks => tasksNotifier.value;
 
@@ -109,7 +109,9 @@ class DownloadManagerService {
 
     // Check if task already exists
     final existingIndex = tasks.indexWhere(
-      (t) => t.itemId == itemId && (mediaSourceId == null || t.mediaSourceId == mediaSourceId),
+      (t) =>
+          t.itemId == itemId &&
+          (mediaSourceId == null || t.mediaSourceId == mediaSourceId),
     );
     if (existingIndex != -1) {
       final existing = tasks[existingIndex];

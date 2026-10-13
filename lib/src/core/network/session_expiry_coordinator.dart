@@ -58,7 +58,9 @@ class SessionExpiryInterceptor extends Interceptor {
       if (key == 'authorization') {
         final value = entry.value?.toString() ?? '';
         final match = RegExp(r'Token="([^"]+)"').firstMatch(value);
-        if (match != null && match.group(1) != null && match.group(1)!.isNotEmpty) {
+        if (match != null &&
+            match.group(1) != null &&
+            match.group(1)!.isNotEmpty) {
           return match.group(1);
         }
       }

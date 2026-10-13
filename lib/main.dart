@@ -37,20 +37,23 @@ Future<void> main([List<String> args = const []]) async {
           titleBarStyle: TitleBarStyle.hidden,
           windowButtonVisibility: false,
         );
-        await windowManager.waitUntilReadyToShow(windowOptions, () async {
-          await windowManager.setAsFrameless();
-          await windowManager.setHasShadow(false);
-          await windowManager.show();
-          await windowManager.focus();
-        });
+        await windowManager.waitUntilReadyToShow(windowOptions);
+        await windowManager.setAsFrameless();
+        await windowManager.setHasShadow(false);
+        await windowManager.show();
+        await windowManager.focus();
 
-        runApp(PlayerWindowApp(
-          windowController: windowController,
-          initialPayload: payload,
-        ));
+        runApp(
+          PlayerWindowApp(
+            windowController: windowController,
+            initialPayload: payload,
+          ),
+        );
         return;
       } catch (e) {
-        debugPrint('[main] Failed to launch PlayerWindowApp via entrypoint args: $e');
+        debugPrint(
+          '[main] Failed to launch PlayerWindowApp via entrypoint args: $e',
+        );
       }
     }
 
@@ -70,17 +73,18 @@ Future<void> main([List<String> args = const []]) async {
           titleBarStyle: TitleBarStyle.hidden,
           windowButtonVisibility: false,
         );
-        await windowManager.waitUntilReadyToShow(windowOptions, () async {
-          await windowManager.setAsFrameless();
-          await windowManager.setHasShadow(false);
-          await windowManager.show();
-          await windowManager.focus();
-        });
+        await windowManager.waitUntilReadyToShow(windowOptions);
+        await windowManager.setAsFrameless();
+        await windowManager.setHasShadow(false);
+        await windowManager.show();
+        await windowManager.focus();
 
-        runApp(PlayerWindowApp(
-          windowController: windowController,
-          initialPayload: payload,
-        ));
+        runApp(
+          PlayerWindowApp(
+            windowController: windowController,
+            initialPayload: payload,
+          ),
+        );
         return;
       }
     } catch (_) {
@@ -91,17 +95,16 @@ Future<void> main([List<String> args = const []]) async {
       size: Size(1280, 800),
       minimumSize: Size(820, 560),
       center: true,
-      backgroundColor: Color(0xFF070810),
+      backgroundColor: Color(0x00000000),
       title: 'PEeK',
       titleBarStyle: TitleBarStyle.hidden,
       windowButtonVisibility: false,
     );
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setAsFrameless();
-      await windowManager.setHasShadow(false);
-      await windowManager.show();
-      await windowManager.focus();
-    });
+    await windowManager.waitUntilReadyToShow(windowOptions);
+    await windowManager.setAsFrameless();
+    await windowManager.setHasShadow(false);
+    await windowManager.show();
+    await windowManager.focus();
   }
 
   runApp(const ProviderScope(child: EmbyPlayerApp()));

@@ -24,7 +24,7 @@ Core Domain Layer (src/core/domain/)
 Core Infrastructure Layer (src/core/)
   ├── network (Dio 网络客户端、SessionExpiryCoordinator)
   ├── storage (SecureTokenStore、MediaCacheStore、SearchHistoryStore)
-  └── presentation (PeekSmoothScroll 全局平滑滚动引擎、PeekMotion 动效、PeekMediaImage)
+  └── presentation (PeekSmoothScroll 全局平滑滚动引擎、PeekMotion 四合一空间流体动效体系、PeekMediaImage)
 ```
 
 UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO。两个服务端适配器可以复用公共 HTTP 工具，但必须分别处理接口差异和版本兼容。
@@ -36,11 +36,16 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
    - `danmaku ⟷ player`：弹幕模块仅依赖 `core/domain/playback_settings.dart`，切断向 `player` 的反向依赖。
    - `servers ⟷ player`：服务器调度与账户设置仅依赖 `core/domain/playback_plan.dart` 与公共硬件解码设置，切断向 `player` 的反向依赖。
    - `details ⟷ people`：演员作品页面归位至 `features/people/presentation/person_works_page.dart`，切断 `people` 模块向 `details` 的反向依赖。
-3. **类型安全路由门面 (`src/app/app_routes.dart`)**：页面间严禁跨特性直接 import 目标 Page 类并手动 `Navigator.push`；所有跨特性跳转统一经由 `AppRoutes.openMediaDetail`、`openPlayback`、`openPersonWorks`、`openDedupe` 等强类型静态门面完成，内聚封装 `Peek3DPageRoute` 转场动效与参数校验。
+3. **类型安全路由门面 (`src/app/app_routes.dart`)**：页面间严禁跨特性直接 import 目标 Page 类并手动 `Navigator.push`；所有跨特性跳转统一经由 `AppRoutes.openMediaDetail`、`openPlayback`、`openPersonWorks`、`openDedupe` 等强类型静态门面完成，内聚封装 `Peek3DPageRoute`（`PeekSpatialPageRoute` 点击锚点容器形变与双层景深虚化）转场动效与参数校验。
 4. **依赖倒置与应用装配中心 (`src/app/app_providers.dart`)**：底层基础设施 `src/core/network/network_providers.dart` 仅注册通用网络与缓存 Provider，禁止向上逆向依赖 `features/`；所有跨特性的服务组合与状态委托统一在顶层 `src/app/app_providers.dart`（Composition Root）装配。
+5. **四合一空间流体动效系统 (`src/core/presentation/peek_motion.dart`)**：
+   - 一级导航由 `PeekIndexedTransitionStack` 承载按需创建、访问后保活的页面栈，提供光学景深对焦溶解转场，并通过 `PeekTabTransitionScope` 向下广播 `activationEpoch`；
+   - 网格与横向内容轨卡片统一包裹 `PeekStaggeredGridItem`，通过 `WidgetsBinding.instance.addPostFrameCallback` 在同步布局帧完成后启动二维斜向波浪定时器（`row * 78ms + col * 52ms`），结合 `RepaintBoundary` 与硬件合成 3D 矩阵实现满帧错峰瀑布流，并在动画静止后自动卸载变换层；
+   - `PeekMotionOrigin` 捕获全局与卡片指针按下坐标，驱动 `PeekSpatialPageRoute` 实现从点击源锚点展开/收缩的空间容器形变；
+   - 侧栏导航采用 `_LiquidRailIndicator` 非对称前后沿区间与挤压拉伸算法。
 
 
-主导航使用按需创建、访问后保活的 `PageView` 承载首页、媒体库、收藏、搜索和设置；切换一级页面不得销毁其滚动位置、媒体库路径或搜索上下文，也不得在首次访问前提前请求隐藏页面数据。宽屏侧栏允许用户主动收起，720–1039px 自动使用紧凑图标栏，小屏使用六项底部导航；收起态必须保留 Tooltip、语义标签和可见激活态。离屏页面停止非必要轮播并释放输入焦点，账户切换仍通过 `didUpdateWidget` 清理用户隔离状态。
+主导航使用按需创建、访问后保活的 `PeekIndexedTransitionStack` 承载首页、媒体库、收藏、设置、演员、仪表盘与下载；切换一级页面不得销毁其滚动位置、媒体库路径或搜索上下文，也不得在首次访问前提前请求隐藏页面数据。顶层 `HomeShell` 统一渲染 `AmbientBackdrop` 动态环境光，各子级一级页面保持透明画布。宽屏侧栏允许用户主动收起，720–1039px 自动使用紧凑图标栏，小屏使用底部导航；收起态必须保留 Tooltip、语义标签和可见液态激活光轨。离屏页面停止非必要轮播并释放输入焦点，账户切换仍通过 `didUpdateWidget` 清理用户隔离状态。
 
 首页最近添加的电影按媒体库分组：先读取用户可见媒体库的 `CollectionType`，只为 `movies`、`mixed` 及缺少类型的兼容库请求 `Items/Latest`，并通过 `ParentId` 保持归属。每库最多读取 12 项、最多四个请求并发；空分组隐藏，单库失败只在对应位置恢复，不得清空其他首页轨道。缺少 `CollectionType` 时允许发起兼容查询，由空结果自然淘汰非电影库。
 

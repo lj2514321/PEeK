@@ -3,6 +3,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
@@ -400,14 +401,14 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
                                         [])[index];
                                     return _FavoriteActorChipCard(
                                       actor: actor,
-                                        onTap: () {
-                                          AppRoutes.openPersonWorks(
-                                            context,
-                                            account: account,
-                                            person: actor.toMediaPerson(),
-                                            onOpen: (item) => _openItem(item),
-                                          );
-                                        },
+                                      onTap: () {
+                                        AppRoutes.openPersonWorks(
+                                          context,
+                                          account: account,
+                                          person: actor.toMediaPerson(),
+                                          onOpen: (item) => _openItem(item),
+                                        );
+                                      },
                                     );
                                   },
                                 ),
@@ -456,11 +457,18 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
                             index,
                           ) {
                             final item = _items[index];
-                            return _FavoriteMediaCard(
-                              item: item,
-                              updating: _updatingIds.contains(item.id),
-                              onOpen: () => _openItem(item),
-                              onRemove: () => _removeFavorite(item),
+                            return PeekStaggeredGridItem(
+                              key: ValueKey(
+                                'fav-stagger-$_requestGeneration-$index-${item.id}',
+                              ),
+                              index: index,
+                              columns: columns,
+                              child: _FavoriteMediaCard(
+                                item: item,
+                                updating: _updatingIds.contains(item.id),
+                                onOpen: () => _openItem(item),
+                                onRemove: () => _removeFavorite(item),
+                              ),
                             );
                           }, childCount: _items.length),
                           gridDelegate:
@@ -592,110 +600,132 @@ class _FavoriteMediaCard extends StatelessWidget {
     return Semantics(
       button: true,
       label: '查看 ${item.name} 详情',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Peek3DCard(
-              onTap: onOpen,
-              borderRadius: 14,
-              child: Material(
-                key: ValueKey('favorite-card-${item.id}'),
-                color: AppColors.surfaceLow,
-                borderRadius: BorderRadius.circular(14),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: onOpen,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      PeekMediaImage(
-                        uri: item.imageUri,
-                        headers: item.imageHeaders,
-                        kind: PeekMediaImageKind.poster,
-                        fit: BoxFit.cover,
-                        placeholderIcon: _kindIcon(item.kind),
-                      ),
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: Tooltip(
-                          message: '从收藏移除',
-                          child: Material(
-                            color: AppColors.canvas.withValues(alpha: 0.82),
-                            shape: const CircleBorder(),
-                            child: IconButton(
-                              key: ValueKey('remove-favorite-${item.id}'),
-                              onPressed: updating ? null : onRemove,
-                              icon: updating
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: AppGlass.decoration(radius: AppRadius.value),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Peek3DCard(
+                onTap: onOpen,
+                borderRadius: AppRadius.value,
+                child: Material(
+                  key: ValueKey('favorite-card-${item.id}'),
+                  color: AppColors.surfaceLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: AppRadius.borderRadius,
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.20),
+                      width: 1,
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: onOpen,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        PeekMediaImage(
+                          uri: item.imageUri,
+                          headers: item.imageHeaders,
+                          kind: PeekMediaImageKind.poster,
+                          fit: BoxFit.cover,
+                          placeholderIcon: _kindIcon(item.kind),
+                        ),
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Tooltip(
+                            message: '从收藏移除',
+                            child: Material(
+                              color: Colors.black.withValues(alpha: 0.56),
+                              shape: AppRadius.shape,
+                              child: IconButton(
+                                key: ValueKey('remove-favorite-${item.id}'),
+                                onPressed: updating ? null : onRemove,
+                                icon: updating
+                                    ? const SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.favorite_rounded,
+                                        color: Color(0xFFFF6B8A),
+                                        size: 20,
                                       ),
-                                    )
-                                  : const Icon(
-                                      Icons.favorite_rounded,
-                                      color: AppColors.spotlight,
-                                      size: 20,
-                                    ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      if (item.played)
-                        Positioned(
-                          top: 10,
-                          left: 10,
-                          child: Container(
-                            width: 28,
-                            height: 28,
-                            decoration: const BoxDecoration(
-                              color: AppColors.success,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.check_rounded,
-                              color: AppColors.canvas,
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                      if (progress > 0 && progress < 1)
-                        Positioned(
-                          left: 8,
-                          right: 8,
-                          bottom: 8,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(99),
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              minHeight: 4,
-                              backgroundColor: Colors.black54,
+                        if (item.played)
+                          Positioned(
+                            top: 10,
+                            left: 10,
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: const BoxDecoration(
+                                color: AppColors.success,
+                                borderRadius: AppRadius.borderRadius,
+                              ),
+                              child: const Icon(
+                                Icons.check_rounded,
+                                color: AppColors.canvas,
+                                size: 18,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                        if (progress > 0 && progress < 1)
+                          Positioned(
+                            left: 8,
+                            right: 8,
+                            bottom: 8,
+                            child: ClipRRect(
+                              borderRadius: AppRadius.borderRadius,
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 4,
+                                backgroundColor: Colors.black54,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _metadata(item),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                item.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                _metadata(item),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

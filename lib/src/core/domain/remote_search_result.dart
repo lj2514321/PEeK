@@ -58,7 +58,8 @@ class RemoteSearchResult {
       name: json['Name']?.toString().trim() ?? '',
       originalTitle: json['OriginalTitle']?.toString().trim(),
       productionYear: year,
-      imageUrl: json['ImageUrl']?.toString() ?? json['PrimaryImageTag']?.toString(),
+      imageUrl:
+          json['ImageUrl']?.toString() ?? json['PrimaryImageTag']?.toString(),
       overview: json['Overview']?.toString().trim(),
       providerIds: providerIds,
       searchProviderName: json['SearchProviderName']?.toString(),

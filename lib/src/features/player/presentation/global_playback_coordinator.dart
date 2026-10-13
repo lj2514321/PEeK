@@ -19,12 +19,7 @@ import 'package:embyplayer/src/features/player/presentation/player_window_coordi
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 
-enum PlaybackPresentationMode {
-  hidden,
-  mini,
-  full,
-  window,
-}
+enum PlaybackPresentationMode { hidden, mini, full, window }
 
 class GlobalPlaybackState {
   const GlobalPlaybackState({
@@ -60,7 +55,9 @@ class GlobalPlaybackState {
 
   double? progressFor(String itemId, Duration? totalDuration) {
     final pos = positionFor(itemId);
-    if (pos == null || totalDuration == null || totalDuration <= Duration.zero) {
+    if (pos == null ||
+        totalDuration == null ||
+        totalDuration <= Duration.zero) {
       return null;
     }
     return (pos.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
@@ -97,8 +94,8 @@ class GlobalPlaybackState {
 
 final globalPlaybackCoordinatorProvider =
     NotifierProvider<GlobalPlaybackCoordinator, GlobalPlaybackState>(
-  GlobalPlaybackCoordinator.new,
-);
+      GlobalPlaybackCoordinator.new,
+    );
 
 class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   final List<StreamSubscription<dynamic>> _subscriptions = [];
@@ -137,7 +134,8 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     _cancelSubscriptions();
     _activeRuntime = runtime;
 
-    final initialPos = (initialPosition != null && initialPosition > Duration.zero)
+    final initialPos =
+        (initialPosition != null && initialPosition > Duration.zero)
         ? initialPosition
         : runtime.position;
     final updatedPositions = Map<String, Duration>.from(state.recentPositions);
@@ -173,7 +171,8 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
           final now = DateTime.now();
           final diff = (position - state.position).abs();
           if (diff >= const Duration(seconds: 1) ||
-              now.difference(lastPositionUpdateTime) >= const Duration(milliseconds: 350)) {
+              now.difference(lastPositionUpdateTime) >=
+                  const Duration(milliseconds: 350)) {
             lastPositionUpdateTime = now;
             final recents = Map<String, Duration>.from(state.recentPositions);
             recents[item.id] = position;
@@ -206,8 +205,8 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
 
     final initialPos =
         (initialPosition != null && initialPosition > Duration.zero)
-            ? initialPosition
-            : plan.startPosition;
+        ? initialPosition
+        : plan.startPosition;
     final updatedPositions = Map<String, Duration>.from(state.recentPositions);
     if (initialPos > Duration.zero) {
       updatedPositions[item.id] = initialPos;
@@ -298,7 +297,8 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   }
 
   void expand([BuildContext? context]) {
-    if (state.runtime == null || state.item == null || state.plan == null) return;
+    if (state.runtime == null || state.item == null || state.plan == null)
+      return;
     final item = state.item!;
     final account = state.account;
     final plan = state.plan!;
@@ -312,7 +312,9 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
         ? state.position
         : runtime.position;
     final updatedPlan = plan.copyWith(
-      startPosition: currentPos > Duration.zero ? currentPos : plan.startPosition,
+      startPosition: currentPos > Duration.zero
+          ? currentPos
+          : plan.startPosition,
     );
 
     if (!kIsWeb && Platform.isWindows && !AppMotion.isTest) {
@@ -323,12 +325,15 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
         plan: updatedPlan,
         queue: queue,
       );
-      unawaited(ref.read(playerWindowCoordinatorProvider).openOrSwitch(payload));
+      unawaited(
+        ref.read(playerWindowCoordinatorProvider).openOrSwitch(payload),
+      );
       return;
     }
 
     state = state.copyWith(mode: PlaybackPresentationMode.full);
-    final navigator = (context != null ? Navigator.maybeOf(context) : null) ??
+    final navigator =
+        (context != null ? Navigator.maybeOf(context) : null) ??
         EmbyPlayerApp.rootNavigatorKey.currentState;
 
     navigator?.push<void>(
@@ -368,7 +373,9 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   Future<void> seekRelative(Duration delta) async {
     final runtime = state.runtime;
     if (runtime == null) return;
-    final current = state.position > Duration.zero ? state.position : runtime.position;
+    final current = state.position > Duration.zero
+        ? state.position
+        : runtime.position;
     final target = current + delta;
     final clamped = Duration(
       milliseconds: target.inMilliseconds.clamp(
@@ -399,7 +406,9 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     }
     final runtime = state.runtime;
     final item = state.item;
-    final pos = (state.position > Duration.zero ? state.position : runtime?.position) ?? Duration.zero;
+    final pos =
+        (state.position > Duration.zero ? state.position : runtime?.position) ??
+        Duration.zero;
     final account = state.account;
     final plan = state.plan;
 
@@ -437,7 +446,9 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
           volume: 100,
           playbackRate: 1.0,
         );
-        await ref.read(playbackServiceProvider).reportStopped(account, snapshot);
+        await ref
+            .read(playbackServiceProvider)
+            .reportStopped(account, snapshot);
       } catch (_) {
         // Safe report
       }
@@ -479,7 +490,8 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     final runtime = state.runtime;
     if (account == null || plan == null || item == null || item.isLocal) return;
     try {
-      final currentPos = positionOverride ??
+      final currentPos =
+          positionOverride ??
           (state.position > Duration.zero
               ? state.position
               : (runtime?.position ?? Duration.zero));
@@ -490,12 +502,12 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
         volume: 100,
         playbackRate: 1.0,
       );
-      await ref.read(playbackServiceProvider).reportProgress(
-            account,
-            snapshot,
-            eventName: eventName,
-          );
-      final updatedPositions = Map<String, Duration>.from(state.recentPositions);
+      await ref
+          .read(playbackServiceProvider)
+          .reportProgress(account, snapshot, eventName: eventName);
+      final updatedPositions = Map<String, Duration>.from(
+        state.recentPositions,
+      );
       updatedPositions[item.id] = currentPos;
       state = state.copyWith(recentPositions: updatedPositions);
     } catch (_) {

@@ -5,7 +5,10 @@ import 'package:embyplayer/src/features/servers/domain/server.dart';
 class EmbyMediaItemParser {
   const EmbyMediaItemParser._();
 
-  static MediaItem parseItem(Map<String, dynamic> data, AuthenticatedServer account) {
+  static MediaItem parseItem(
+    Map<String, dynamic> data,
+    AuthenticatedServer account,
+  ) {
     final id = readString(data, 'Id');
     final imageTags = data['ImageTags'];
     final imageTag = imageTags is Map ? imageTags['Primary'] : null;
@@ -89,15 +92,18 @@ class EmbyMediaItemParser {
       }
     }
 
-    final firstSource = (mediaSources is List &&
+    final firstSource =
+        (mediaSources is List &&
             mediaSources.isNotEmpty &&
             mediaSources.first is Map)
         ? mediaSources.first as Map<String, dynamic>
         : null;
-    final mediaStreams = (firstSource != null &&
-            firstSource['MediaStreams'] is List)
+    final mediaStreams =
+        (firstSource != null && firstSource['MediaStreams'] is List)
         ? firstSource['MediaStreams'] as List
-        : (data['MediaStreams'] is List ? data['MediaStreams'] as List : const []);
+        : (data['MediaStreams'] is List
+              ? data['MediaStreams'] as List
+              : const []);
     Map<String, dynamic>? videoStream;
     for (final s in mediaStreams) {
       if (s is Map && s['Type'] == 'Video') {
@@ -108,9 +114,14 @@ class EmbyMediaItemParser {
 
     final width = readInt(videoStream?['Width']) ?? readInt(data['Width']);
     final height = readInt(videoStream?['Height']) ?? readInt(data['Height']);
-    final videoCodec = readNullableString(videoStream, 'Codec') ?? readNullableString(data, 'VideoCodec');
-    final container = readNullableString(firstSource, 'Container') ?? readNullableString(data, 'Container');
-    final bitrate = readInt(firstSource?['Bitrate']) ?? readInt(data['Bitrate']);
+    final videoCodec =
+        readNullableString(videoStream, 'Codec') ??
+        readNullableString(data, 'VideoCodec');
+    final container =
+        readNullableString(firstSource, 'Container') ??
+        readNullableString(data, 'Container');
+    final bitrate =
+        readInt(firstSource?['Bitrate']) ?? readInt(data['Bitrate']);
     final sourceSize = readInt(firstSource?['Size']);
 
     return MediaItem(
@@ -277,31 +288,30 @@ class EmbyMediaItemParser {
     AuthenticatedServer account,
   ) {
     if (value is! List) return const [];
-    final people =
-        value
-            .whereType<Map>()
-            .map((person) {
-              final id = readString(person, 'Id');
-              final name = readString(person, 'Name');
-              if (id.isEmpty && name.isEmpty) return null;
-              final primaryTag = person['PrimaryImageTag'];
-              final tag = primaryTag is String ? primaryTag : null;
-              final role = readNullableString(person, 'Role');
-              final type = readNullableString(person, 'Type') ?? 'Actor';
+    final people = value
+        .whereType<Map>()
+        .map((person) {
+          final id = readString(person, 'Id');
+          final name = readString(person, 'Name');
+          if (id.isEmpty && name.isEmpty) return null;
+          final primaryTag = person['PrimaryImageTag'];
+          final tag = primaryTag is String ? primaryTag : null;
+          final role = readNullableString(person, 'Role');
+          final type = readNullableString(person, 'Type') ?? 'Actor';
 
-              return MediaPerson(
-                id: id,
-                name: name.isEmpty ? (role ?? '未知人员') : name,
-                type: type,
-                role: role,
-                imageUri: tag == null || id.isEmpty
-                    ? null
-                    : imageUri(account.server.apiBaseUri, id, tag),
-                imageHeaders: authHeaders(account.accessToken),
-              );
-            })
-            .whereType<MediaPerson>()
-            .toList(growable: false);
+          return MediaPerson(
+            id: id,
+            name: name.isEmpty ? (role ?? '未知人员') : name,
+            type: type,
+            role: role,
+            imageUri: tag == null || id.isEmpty
+                ? null
+                : imageUri(account.server.apiBaseUri, id, tag),
+            imageHeaders: authHeaders(account.accessToken),
+          );
+        })
+        .whereType<MediaPerson>()
+        .toList(growable: false);
     return List.unmodifiable(people);
   }
 
@@ -355,12 +365,11 @@ class EmbyMediaItemParser {
 
   static List<String> readStringList(Object? value) {
     if (value is! List) return const [];
-    final items =
-        value
-            .whereType<String>()
-            .map((item) => item.trim())
-            .where((item) => item.isNotEmpty)
-            .toList(growable: false);
+    final items = value
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
     return List.unmodifiable(items);
   }
 

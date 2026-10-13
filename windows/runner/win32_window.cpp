@@ -22,17 +22,58 @@ namespace {
 #define DWMWA_BORDER_COLOR 34
 #endif
 
+#ifndef DWMWA_CAPTION_COLOR
+#define DWMWA_CAPTION_COLOR 35
+#endif
+
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+
 #ifndef DWMWA_COLOR_NONE
 #define DWMWA_COLOR_NONE 0xFFFFFFFE
 #endif
 
-/// Requests the standard Windows 11 radius for a frameless window. DWM keeps
-/// maximized and snapped windows square by policy.
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
 #define DWMWA_WINDOW_CORNER_PREFERENCE 33
 #endif
 
-constexpr DWORD kDwmCornerPreferenceRound = 2;
+constexpr DWORD kDwmCornerPreferenceDoNotRound = 1;
+constexpr int kDwmSystemBackdropNone = 1;
+
+/// Configures DWM so the window has no visible NC frame, no DWM rounded
+/// corners, and extends the client area into the entire window rect.  The
+/// actual rounded-corner clipping is done on the Flutter side via ClipRRect.
+void ApplyTransparentFramelessWindow(HWND const window) {
+  if (!window) {
+    return;
+  }
+
+  // Tell DWM NOT to round the corners itself -- Flutter draws its own.
+  const DWORD corner_preference = kDwmCornerPreferenceDoNotRound;
+  DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE,
+                        &corner_preference, sizeof(corner_preference));
+
+  // Hide the 1-px DWM border / caption bar colour.
+  const COLORREF color_none = DWMWA_COLOR_NONE;
+  DwmSetWindowAttribute(window, DWMWA_BORDER_COLOR, &color_none,
+                        sizeof(color_none));
+  DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &color_none,
+                        sizeof(color_none));
+
+  // No system backdrop (Mica / Acrylic) -- Flutter renders its own.
+  const int backdrop_none = kDwmSystemBackdropNone;
+  DwmSetWindowAttribute(window, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_none,
+                        sizeof(backdrop_none));
+
+  // Remove any window region that could clip corners.
+  SetWindowRgn(window, nullptr, FALSE);
+
+  // Zero margins disable DWM shadow and sheet-of-glass backdrop so that
+  // window_manager's transparent composition leaves the 4 corners 100% clear.
+  const MARGINS margins = {0, 0, 0, 0};
+  DwmExtendFrameIntoClientArea(window, &margins);
+}
 
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
@@ -168,6 +209,7 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
+  ApplyTransparentFramelessWindow(window_handle_);
   return ShowWindow(window_handle_, SW_SHOWNORMAL);
 }
 
@@ -300,13 +342,7 @@ void Win32Window::OnDestroy() {
 }
 
 void Win32Window::UpdateTheme(HWND const window) {
-  const COLORREF border_color = DWMWA_COLOR_NONE;
-  DwmSetWindowAttribute(window, DWMWA_BORDER_COLOR, &border_color,
-                        sizeof(border_color));
-
-  const DWORD corner_preference = kDwmCornerPreferenceRound;
-  DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE,
-                        &corner_preference, sizeof(corner_preference));
+  ApplyTransparentFramelessWindow(window);
 
   DWORD light_mode;
   DWORD light_mode_size = sizeof(light_mode);

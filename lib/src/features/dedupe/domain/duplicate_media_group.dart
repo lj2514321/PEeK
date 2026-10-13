@@ -112,9 +112,7 @@ class DuplicateMediaGroup {
     return sum;
   }
 
-  DuplicateMediaGroup copyWith({
-    Set<String>? selectedDeleteIds,
-  }) {
+  DuplicateMediaGroup copyWith({Set<String>? selectedDeleteIds}) {
     return DuplicateMediaGroup(
       id: id,
       title: title,

@@ -38,19 +38,31 @@ void main() {
       expect(PeekSprings.stiff.stiffness, 340.0);
     });
 
-    testWidgets('PeekSpatialPageRoute and TheatricalIrisPageRoute create valid routes', (tester) async {
-      final spatialRoute = PeekSpatialPageRoute<void>(
-        builder: (_) => const Scaffold(body: Text('SpatialPage')),
-      );
-      final irisRoute = TheatricalIrisPageRoute<void>(
-        builder: (_) => const Scaffold(body: Text('CinemaPage')),
-      );
+    testWidgets(
+      'PeekSpatialPageRoute and TheatricalIrisPageRoute create valid routes',
+      (tester) async {
+        final spatialRoute = PeekSpatialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('SpatialPage')),
+        );
+        final irisRoute = TheatricalIrisPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('CinemaPage')),
+        );
 
-      expect(spatialRoute.transitionDuration, const Duration(milliseconds: 340));
-      expect(spatialRoute.reverseTransitionDuration, const Duration(milliseconds: 260));
-      expect(irisRoute.transitionDuration, const Duration(milliseconds: 380));
-      expect(irisRoute.reverseTransitionDuration, const Duration(milliseconds: 280));
-    });
+        expect(
+          spatialRoute.transitionDuration,
+          const Duration(milliseconds: 420),
+        );
+        expect(
+          spatialRoute.reverseTransitionDuration,
+          const Duration(milliseconds: 300),
+        );
+        expect(irisRoute.transitionDuration, const Duration(milliseconds: 380));
+        expect(
+          irisRoute.reverseTransitionDuration,
+          const Duration(milliseconds: 280),
+        );
+      },
+    );
 
     testWidgets('PeekSpringValueBuilder updates smoothly', (tester) async {
       await tester.pumpWidget(
@@ -67,49 +79,49 @@ void main() {
       expect(find.text('Val: 42.0'), findsOneWidget);
     });
 
-    testWidgets('PeekMagneticButton renders child and handles interactions safely', (tester) async {
-      var tapped = false;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: PeekMagneticButton(
-                onTap: () => tapped = true,
-                child: const Text('MagneticBtn'),
+    testWidgets(
+      'PeekMagneticButton renders child and handles interactions safely',
+      (tester) async {
+        var tapped = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: PeekMagneticButton(
+                  onTap: () => tapped = true,
+                  child: const Text('MagneticBtn'),
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('MagneticBtn'), findsOneWidget);
-      await tester.tap(find.text('MagneticBtn'));
-      expect(tapped, isTrue);
-    });
+        expect(find.text('MagneticBtn'), findsOneWidget);
+        await tester.tap(find.text('MagneticBtn'));
+        expect(tapped, isTrue);
+      },
+    );
 
-    testWidgets('PeekCascadingSheet and Stack render content at various depths', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: Column(
-              children: [
-                PeekCascadingSheet(
-                  depth: 0,
-                  child: Text('ForegroundSheet'),
-                ),
-                PeekCascadingSheet(
-                  depth: 1,
-                  child: Text('RecedingSheet'),
-                ),
-              ],
+    testWidgets(
+      'PeekCascadingSheet and Stack render content at various depths',
+      (tester) async {
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [
+                  PeekCascadingSheet(depth: 0, child: Text('ForegroundSheet')),
+                  PeekCascadingSheet(depth: 1, child: Text('RecedingSheet')),
+                ],
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('ForegroundSheet'), findsOneWidget);
-      expect(find.text('RecedingSheet'), findsOneWidget);
-    });
+        expect(find.text('ForegroundSheet'), findsOneWidget);
+        expect(find.text('RecedingSheet'), findsOneWidget);
+      },
+    );
 
     test('PeekCascadingSheetRoute creates valid cascading route', () {
       final route = PeekCascadingSheetRoute<void>(
@@ -117,7 +129,10 @@ void main() {
       );
 
       expect(route.transitionDuration, const Duration(milliseconds: 320));
-      expect(route.reverseTransitionDuration, const Duration(milliseconds: 240));
+      expect(
+        route.reverseTransitionDuration,
+        const Duration(milliseconds: 240),
+      );
       expect(route.barrierDismissible, isTrue);
       expect(route.barrierColor, const Color(0x99000000));
     });

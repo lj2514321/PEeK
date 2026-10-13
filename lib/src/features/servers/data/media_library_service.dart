@@ -28,7 +28,7 @@ class MediaLibraryService {
   static const _similarCacheAge = Duration(minutes: 30);
   static const _searchCacheAge = Duration(minutes: 5);
   static const _homeFeedCacheAge = Duration(minutes: 5);
-  static const _recommendationCacheAge = Duration(days: 1);
+  static const _recommendationCacheAge = Duration(hours: 24);
 
   Future<List<MediaItem>> getLibraries(
     AuthenticatedServer account, {
@@ -72,7 +72,9 @@ class MediaLibraryService {
       final items = data['Items'];
       if (items is! List) return const [];
       return items
-          .map((item) => item is Map ? item['Name']?.toString() : item?.toString())
+          .map(
+            (item) => item is Map ? item['Name']?.toString() : item?.toString(),
+          )
           .whereType<String>()
           .map((name) => name.trim())
           .where((name) => name.isNotEmpty)
@@ -334,8 +336,12 @@ class MediaLibraryService {
           .toList(growable: true);
 
       // Pinyin shorthand fallback (e.g., query 'zxc' -> matches '周星驰' if server Search/Hints returned 0)
-      if (items.isEmpty && RegExp(r'^[a-zA-Z]{1,12}$').hasMatch(normalizedQuery)) {
-        final candidates = await _getPinyinSearchCandidates(account, scope: scope);
+      if (items.isEmpty &&
+          RegExp(r'^[a-zA-Z]{1,12}$').hasMatch(normalizedQuery)) {
+        final candidates = await _getPinyinSearchCandidates(
+          account,
+          scope: scope,
+        );
         final pinyinMatched = candidates
             .where((item) => PinyinMatcher.matches(item.name, normalizedQuery))
             .toList();
@@ -361,19 +367,20 @@ class MediaLibraryService {
     AuthenticatedServer account, {
     MediaSearchScope scope = MediaSearchScope.all,
   }) async {
-    final uri = _appendPath(
-      account.server.apiBaseUri,
-      'Users/${account.userId}/Items',
-    ).replace(
-      queryParameters: {
-        'Recursive': 'true',
-        'Fields': 'Overview,ProductionYear,UserData',
-        'IncludeItemTypes': scope == MediaSearchScope.people
-            ? 'Person'
-            : (scope.apiTypes),
-        'Limit': '200',
-      },
-    );
+    final uri =
+        _appendPath(
+          account.server.apiBaseUri,
+          'Users/${account.userId}/Items',
+        ).replace(
+          queryParameters: {
+            'Recursive': 'true',
+            'Fields': 'Overview,ProductionYear,UserData',
+            'IncludeItemTypes': scope == MediaSearchScope.people
+                ? 'Person'
+                : (scope.apiTypes),
+            'Limit': '200',
+          },
+        );
     try {
       final data = await _requestJson(
         uri,
@@ -677,7 +684,6 @@ class MediaLibraryService {
         account,
         cacheAge: _recommendationCacheAge,
         forceRefresh: forceRefresh,
-        cacheForCurrentDay: true,
         refreshCachedInBackground: false,
       )).items;
     } on MediaLibraryException catch (error) {
@@ -711,7 +717,6 @@ class MediaLibraryService {
         account,
         cacheAge: _recommendationCacheAge,
         forceRefresh: forceRefresh,
-        cacheForCurrentDay: true,
         refreshCachedInBackground: false,
       )).items;
     }
@@ -807,16 +812,17 @@ class MediaLibraryService {
     bool forceRefresh = false,
   }) async {
     // 1. Primary endpoint: GET /Items/{itemId}/Collections?userId={userId} (Jellyfin standard)
-    final collectionsUri = _appendPath(
-      account.server.apiBaseUri,
-      'Items/$itemId/Collections',
-    ).replace(
-      queryParameters: {
-        'UserId': account.userId,
-        'Fields':
-            'Overview,PrimaryImageAspectRatio,ProductionYear,RunTimeTicks,UserData',
-      },
-    );
+    final collectionsUri =
+        _appendPath(
+          account.server.apiBaseUri,
+          'Items/$itemId/Collections',
+        ).replace(
+          queryParameters: {
+            'UserId': account.userId,
+            'Fields':
+                'Overview,PrimaryImageAspectRatio,ProductionYear,RunTimeTicks,UserData',
+          },
+        );
 
     try {
       final page = await _requestPage(
@@ -837,11 +843,7 @@ class MediaLibraryService {
       final ancestorsUri = _appendPath(
         account.server.apiBaseUri,
         'Items/$itemId/Ancestors',
-      ).replace(
-        queryParameters: {
-          'UserId': account.userId,
-        },
-      );
+      ).replace(queryParameters: {'UserId': account.userId});
       final data = await _requestJson(
         ancestorsUri,
         account,
@@ -947,7 +949,9 @@ class MediaLibraryService {
               account.server.apiBaseUri,
               'Users/${account.userId}/$pathSegment/$itemId',
             );
-            final options = Options(headers: _authHeaders(account.accessToken, account));
+            final options = Options(
+              headers: _authHeaders(account.accessToken, account),
+            );
             if (enabled) {
               await _dio.postUri<void>(uri, options: options);
             } else {
@@ -960,17 +964,14 @@ class MediaLibraryService {
       throw _mapDioException(error);
     } finally {
       try {
-        await _cache.clear();
+        await _cache.clear(preserveRecommendations: true);
       } on Object {
         // User state is already updated; cache cleanup must not report failure.
       }
     }
   }
 
-  Future<void> deleteItem(
-    AuthenticatedServer account,
-    String itemId,
-  ) async {
+  Future<void> deleteItem(AuthenticatedServer account, String itemId) async {
     final uri = _appendPath(account.server.apiBaseUri, 'Items/$itemId');
     try {
       await _dio.deleteUri<void>(
@@ -978,7 +979,7 @@ class MediaLibraryService {
         options: Options(headers: _authHeaders(account.accessToken, account)),
       );
       try {
-        await _cache.clear();
+        await _cache.clear(preserveRecommendations: true);
       } on Object {
         // Ignore cache clear error
       }
@@ -1296,7 +1297,10 @@ class MediaLibraryService {
     );
   }
 
-  Map<String, String> _authHeaders(String token, [AuthenticatedServer? account]) {
+  Map<String, String> _authHeaders(
+    String token, [
+    AuthenticatedServer? account,
+  ]) {
     final deviceId = account?.deviceId ?? '';
     final kind = account?.server.kind;
     final scheme = kind == ServerKind.emby ? 'Emby' : 'MediaBrowser';
@@ -1456,7 +1460,8 @@ class RemoteSubtitleInfo {
   factory RemoteSubtitleInfo.fromJson(Map<String, dynamic> json) {
     return RemoteSubtitleInfo(
       id: json['Id']?.toString() ?? '',
-      name: json['Name']?.toString() ?? json['SubtitleId']?.toString() ?? '未知字幕',
+      name:
+          json['Name']?.toString() ?? json['SubtitleId']?.toString() ?? '未知字幕',
       providerName: json['ProviderName']?.toString() ?? 'RemoteProvider',
       format: json['Format']?.toString() ?? 'srt',
       comment: json['Comment']?.toString(),
@@ -1471,10 +1476,7 @@ class RemoteSubtitleInfo {
 }
 
 class QuickConnectInitResult {
-  const QuickConnectInitResult({
-    required this.code,
-    required this.secret,
-  });
+  const QuickConnectInitResult({required this.code, required this.secret});
 
   factory QuickConnectInitResult.fromJson(Map<String, dynamic> json) {
     return QuickConnectInitResult(

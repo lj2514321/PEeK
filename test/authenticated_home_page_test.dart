@@ -80,15 +80,15 @@ void main() {
     expect(find.text('02 / 03'), findsOneWidget);
   });
 
-  testWidgets('advances the daily recommendation after five seconds', (
+  testWidgets('advances the daily recommendation after 24 hours', (
     tester,
   ) async {
     await tester.pumpWidget(_homeApp(account, _HomeLibraryService()));
     await tester.pumpAndSettle();
 
     expect(find.text('每日推荐一'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pump(const Duration(milliseconds: 260));
+    await tester.pump(const Duration(hours: 24));
+    await tester.pump(const Duration(milliseconds: 520));
 
     expect(find.text('每日推荐二'), findsOneWidget);
   });
@@ -102,16 +102,14 @@ void main() {
     await tester.pumpWidget(_homeApp(account, _HomeLibraryService()));
     await tester.pumpAndSettle();
 
-    await tester.pump(const Duration(seconds: 12));
+    await tester.pump(const Duration(hours: 24));
 
     expect(find.text('每日推荐一'), findsOneWidget);
     expect(find.text('01 / 03'), findsOneWidget);
   });
 
-  testWidgets('refreshes only recommendations after local midnight', (
-    tester,
-  ) async {
-    var now = DateTime(2026, 7, 18, 23, 59, 59, 800);
+  testWidgets('refreshes only recommendations every 24 hours', (tester) async {
+    var now = DateTime(2026, 7, 18, 10, 0, 0);
     final service = _HomeLibraryService();
     await tester.pumpWidget(_homeApp(account, service, clock: () => now));
     await tester.pump();
@@ -126,9 +124,9 @@ void main() {
         kind: MediaItemKind.movie,
       ),
     ];
-    now = DateTime(2026, 7, 19);
+    now = DateTime(2026, 7, 19, 10, 0, 1);
 
-    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pump(const Duration(hours: 24));
     await tester.pump();
 
     expect(service.recommendationRequests, 2);

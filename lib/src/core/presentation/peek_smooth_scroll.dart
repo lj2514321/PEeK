@@ -43,8 +43,8 @@ class SmoothScrollPosition extends ScrollPositionWithSingleContext {
       } else {
         // Smooth linear decay between 140ms and 260ms
         final factor = (260 - interval) / 120.0;
-        _velocityMultiplier =
-            (1.0 + (_velocityMultiplier - 1.0) * factor).clamp(1.0, 4.5);
+        _velocityMultiplier = (1.0 + (_velocityMultiplier - 1.0) * factor)
+            .clamp(1.0, 4.5);
       }
     }
     _lastScrollTime = now;

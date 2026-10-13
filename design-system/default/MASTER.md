@@ -56,20 +56,20 @@
 ## 层级与效果
 
 - 采用 VisionOS 空间流体玻璃拟态（Spatial Glass）：悬浮胶囊岛、物理级折射微边框与双层空间投影。
-- 普通卡片：1px Outline，海报卡片支持背光溢出（`PosterAmbientGlow`）营造沉浸漫反射。
+- 全局动态环境光（`AmbientBackdrop` + `SpatialAmbientController`）：由顶层 `HomeShell` 统一承载多色域电影氛围光（暖金、赛博紫、深空蓝），随首页轮播或悬停海报平滑流转；子级一级页面（如媒体库、收藏、演员页）必须保持透明画布（`Colors.transparent`），严禁嵌套重复的 `AmbientBackdrop` 或不透明浅色 `SliverAppBar` 顶栏遮挡环境光。
+- 普通卡片：1px Outline，海报卡片支持背光溢出（`PosterAmbientGlow`）与 3D 视差倾斜高光（`Peek3DCard`）。
 - 浮空胶囊与控制岛：采用 `AppGlass.visionOSDecoration`，迎光面采用 1.2px 半透白色渐变反光高光（Specular Rim Light），底部具有深邃接触阴影（blur 42）与蓝紫微光弥散层。
 - 模糊：控制面板、悬浮小窗与侧栏采用平滑毛玻璃 `ImageFilter.blur(sigmaX: 20-28, sigmaY: 20-28)`，透出底层视频动态光影与环境色。
 - 按钮形态：核心交互操作采用优雅的药丸胶囊（`StadiumBorder`），主操作按钮聚光金搭配微光环境漫反射。
 - 渐变用于影片背景、主舞台与玻璃边框折射，不堆叠无序渐变。
 
-## 动效
+## 动效（2026 四合一空间流体动效体系）
 
-- Fast 180ms：hover、pressed、focus
-- Standard 240ms：内容替换、导航选中
-- Slow 320ms：对话框和页面层级进入
-- 曲线：进入 `easeOutCubic`，退出 `easeInCubic`
-- 只动画透明度和位移；禁止持续循环的装饰动画
-- `MediaQuery.disableAnimations == true` 时禁用非必要动效
+- **光学景深对焦溶解转场（`PeekIndexedTransitionStack`）**：一级导航切换采用相机变焦式光学虚化（`sigma` 快速合焦）、微景深缩放（`0.968 -> 1.0`）与方向微位移，并通过 `PeekTabTransitionScope` 广播激活代数（`activationEpoch`）。
+- **二维斜向错峰瀑布流编排（`PeekStaggeredGridItem`）**：媒体库、演员页、收藏页、作品集与横向内容轨卡片按二维斜向波浪（`row * 78ms + col * 52ms`）错峰触发弹簧上浮（`54px -> 0px`）、弹性缩放（`0.80 -> 1.025 -> 1.0`）与 3D 仰角翻转（`rotateX`）。定时器在 `addPostFrameCallback` 首帧布局完成后统一起跑，避免 `shrinkWrap` 同步布局吞噬错峰延迟；动画期间采用 `RepaintBoundary` 硬件合成，静止后自动卸载变换层以保持零滚动开销。
+- **点击锚点空间容器形变路由（`PeekSpatialPageRoute` + `PeekMotionOrigin`）**：记录用户点击卡片/按钮的归一化屏幕坐标，详情页直接从点击源锚点处弹簧展开，返回时精准收缩回原卡片位置，底层页面联动后退景深与光学虚化。
+- **灵动岛非对称流体拉伸指示器（`_LiquidRailIndicator`）**：侧边栏激活指示条采用快前沿（`Interval(0.0, 0.62)`）与慢后沿（`Interval(0.14, 1.0)`）非对称追赶，结合体积守恒挤压拉伸（Squash & Stretch）呈现液态水滴流动感。
+- **微交互与无障碍降级**：卡片悬停支持 3D 透视倾斜与动态反光，按压态（`:active`）触发 `0.965` 物理微缩；`MediaQuery.disableAnimations == true` 或测试环境（`AppMotion.isTest`）下自动旁路所有非必要过渡动效。
 
 ## 组件准则
 

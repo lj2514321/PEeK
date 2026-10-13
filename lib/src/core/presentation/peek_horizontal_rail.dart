@@ -1,4 +1,5 @@
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -127,7 +128,13 @@ class _PeekHorizontalRailState extends State<PeekHorizontalRail> {
                           SizedBox(width: widget.spacing),
                       itemBuilder: (context, index) => SizedBox(
                         width: widget.itemExtent,
-                        child: widget.itemBuilder(context, index),
+                        child: PeekStaggeredGridItem(
+                          key: ValueKey('${widget.railId}-stagger-$index'),
+                          index: index,
+                          columns: 8,
+                          horizontal: true,
+                          child: widget.itemBuilder(context, index),
+                        ),
                       ),
                     ),
                   ),

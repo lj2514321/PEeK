@@ -96,7 +96,7 @@ class PlaybackPage extends ConsumerStatefulWidget {
   final bool enableMiniPlayer;
   final double longPressSpeed;
   final void Function(Duration position, Duration duration, bool playing)?
-      onProgressUpdated;
+  onProgressUpdated;
   final void Function(MediaItem item, PlaybackPlan plan)? onItemChanged;
   final VoidCallback? onWindowClosed;
   final VoidCallback? onMinimize;
@@ -1103,9 +1103,7 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
                   backgroundColor: const Color(
                     0xFFF09199,
                   ).withValues(alpha: 0.95),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: AppRadius.shape,
                   content: Row(
                     children: [
                       const Icon(
@@ -2593,7 +2591,8 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
         }
         _fullScreen = false;
       }
-      if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
+      if ((_isPip || WindowPipController.instance.isPip) &&
+          Platform.isWindows) {
         try {
           await WindowPipController.instance.exitPip();
         } on Object {
@@ -2653,7 +2652,8 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
       if (_fullScreen && Platform.isWindows) {
         unawaited(_setNativeFullScreen(false));
       }
-      if ((_isPip || WindowPipController.instance.isPip) && Platform.isWindows) {
+      if ((_isPip || WindowPipController.instance.isPip) &&
+          Platform.isWindows) {
         unawaited(WindowPipController.instance.exitPip());
         _isPip = false;
       }
@@ -2932,15 +2932,26 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
                                         context,
                                         const Duration(milliseconds: 100),
                                       ),
-                                      switchInCurve: const Cubic(0.16, 1.0, 0.3, 1.0),
+                                      switchInCurve: const Cubic(
+                                        0.16,
+                                        1.0,
+                                        0.3,
+                                        1.0,
+                                      ),
                                       switchOutCurve: Curves.easeInCubic,
-                                      child: feedback == null || _speedModeActive
+                                      child:
+                                          feedback == null || _speedModeActive
                                           ? const SizedBox.shrink(
-                                              key: ValueKey('seek-feedback-hidden'),
+                                              key: ValueKey(
+                                                'seek-feedback-hidden',
+                                              ),
                                             )
                                           : PlaybackSeekFeedback(
-                                              key: const ValueKey('player-seek-feedback'),
-                                              deltaSeconds: feedback.deltaSeconds,
+                                              key: const ValueKey(
+                                                'player-seek-feedback',
+                                              ),
+                                              deltaSeconds:
+                                                  feedback.deltaSeconds,
                                               position: feedback.position,
                                             ),
                                     );
@@ -3167,86 +3178,86 @@ class _EpisodeSheet extends StatelessWidget {
                   Flexible(
                     child: PeekSmoothScroll(
                       child: ListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
-                      itemCount: queue.items.length,
-                      itemBuilder: (context, index) {
-                        final item = queue.items[index];
-                        final selected = index == queue.currentIndex;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Material(
-                            color: selected
-                                ? AppColors.glassSelected
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(14),
-                            child: InkWell(
-                              key: ValueKey('episode-$index'),
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
+                        itemCount: queue.items.length,
+                        itemBuilder: (context, index) {
+                          final item = queue.items[index];
+                          final selected = index == queue.currentIndex;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Material(
+                              color: selected
+                                  ? AppColors.glassSelected
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(14),
-                              onTap: selected
-                                  ? null
-                                  : () => Navigator.of(context).pop(index),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 30,
-                                      child: selected
-                                          ? const Icon(
-                                              Icons.play_arrow_rounded,
-                                              color: AppColors.spotlight,
-                                            )
-                                          : Text(
-                                              '${index + 1}',
-                                              textAlign: TextAlign.center,
+                              child: InkWell(
+                                key: ValueKey('episode-$index'),
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: selected
+                                    ? null
+                                    : () => Navigator.of(context).pop(index),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 30,
+                                        child: selected
+                                            ? const Icon(
+                                                Icons.play_arrow_rounded,
+                                                color: AppColors.spotlight,
+                                              )
+                                            : Text(
+                                                '${index + 1}',
+                                                textAlign: TextAlign.center,
+                                                style: const TextStyle(
+                                                  color: AppColors.textTertiary,
+                                                  fontFamily: 'Cascadia Mono',
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _queueItemTitle(item),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              _queueItemStatus(item, selected),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
                                                 color: AppColors.textTertiary,
-                                                fontFamily: 'Cascadia Mono',
                                                 fontSize: 11,
                                               ),
                                             ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _queueItemTitle(item),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            _queueItemStatus(item, selected),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: AppColors.textTertiary,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
-                ),
                 ],
               ),
             ),
@@ -3457,209 +3468,213 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
                   Flexible(
                     child: PeekSmoothScroll(
                       child: ListView(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
-                      children: [
-                        Container(
-                          key: const ValueKey('subtitle-preview'),
-                          height: 92,
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(horizontal: 18),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF1D2230), Color(0xFF090B10)],
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+                        children: [
+                          Container(
+                            key: const ValueKey('subtitle-preview'),
+                            height: 92,
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(horizontal: 18),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF1D2230), Color(0xFF090B10)],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Text(
-                            '在光影之间，故事正在发生。',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              height: 1.35,
-                              fontSize: _preferences.fontSize.clamp(18, 32),
-                              color: _subtitleForeground(
-                                _preferences.appearance,
-                              ),
-                              backgroundColor: _subtitleBackground(
-                                _preferences.appearance,
-                              ),
-                              fontWeight: FontWeight.w600,
-                              shadows: _subtitleShadows(
-                                _preferences.appearance,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        const _SheetLabel('字幕风格'),
-                        const SizedBox(height: 9),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final appearance in SubtitleAppearance.values)
-                              ChoiceChip(
-                                key: ValueKey(
-                                  'subtitle-style-${appearance.name}',
+                            child: Text(
+                              '在光影之间，故事正在发生。',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                height: 1.35,
+                                fontSize: _preferences.fontSize.clamp(18, 32),
+                                color: _subtitleForeground(
+                                  _preferences.appearance,
                                 ),
-                                label: Text(appearance.label),
-                                selected: _preferences.appearance == appearance,
-                                onSelected: (_) => _update(
-                                  _preferences.copyWith(appearance: appearance),
+                                backgroundColor: _subtitleBackground(
+                                  _preferences.appearance,
+                                ),
+                                fontWeight: FontWeight.w600,
+                                shadows: _subtitleShadows(
+                                  _preferences.appearance,
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        _PreferenceSlider(
-                          label: '字号',
-                          valueLabel: '${_preferences.fontSize.round()} px',
-                          value: _preferences.fontSize,
-                          min: 18,
-                          max: 42,
-                          divisions: 12,
-                          onChanged: (value) =>
-                              _update(_preferences.copyWith(fontSize: value)),
-                        ),
-                        _PreferenceSlider(
-                          label: '垂直位置',
-                          valueLabel:
-                              '距底部 ${_preferences.bottomPadding.round()} px',
-                          value: _preferences.bottomPadding,
-                          min: 48,
-                          max: 180,
-                          divisions: 11,
-                          onChanged: (value) => _update(
-                            _preferences.copyWith(bottomPadding: value),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '字幕延迟',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
+                          const SizedBox(height: 18),
+                          const _SheetLabel('字幕风格'),
+                          const SizedBox(height: 9),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final appearance
+                                  in SubtitleAppearance.values)
+                                ChoiceChip(
+                                  key: ValueKey(
+                                    'subtitle-style-${appearance.name}',
+                                  ),
+                                  label: Text(appearance.label),
+                                  selected:
+                                      _preferences.appearance == appearance,
+                                  onSelected: (_) => _update(
+                                    _preferences.copyWith(
+                                      appearance: appearance,
                                     ),
                                   ),
-                                  SizedBox(height: 3),
-                                  Text(
-                                    '正值延后，负值提前',
-                                    style: TextStyle(
-                                      color: AppColors.textTertiary,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton.outlined(
-                              key: const ValueKey('subtitle-delay-minus'),
-                              tooltip: '字幕提前 0.1 秒',
-                              onPressed: () => _adjustDelay(-100),
-                              icon: const Icon(Icons.remove_rounded),
-                            ),
-                            SizedBox(
-                              width: 82,
-                              child: TextButton(
-                                key: const ValueKey('subtitle-delay-reset'),
-                                onPressed: () => _update(
-                                  _preferences.copyWith(delayMilliseconds: 0),
                                 ),
-                                child: Text(
-                                  _subtitleDelayLabel(
-                                    _preferences.delayMilliseconds,
-                                  ),
-                                  style: const TextStyle(
-                                    fontFamily: 'Cascadia Mono',
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          _PreferenceSlider(
+                            label: '字号',
+                            valueLabel: '${_preferences.fontSize.round()} px',
+                            value: _preferences.fontSize,
+                            min: 18,
+                            max: 42,
+                            divisions: 12,
+                            onChanged: (value) =>
+                                _update(_preferences.copyWith(fontSize: value)),
+                          ),
+                          _PreferenceSlider(
+                            label: '垂直位置',
+                            valueLabel:
+                                '距底部 ${_preferences.bottomPadding.round()} px',
+                            value: _preferences.bottomPadding,
+                            min: 48,
+                            max: 180,
+                            divisions: 11,
+                            onChanged: (value) => _update(
+                              _preferences.copyWith(bottomPadding: value),
                             ),
-                            IconButton.outlined(
-                              key: const ValueKey('subtitle-delay-plus'),
-                              tooltip: '字幕延后 0.1 秒',
-                              onPressed: () => _adjustDelay(100),
-                              icon: const Icon(Icons.add_rounded),
-                            ),
-                          ],
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 18),
-                          child: Divider(height: 1),
-                        ),
-                        const _SheetLabel('字幕轨道'),
-                        const SizedBox(height: 8),
-                        for (final option in widget.options)
-                          Material(
-                            color: option.selected
-                                ? AppColors.glassSelected
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(14),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: () {
-                                Navigator.of(context).pop();
-                                unawaited(option.onSelected());
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                child: Row(
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    SizedBox(
-                                      width: 28,
-                                      child: option.selected
-                                          ? const Icon(
-                                              Icons.check_rounded,
-                                              color: AppColors.spotlight,
-                                              size: 20,
-                                            )
-                                          : null,
+                                    Text(
+                                      '字幕延迟',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            option.title,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            option.detail,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: AppColors.textTertiary,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ],
+                                    SizedBox(height: 3),
+                                    Text(
+                                      '正值延后，负值提前',
+                                      style: TextStyle(
+                                        color: AppColors.textTertiary,
+                                        fontSize: 11,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
+                              IconButton.outlined(
+                                key: const ValueKey('subtitle-delay-minus'),
+                                tooltip: '字幕提前 0.1 秒',
+                                onPressed: () => _adjustDelay(-100),
+                                icon: const Icon(Icons.remove_rounded),
+                              ),
+                              SizedBox(
+                                width: 82,
+                                child: TextButton(
+                                  key: const ValueKey('subtitle-delay-reset'),
+                                  onPressed: () => _update(
+                                    _preferences.copyWith(delayMilliseconds: 0),
+                                  ),
+                                  child: Text(
+                                    _subtitleDelayLabel(
+                                      _preferences.delayMilliseconds,
+                                    ),
+                                    style: const TextStyle(
+                                      fontFamily: 'Cascadia Mono',
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              IconButton.outlined(
+                                key: const ValueKey('subtitle-delay-plus'),
+                                tooltip: '字幕延后 0.1 秒',
+                                onPressed: () => _adjustDelay(100),
+                                icon: const Icon(Icons.add_rounded),
+                              ),
+                            ],
                           ),
-                      ],
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 18),
+                            child: Divider(height: 1),
+                          ),
+                          const _SheetLabel('字幕轨道'),
+                          const SizedBox(height: 8),
+                          for (final option in widget.options)
+                            Material(
+                              color: option.selected
+                                  ? AppColors.glassSelected
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(14),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  unawaited(option.onSelected());
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 28,
+                                        child: option.selected
+                                            ? const Icon(
+                                                Icons.check_rounded,
+                                                color: AppColors.spotlight,
+                                                size: 20,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              option.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              option.detail,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: AppColors.textTertiary,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ],
               ),
             ),
@@ -3812,80 +3827,80 @@ class _ChapterSheet extends StatelessWidget {
                   Flexible(
                     child: PeekSmoothScroll(
                       child: ListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
-                      itemCount: chapters.length,
-                      itemBuilder: (context, index) {
-                        final chapter = chapters[index];
-                        final selected = index == currentIndex;
-                        return Material(
-                          color: selected
-                              ? AppColors.glassSelected
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                          child: InkWell(
-                            key: ValueKey('chapter-option-$index'),
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
+                        itemCount: chapters.length,
+                        itemBuilder: (context, index) {
+                          final chapter = chapters[index];
+                          final selected = index == currentIndex;
+                          return Material(
+                            color: selected
+                                ? AppColors.glassSelected
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () => Navigator.of(
-                              context,
-                            ).pop(chapter.startPosition),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
-                              ),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: 48,
-                                    child: Text(
-                                      'CH ${(index + 1).toString().padLeft(2, '0')}',
-                                      style: TextStyle(
-                                        color: selected
-                                            ? AppColors.spotlight
-                                            : AppColors.textTertiary,
-                                        fontFamily: 'Cascadia Mono',
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
+                            child: InkWell(
+                              key: ValueKey('chapter-option-$index'),
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: () => Navigator.of(
+                                context,
+                              ).pop(chapter.startPosition),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 48,
+                                      child: Text(
+                                        'CH ${(index + 1).toString().padLeft(2, '0')}',
+                                        style: TextStyle(
+                                          color: selected
+                                              ? AppColors.spotlight
+                                              : AppColors.textTertiary,
+                                          fontFamily: 'Cascadia Mono',
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      chapter.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    Expanded(
+                                      child: Text(
+                                        chapter.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      _queueTime(chapter.startPosition),
                                       style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textTertiary,
+                                        fontFamily: 'Cascadia Mono',
+                                        fontSize: 10,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    _queueTime(chapter.startPosition),
-                                    style: const TextStyle(
-                                      color: AppColors.textTertiary,
-                                      fontFamily: 'Cascadia Mono',
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                  if (selected) ...[
-                                    const SizedBox(width: 10),
-                                    const Icon(
-                                      Icons.graphic_eq_rounded,
-                                      color: AppColors.spotlight,
-                                      size: 18,
-                                    ),
+                                    if (selected) ...[
+                                      const SizedBox(width: 10),
+                                      const Icon(
+                                        Icons.graphic_eq_rounded,
+                                        color: AppColors.spotlight,
+                                        size: 18,
+                                      ),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
-                ),
                 ],
               ),
             ),
@@ -3960,74 +3975,77 @@ class _TrackSheet extends StatelessWidget {
                           )
                         : PeekSmoothScroll(
                             child: ListView.builder(
-                            shrinkWrap: true,
-                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
-                            itemCount: options.length,
-                            itemBuilder: (context, index) {
-                              final option = options[index];
-                              return Material(
-                                color: option.selected
-                                    ? AppColors.glassSelected
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(14),
-                                child: InkWell(
+                              shrinkWrap: true,
+                              padding: const EdgeInsets.fromLTRB(10, 0, 10, 14),
+                              itemCount: options.length,
+                              itemBuilder: (context, index) {
+                                final option = options[index];
+                                return Material(
+                                  color: option.selected
+                                      ? AppColors.glassSelected
+                                      : Colors.transparent,
                                   borderRadius: BorderRadius.circular(14),
-                                  onTap: () {
-                                    Navigator.of(context).pop();
-                                    unawaited(option.onSelected());
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 13,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 28,
-                                          child: option.selected
-                                              ? const Icon(
-                                                  Icons.check_rounded,
-                                                  color: AppColors.spotlight,
-                                                  size: 20,
-                                                )
-                                              : null,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                option.title,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 3),
-                                              Text(
-                                                option.detail,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: AppColors.textTertiary,
-                                                  fontSize: 11,
-                                                ),
-                                              ),
-                                            ],
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () {
+                                      Navigator.of(context).pop();
+                                      unawaited(option.onSelected());
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 13,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 28,
+                                            child: option.selected
+                                                ? const Icon(
+                                                    Icons.check_rounded,
+                                                    color: AppColors.spotlight,
+                                                    size: 20,
+                                                  )
+                                                : null,
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  option.title,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  option.detail,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    color:
+                                                        AppColors.textTertiary,
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
-                            },
+                                );
+                              },
+                            ),
                           ),
-                        ),
                   ),
                 ],
               ),

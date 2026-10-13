@@ -33,18 +33,20 @@ class DanmakuOverlay extends StatelessWidget {
     final blocked = preferences.blockedKeywords;
 
     // Show items active within [currentSec - 6.0, currentSec]
-    final activeItems = items.where((item) {
-      if (blocked.isNotEmpty &&
-          blocked.any((kw) => kw.isNotEmpty && item.text.contains(kw))) {
-        return false;
-      }
-      if (item.type == 1 && !preferences.allowScroll) return false;
-      if (item.type == 5 && !preferences.allowTop) return false;
-      if (item.type == 4 && !preferences.allowBottom) return false;
+    final activeItems = items
+        .where((item) {
+          if (blocked.isNotEmpty &&
+              blocked.any((kw) => kw.isNotEmpty && item.text.contains(kw))) {
+            return false;
+          }
+          if (item.type == 1 && !preferences.allowScroll) return false;
+          if (item.type == 5 && !preferences.allowTop) return false;
+          if (item.type == 4 && !preferences.allowBottom) return false;
 
-      final delta = currentSec - item.timeSeconds;
-      return delta >= 0.0 && delta <= 6.0;
-    }).toList(growable: false);
+          final delta = currentSec - item.timeSeconds;
+          return delta >= 0.0 && delta <= 6.0;
+        })
+        .toList(growable: false);
 
     if (activeItems.isEmpty) return const SizedBox.shrink();
 
@@ -59,10 +61,13 @@ class DanmakuOverlay extends StatelessWidget {
                 ? (height * 0.78).clamp(80.0, height)
                 : height;
             final displayHeight =
-                (height * preferences.displayArea.clamp(0.15, 1.0))
-                    .clamp(0.0, maxHeightAllowed);
-            final trackCount =
-                (displayHeight / (effectiveFontSize * 1.8)).floor().clamp(2, 16);
+                (height * preferences.displayArea.clamp(0.15, 1.0)).clamp(
+                  0.0,
+                  maxHeightAllowed,
+                );
+            final trackCount = (displayHeight / (effectiveFontSize * 1.8))
+                .floor()
+                .clamp(2, 16);
             final trackHeight = displayHeight / trackCount;
 
             return Stack(
@@ -102,8 +107,9 @@ class DanmakuOverlay extends StatelessWidget {
     final top = trackIndex * trackHeight;
     final left = width - (progress * (width + 300));
 
-    final colorValue =
-        item.color == 16777215 ? 0xFFFFFFFF : item.color | 0xFF000000;
+    final colorValue = item.color == 16777215
+        ? 0xFFFFFFFF
+        : item.color | 0xFF000000;
 
     return Positioned(
       top: top,

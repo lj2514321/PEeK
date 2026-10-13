@@ -19,9 +19,7 @@ class HomeFeedService {
       forceRefresh: forceRefresh,
     );
     final results = await Future.wait<HomeFeedSection>([
-      _capture(
-        () => _library.getRecommendations(account, forceRefresh: forceRefresh),
-      ),
+      _capture(() => _library.getRecommendations(account)),
       _capture(
         () => _library.getResumeItems(account, forceRefresh: forceRefresh),
       ),
@@ -92,7 +90,7 @@ class HomeFeedService {
     HomeFeed currentFeed,
   ) async {
     final refreshed = await _capture(
-      () => _library.getRecommendations(account),
+      () => _library.getRecommendations(account, forceRefresh: true),
     );
     if (refreshed.authenticationExpired) {
       throw MediaLibraryException(

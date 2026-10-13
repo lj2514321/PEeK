@@ -86,7 +86,8 @@ class PlaybackQualitySheet extends StatelessWidget {
                             _QualityOption(
                               bitrate: bitrate,
                               selected: bitrate == selected,
-                              onPressed: () => Navigator.of(context).pop(bitrate),
+                              onPressed: () =>
+                                  Navigator.of(context).pop(bitrate),
                             ),
                         ],
                       ),

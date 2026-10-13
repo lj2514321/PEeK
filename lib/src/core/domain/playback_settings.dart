@@ -261,20 +261,18 @@ class DanmakuPreferences {
     final rawList = json['blockedKeywords'];
     final blocked = rawList is List
         ? rawList
-            .map((e) => e.toString())
-            .where((e) => e.isNotEmpty)
-            .toList(growable: false)
+              .map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
+              .toList(growable: false)
         : const <String>[];
     return DanmakuPreferences(
       enabled: json['enabled'] as bool? ?? true,
-      offsetMilliseconds:
-          (json['offsetMilliseconds'] as num?)?.toInt() ?? 0,
+      offsetMilliseconds: (json['offsetMilliseconds'] as num?)?.toInt() ?? 0,
       opacity: (json['opacity'] as num?)?.toDouble() ?? 0.85,
       fontSize: (json['fontSize'] as num?)?.toDouble() ?? 16.0,
       displayArea: (json['displayArea'] as num?)?.toDouble() ?? 0.5,
       blockedKeywords: blocked,
-      preventSubtitleOverlap:
-          json['preventSubtitleOverlap'] as bool? ?? true,
+      preventSubtitleOverlap: json['preventSubtitleOverlap'] as bool? ?? true,
       allowScroll: json['allowScroll'] as bool? ?? true,
       allowTop: json['allowTop'] as bool? ?? true,
       allowBottom: json['allowBottom'] as bool? ?? true,

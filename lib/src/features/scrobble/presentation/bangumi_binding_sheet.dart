@@ -263,7 +263,10 @@ class _BangumiBindingSheetState extends State<BangumiBindingSheet> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
                 onPressed: _unbind,
                 child: const Text('解除绑定', style: TextStyle(fontSize: 12)),
@@ -378,7 +381,10 @@ class _BangumiBindingSheetState extends State<BangumiBindingSheet> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFF09199), width: 1.5),
+              borderSide: const BorderSide(
+                color: Color(0xFFF09199),
+                width: 1.5,
+              ),
             ),
           ),
         ),

@@ -469,7 +469,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen(globalPlaybackCoordinatorProvider, (prev, next) {
-      final wasActive = prev?.mode == PlaybackPresentationMode.mini ||
+      final wasActive =
+          prev?.mode == PlaybackPresentationMode.mini ||
           prev?.mode == PlaybackPresentationMode.window ||
           prev?.mode == PlaybackPresentationMode.full;
       if (wasActive && next.mode == PlaybackPresentationMode.hidden) {
@@ -607,7 +608,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                     ? _loadCatalog
                                     : () => _reloadCurrentNode(),
                               )
-                            else if (_loadingItems)
+                            else if (_loadingItems || _loadingCatalog)
                               const _ItemsLoadingGrid()
                             else if (_items.isEmpty)
                               _EmptyLibrary(
@@ -632,6 +633,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                               )
                             else ...[
                               _MediaGrid(
+                                generation: _requestGeneration,
                                 items: _items,
                                 density: _density,
                                 selectionMode: _selectionMode,
@@ -721,7 +723,10 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   Future<void> _showFilters() async {
     final account = widget.account;
     final library = _selectedLibrary;
-    if (_availableTags.isEmpty && account != null && library != null && !library.isLocal) {
+    if (_availableTags.isEmpty &&
+        account != null &&
+        library != null &&
+        !library.isLocal) {
       try {
         final tags = await ref
             .read(mediaLibraryProvider)
@@ -1788,7 +1793,10 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
                 const SizedBox(height: 22),
                 Row(
                   children: [
-                    const Text('标签分类', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const Text(
+                      '标签分类',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     if (_tag != null) ...[
                       const SizedBox(width: 8),
                       Text(
@@ -1820,7 +1828,9 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
                         ),
                       ),
                       style: const TextStyle(fontSize: 12),
-                      onChanged: (val) => setState(() => _tagSearchQuery = val.trim().toLowerCase()),
+                      onChanged: (val) => setState(
+                        () => _tagSearchQuery = val.trim().toLowerCase(),
+                      ),
                     ),
                   ),
                 ],
@@ -1835,13 +1845,16 @@ class _LibraryFilterDialogState extends State<_LibraryFilterDialog> {
                       onSelected: (_) => setState(() => _tag = null),
                     ),
                     for (final tag in widget.availableTags.where(
-                      (t) => _tagSearchQuery.isEmpty || t.toLowerCase().contains(_tagSearchQuery),
+                      (t) =>
+                          _tagSearchQuery.isEmpty ||
+                          t.toLowerCase().contains(_tagSearchQuery),
                     ))
                       FilterChip(
                         key: ValueKey('tag-filter-$tag'),
                         label: Text('#$tag'),
                         selected: _tag == tag,
-                        onSelected: (selected) => setState(() => _tag = selected ? tag : null),
+                        onSelected: (selected) =>
+                            setState(() => _tag = selected ? tag : null),
                       ),
                   ],
                 ),
@@ -2050,6 +2063,7 @@ class _LibraryIcon extends StatelessWidget {
 
 class _MediaGrid extends StatelessWidget {
   const _MediaGrid({
+    required this.generation,
     required this.items,
     required this.density,
     required this.selectionMode,
@@ -2061,6 +2075,7 @@ class _MediaGrid extends StatelessWidget {
     this.selectionAvailable = true,
   });
 
+  final int generation;
   final List<MediaItem> items;
   final MediaGridDensity density;
   final bool selectionMode;
@@ -2104,16 +2119,21 @@ class _MediaGrid extends StatelessWidget {
             mainAxisSpacing: spacing + 6,
             childAspectRatio: density == MediaGridDensity.compact ? 0.64 : 0.62,
           ),
-          itemBuilder: (context, index) => _MediaCard(
-            item: items[index],
-            selectionMode: selectionMode,
-            selected: selectedIds.contains(items[index].id),
-            onOpen: () => onOpen(items[index]),
-            onToggleSelection: () => onToggleSelection(items[index].id),
-            onEnterSelection: selectionAvailable
-                ? () => onEnterSelection(items[index].id)
-                : null,
-            onDelete: onDelete != null ? () => onDelete!(items[index]) : null,
+          itemBuilder: (context, index) => PeekStaggeredGridItem(
+            key: ValueKey('lib-stagger-$generation-$index-${items[index].id}'),
+            index: index,
+            columns: columns,
+            child: _MediaCard(
+              item: items[index],
+              selectionMode: selectionMode,
+              selected: selectedIds.contains(items[index].id),
+              onOpen: () => onOpen(items[index]),
+              onToggleSelection: () => onToggleSelection(items[index].id),
+              onEnterSelection: selectionAvailable
+                  ? () => onEnterSelection(items[index].id)
+                  : null,
+              onDelete: onDelete != null ? () => onDelete!(items[index]) : null,
+            ),
           ),
         );
       },
@@ -2142,16 +2162,18 @@ class _MediaCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final livePos = ref.watch(globalPlaybackCoordinatorProvider.select(
-      (s) => s.positionFor(item.id),
-    ));
+    final livePos = ref.watch(
+      globalPlaybackCoordinatorProvider.select((s) => s.positionFor(item.id)),
+    );
     final effectivePos = (livePos != null && livePos > Duration.zero)
         ? livePos
         : item.resumePosition;
     final progress = item.runTime == null || item.runTime == Duration.zero
         ? 0.0
-        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds)
-              .clamp(0.0, 1.0);
+        : (effectivePos.inMilliseconds / item.runTime!.inMilliseconds).clamp(
+            0.0,
+            1.0,
+          );
     final browsable =
         item.kind == MediaItemKind.folder ||
         item.kind == MediaItemKind.series ||
@@ -2186,94 +2208,116 @@ class _MediaCard extends ConsumerWidget {
         label: '${item.name}，${_kindLabel(item.kind)}',
         button: true,
         selected: selected,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Peek3DCard(
-                onTap: selectionMode ? onToggleSelection : onOpen,
-                borderRadius: 14,
-                child: Material(
-                  key: ValueKey('media-card-artwork-${item.id}'),
-                  color: AppColors.surfaceLow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    side: selected
-                        ? const BorderSide(color: AppColors.spotlight, width: 2)
-                        : BorderSide.none,
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: selectionMode ? onToggleSelection : onOpen,
-                    onLongPress: selectionMode
-                        ? onToggleSelection
-                        : onEnterSelection,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _MediaArtwork(item: item),
-                        if (selectionMode)
-                          Positioned(
-                            top: 8,
-                            left: 8,
-                            child: _SelectionBadge(selected: selected),
-                          )
-                        else if (item.favorite)
-                          const Positioned(
-                            top: 10,
-                            left: 10,
-                            child: _FavoriteBadge(),
-                          ),
-                        if (item.played)
-                          const Positioned(
-                            top: 10,
-                            right: 10,
-                            child: _PlayedBadge(),
-                          ),
-                        if (browsable)
-                          const Positioned(
-                            left: 10,
-                            bottom: 10,
-                            child: _BrowseBadge(),
-                          ),
-                        if (progress > 0 && progress < 1)
-                          Positioned(
-                            left: 8,
-                            right: 8,
-                            bottom: 8,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(99),
-                              child: LinearProgressIndicator(
-                                value: progress,
-                                minHeight: 4,
-                                backgroundColor: Colors.black54,
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: AppGlass.decoration(
+            radius: AppRadius.value,
+            selected: selected,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Peek3DCard(
+                  onTap: selectionMode ? onToggleSelection : onOpen,
+                  borderRadius: AppRadius.value,
+                  child: Material(
+                    key: ValueKey('media-card-artwork-${item.id}'),
+                    color: AppColors.surfaceLow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppRadius.borderRadius,
+                      side: selected
+                          ? const BorderSide(
+                              color: AppColors.spotlight,
+                              width: 2,
+                            )
+                          : BorderSide(
+                              color: Colors.white.withValues(alpha: 0.20),
+                              width: 1,
+                            ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: selectionMode ? onToggleSelection : onOpen,
+                      onLongPress: selectionMode
+                          ? onToggleSelection
+                          : onEnterSelection,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _MediaArtwork(item: item),
+                          if (selectionMode)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: _SelectionBadge(selected: selected),
+                            )
+                          else if (item.favorite)
+                            const Positioned(
+                              top: 10,
+                              left: 10,
+                              child: _FavoriteBadge(),
+                            ),
+                          if (item.played)
+                            const Positioned(
+                              top: 10,
+                              right: 10,
+                              child: _PlayedBadge(),
+                            ),
+                          if (browsable)
+                            const Positioned(
+                              left: 10,
+                              bottom: 10,
+                              child: _BrowseBadge(),
+                            ),
+                          if (progress > 0 && progress < 1)
+                            Positioned(
+                              left: 8,
+                              right: 8,
+                              bottom: 8,
+                              child: ClipRRect(
+                                borderRadius: AppRadius.borderRadius,
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 4,
+                                  backgroundColor: Colors.black54,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              item.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _metadata(item),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textTertiary,
-                fontSize: 11,
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  _metadata(item),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

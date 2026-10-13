@@ -12,12 +12,13 @@ abstract class ActorFavoritesStore {
 
 class MemoryActorFavoritesStore implements ActorFavoritesStore {
   MemoryActorFavoritesStore([List<ActorFavorite>? initial])
-      : _favorites = List.from(initial ?? const []);
+    : _favorites = List.from(initial ?? const []);
 
   final List<ActorFavorite> _favorites;
 
   @override
-  Future<List<ActorFavorite>> readFavorites() async => List.unmodifiable(_favorites);
+  Future<List<ActorFavorite>> readFavorites() async =>
+      List.unmodifiable(_favorites);
 
   @override
   Future<void> writeFavorites(List<ActorFavorite> favorites) async {
@@ -28,8 +29,7 @@ class MemoryActorFavoritesStore implements ActorFavoritesStore {
 }
 
 class LocalActorFavoritesStore implements ActorFavoritesStore {
-  LocalActorFavoritesStore([String? filePath])
-      : _filePathOverride = filePath;
+  LocalActorFavoritesStore([String? filePath]) : _filePathOverride = filePath;
 
   final String? _filePathOverride;
 
@@ -53,7 +53,9 @@ class LocalActorFavoritesStore implements ActorFavoritesStore {
       if (raw is! List) return const [];
       return raw
           .whereType<Map<String, dynamic>>()
-          .map((item) => ActorFavorite.fromJson(Map<String, dynamic>.from(item)))
+          .map(
+            (item) => ActorFavorite.fromJson(Map<String, dynamic>.from(item)),
+          )
           .toList(growable: false);
     } on Object catch (e) {
       debugPrint('Failed to read actor favorites: $e');

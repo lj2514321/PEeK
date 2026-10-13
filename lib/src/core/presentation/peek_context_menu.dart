@@ -47,7 +47,7 @@ class PeekContextMenuRegion extends StatelessWidget {
       surfaceTintColor: Colors.transparent,
       shadowColor: const Color(0x4D4A90E2),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRadius.borderRadius,
         side: BorderSide(
           color: Colors.white.withValues(alpha: 0.22),
           width: 1.2,

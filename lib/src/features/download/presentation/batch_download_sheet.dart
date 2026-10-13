@@ -23,7 +23,8 @@ class BatchDownloadSheet extends StatefulWidget {
 }
 
 class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
-  final DownloadManagerService _downloadManager = DownloadManagerService.instance;
+  final DownloadManagerService _downloadManager =
+      DownloadManagerService.instance;
   final Set<String> _selectedIds = {};
   bool _enqueuing = false;
 
@@ -66,7 +67,9 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
     var total = 0;
     for (final it in _itemsToDisplay) {
       if (_selectedIds.contains(it.id)) {
-        final fs = it.mediaSources.isNotEmpty ? it.mediaSources.first.fileSize : it.fileSize;
+        final fs = it.mediaSources.isNotEmpty
+            ? it.mediaSources.first.fileSize
+            : it.fileSize;
         if (fs != null && fs > 0) {
           total += fs;
         } else {
@@ -82,12 +85,18 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
 
     setState(() => _enqueuing = true);
 
-    final baseUrl = widget.account!.server.apiBaseUri.toString().replaceAll(RegExp(r'/$'), '');
+    final baseUrl = widget.account!.server.apiBaseUri.toString().replaceAll(
+      RegExp(r'/$'),
+      '',
+    );
     final token = widget.account!.accessToken;
-    final scheme = widget.account!.server.kind == ServerKind.emby ? 'Emby' : 'MediaBrowser';
+    final scheme = widget.account!.server.kind == ServerKind.emby
+        ? 'Emby'
+        : 'MediaBrowser';
     final deviceId = widget.account!.deviceId;
     final headers = {
-      'Authorization': '$scheme Client="PEeK", Device="Windows", DeviceId="$deviceId", Version="0.1.0", Token="$token"',
+      'Authorization':
+          '$scheme Client="PEeK", Device="Windows", DeviceId="$deviceId", Version="0.1.0", Token="$token"',
       'X-Emby-Token': token,
       'X-MediaBrowser-Token': token,
     };
@@ -95,8 +104,13 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
     var count = 0;
     for (final it in _itemsToDisplay) {
       if (_selectedIds.contains(it.id)) {
-        final streamUrl = '$baseUrl/Videos/${it.id}/stream?static=true&api_key=$token';
-        final size = (it.mediaSources.isNotEmpty ? it.mediaSources.first.fileSize : it.fileSize) ?? 0;
+        final streamUrl =
+            '$baseUrl/Videos/${it.id}/stream?static=true&api_key=$token';
+        final size =
+            (it.mediaSources.isNotEmpty
+                ? it.mediaSources.first.fileSize
+                : it.fileSize) ??
+            0;
         await _downloadManager.enqueueTask(
           itemId: it.id,
           title: it.name,
@@ -150,7 +164,9 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isSeries ? '批量下载：${widget.item.name}' : '离线缓存：${widget.item.name}',
+                      isSeries
+                          ? '批量下载：${widget.item.name}'
+                          : '离线缓存：${widget.item.name}',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -182,20 +198,32 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
               children: [
                 TextButton(
                   onPressed: _selectAll,
-                  child: const Text('全选', style: TextStyle(color: AppColors.spotlight, fontSize: 12)),
+                  child: const Text(
+                    '全选',
+                    style: TextStyle(color: AppColors.spotlight, fontSize: 12),
+                  ),
                 ),
                 TextButton(
                   onPressed: _deselectAll,
-                  child: const Text('清空', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  child: const Text(
+                    '清空',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ),
                 TextButton(
                   onPressed: _selectUnplayed,
-                  child: const Text('仅未看集', style: TextStyle(color: AppColors.cyan, fontSize: 12)),
+                  child: const Text(
+                    '仅未看集',
+                    style: TextStyle(color: AppColors.cyan, fontSize: 12),
+                  ),
                 ),
                 const Spacer(),
                 Text(
                   '已选 ${_selectedIds.length} / ${_itemsToDisplay.length} 集',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -213,29 +241,45 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
                   shrinkWrap: true,
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: _itemsToDisplay.length,
-                  separatorBuilder: (_, _) => const Divider(color: Colors.white10, height: 1),
+                  separatorBuilder: (_, _) =>
+                      const Divider(color: Colors.white10, height: 1),
                   itemBuilder: (context, index) {
                     final it = _itemsToDisplay[index];
                     final isSelected = _selectedIds.contains(it.id);
-                    final size = (it.mediaSources.isNotEmpty ? it.mediaSources.first.fileSize : it.fileSize) ?? 0;
-                    final sizeStr = size > 0 ? DownloadTaskItem.formatBytes(size) : '约 800 MB';
+                    final size =
+                        (it.mediaSources.isNotEmpty
+                            ? it.mediaSources.first.fileSize
+                            : it.fileSize) ??
+                        0;
+                    final sizeStr = size > 0
+                        ? DownloadTaskItem.formatBytes(size)
+                        : '约 800 MB';
 
                     return CheckboxListTile(
                       value: isSelected,
                       activeColor: AppColors.spotlight,
                       checkColor: AppColors.onSpotlight,
                       title: Text(
-                        it.indexNumber != null ? '第 ${it.indexNumber} 话 · ${it.name}' : it.name,
+                        it.indexNumber != null
+                            ? '第 ${it.indexNumber} 话 · ${it.name}'
+                            : it.name,
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? Colors.white : AppColors.textSecondary,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: isSelected
+                              ? Colors.white
+                              : AppColors.textSecondary,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: Text(
                         '$sizeStr${it.played ? ' · 已看' : ''}',
-                        style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textTertiary,
+                        ),
                       ),
                       onChanged: (checked) {
                         setState(() {
@@ -260,7 +304,10 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
                 children: [
                   const Text(
                     '预计下载体积',
-                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -278,21 +325,32 @@ class _BatchDownloadSheetState extends State<BatchDownloadSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.spotlight,
                   foregroundColor: AppColors.onSpotlight,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: _selectedIds.isEmpty || _enqueuing ? null : _startDownload,
+                onPressed: _selectedIds.isEmpty || _enqueuing
+                    ? null
+                    : _startDownload,
                 child: _enqueuing
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black,
+                        ),
                       )
                     : Text(
                         '加入下载队列 (${_selectedIds.length})',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
               ),
             ],

@@ -4,10 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('DanmakuItem parses DandanPlay JSON comment correctly', () {
-    final json = {
-      'p': '12.5,1,16777215,user1',
-      'm': '这是一条弹幕测试',
-    };
+    final json = {'p': '12.5,1,16777215,user1', 'm': '这是一条弹幕测试'};
     final item = DanmakuItem.fromDandanJson(json);
     expect(item.timeSeconds, 12.5);
     expect(item.type, 1);

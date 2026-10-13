@@ -64,13 +64,16 @@ class DownloadTaskItem {
       final s = seasonNumber != null ? 'S$seasonNumber' : '';
       final e = episodeNumber != null ? 'E$episodeNumber' : '';
       final se = [s, e].where((x) => x.isNotEmpty).join();
-      return se.isNotEmpty ? '$seriesName $se · $title' : '$seriesName · $title';
+      return se.isNotEmpty
+          ? '$seriesName $se · $title'
+          : '$seriesName · $title';
     }
     return title;
   }
 
   String get formattedSpeed {
-    if (speedBytesPerSec < 1024) return '${speedBytesPerSec.toStringAsFixed(0)} B/s';
+    if (speedBytesPerSec < 1024)
+      return '${speedBytesPerSec.toStringAsFixed(0)} B/s';
     if (speedBytesPerSec < 1024 * 1024) {
       return '${(speedBytesPerSec / 1024).toStringAsFixed(1)} KB/s';
     }
@@ -116,21 +119,21 @@ class DownloadTaskItem {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'itemId': itemId,
-        'title': title,
-        'seriesName': seriesName,
-        'seasonNumber': seasonNumber,
-        'episodeNumber': episodeNumber,
-        'url': url,
-        'savePath': savePath,
-        'totalBytes': totalBytes,
-        'downloadedBytes': downloadedBytes,
-        'status': status.name,
-        'mediaSourceId': mediaSourceId,
-        'createdAt': createdAt.toIso8601String(),
-        'errorMessage': errorMessage,
-      };
+    'id': id,
+    'itemId': itemId,
+    'title': title,
+    'seriesName': seriesName,
+    'seasonNumber': seasonNumber,
+    'episodeNumber': episodeNumber,
+    'url': url,
+    'savePath': savePath,
+    'totalBytes': totalBytes,
+    'downloadedBytes': downloadedBytes,
+    'status': status.name,
+    'mediaSourceId': mediaSourceId,
+    'createdAt': createdAt.toIso8601String(),
+    'errorMessage': errorMessage,
+  };
 
   factory DownloadTaskItem.fromJson(Map<String, dynamic> json) {
     return DownloadTaskItem(
@@ -147,7 +150,8 @@ class DownloadTaskItem {
       speedBytesPerSec: 0.0,
       status: DownloadTaskStatus.fromString(json['status'] as String?),
       mediaSourceId: json['mediaSourceId'] as String?,
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.now(),
       errorMessage: json['errorMessage'] as String?,
     );

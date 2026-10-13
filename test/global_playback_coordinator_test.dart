@@ -52,12 +52,18 @@ class _FakeRuntime implements PlaybackRuntime {
   Tracks get tracks => const Tracks();
 
   @override
-  Widget buildVideoSurface({required SubtitleViewConfiguration subtitleConfiguration}) {
+  Widget buildVideoSurface({
+    required SubtitleViewConfiguration subtitleConfiguration,
+  }) {
     return const SizedBox(width: 320, height: 180);
   }
 
   @override
-  Future<void> open(PlaybackPlan plan, {required bool play, Duration? startPosition}) async {}
+  Future<void> open(
+    PlaybackPlan plan, {
+    required bool play,
+    Duration? startPosition,
+  }) async {}
 
   @override
   Future<void> play() async {
@@ -112,130 +118,178 @@ class _FakeRuntime implements PlaybackRuntime {
 }
 
 void main() {
-  test('GlobalPlaybackCoordinator manages presentation lifecycle and controls', () async {
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+  test(
+    'GlobalPlaybackCoordinator manages presentation lifecycle and controls',
+    () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
 
-    final coordinator = container.read(globalPlaybackCoordinatorProvider.notifier);
-    final runtime = _FakeRuntime();
+      final coordinator = container.read(
+        globalPlaybackCoordinatorProvider.notifier,
+      );
+      final runtime = _FakeRuntime();
 
-    // 1. Initial State
-    expect(container.read(globalPlaybackCoordinatorProvider).mode, PlaybackPresentationMode.hidden);
+      // 1. Initial State
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).mode,
+        PlaybackPresentationMode.hidden,
+      );
 
-    const testItem = MediaItem(
-      id: 'm1',
-      name: 'Test Movie',
-      kind: MediaItemKind.movie,
-    );
-    final testPlan = PlaybackPlan(
-      itemId: 'm1',
-      mediaSourceId: 'src1',
-      playSessionId: 'sess1',
-      streamUri: Uri.parse('http://localhost/video.mp4'),
-      method: PlaybackMethod.directPlay,
-    );
+      const testItem = MediaItem(
+        id: 'm1',
+        name: 'Test Movie',
+        kind: MediaItemKind.movie,
+      );
+      final testPlan = PlaybackPlan(
+        itemId: 'm1',
+        mediaSourceId: 'src1',
+        playSessionId: 'sess1',
+        streamUri: Uri.parse('http://localhost/video.mp4'),
+        method: PlaybackMethod.directPlay,
+      );
 
-    // 2. Register Active Playback
-    coordinator.registerActivePlayback(
-      account: null,
-      item: testItem,
-      plan: testPlan,
-      runtime: runtime,
-    );
+      // 2. Register Active Playback
+      coordinator.registerActivePlayback(
+        account: null,
+        item: testItem,
+        plan: testPlan,
+        runtime: runtime,
+      );
 
-    expect(container.read(globalPlaybackCoordinatorProvider).mode, PlaybackPresentationMode.full);
-    expect(container.read(globalPlaybackCoordinatorProvider).item?.id, 'm1');
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).mode,
+        PlaybackPresentationMode.full,
+      );
+      expect(container.read(globalPlaybackCoordinatorProvider).item?.id, 'm1');
 
-    // 3. Play / Pause
-    await coordinator.togglePlayPause();
-    expect(runtime.playing, isTrue);
+      // 3. Play / Pause
+      await coordinator.togglePlayPause();
+      expect(runtime.playing, isTrue);
 
-    // 4. Seek
-    await coordinator.seekRelative(const Duration(seconds: 10));
-    expect(runtime.position, const Duration(seconds: 10));
+      // 4. Seek
+      await coordinator.seekRelative(const Duration(seconds: 10));
+      expect(runtime.position, const Duration(seconds: 10));
 
-    // 5. Close
-    await coordinator.close();
-    expect(container.read(globalPlaybackCoordinatorProvider).mode, PlaybackPresentationMode.hidden);
-    expect(runtime.isDisposed, isTrue);
-  });
+      // 5. Close
+      await coordinator.close();
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).mode,
+        PlaybackPresentationMode.hidden,
+      );
+      expect(runtime.isDisposed, isTrue);
+    },
+  );
 
-  test('GlobalPlaybackCoordinator updates plan startPosition on seek and expand preparation', () async {
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+  test(
+    'GlobalPlaybackCoordinator updates plan startPosition on seek and expand preparation',
+    () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
 
-    final coordinator = container.read(globalPlaybackCoordinatorProvider.notifier);
-    final runtime = _FakeRuntime();
+      final coordinator = container.read(
+        globalPlaybackCoordinatorProvider.notifier,
+      );
+      final runtime = _FakeRuntime();
 
-    final testPlan = PlaybackPlan(
-      itemId: 'm2',
-      mediaSourceId: 'src2',
-      playSessionId: 'sess2',
-      streamUri: Uri.parse('http://localhost/video.mp4'),
-      method: PlaybackMethod.directPlay,
-      startPosition: Duration.zero,
-    );
+      final testPlan = PlaybackPlan(
+        itemId: 'm2',
+        mediaSourceId: 'src2',
+        playSessionId: 'sess2',
+        streamUri: Uri.parse('http://localhost/video.mp4'),
+        method: PlaybackMethod.directPlay,
+        startPosition: Duration.zero,
+      );
 
-    coordinator.registerActivePlayback(
-      account: null,
-      item: const MediaItem(id: 'm2', name: 'Movie 2', kind: MediaItemKind.movie),
-      plan: testPlan,
-      runtime: runtime,
-    );
+      coordinator.registerActivePlayback(
+        account: null,
+        item: const MediaItem(
+          id: 'm2',
+          name: 'Movie 2',
+          kind: MediaItemKind.movie,
+        ),
+        plan: testPlan,
+        runtime: runtime,
+      );
 
-    // Seek to 15 minutes
-    await coordinator.seekRelative(const Duration(minutes: 15));
-    expect(container.read(globalPlaybackCoordinatorProvider).position, const Duration(minutes: 15));
-  });
+      // Seek to 15 minutes
+      await coordinator.seekRelative(const Duration(minutes: 15));
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).position,
+        const Duration(minutes: 15),
+      );
+    },
+  );
 
-  test('GlobalPlaybackCoordinator tracks recentPositions, progress, and effective positions', () async {
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+  test(
+    'GlobalPlaybackCoordinator tracks recentPositions, progress, and effective positions',
+    () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
 
-    final coordinator = container.read(globalPlaybackCoordinatorProvider.notifier);
-    final runtime = _FakeRuntime();
+      final coordinator = container.read(
+        globalPlaybackCoordinatorProvider.notifier,
+      );
+      final runtime = _FakeRuntime();
 
-    final testPlan = PlaybackPlan(
-      itemId: 'ep1',
-      mediaSourceId: 'src_ep1',
-      playSessionId: 'sess_ep1',
-      streamUri: Uri.parse('http://localhost/ep1.mp4'),
-      method: PlaybackMethod.directPlay,
-      duration: const Duration(minutes: 40),
-    );
+      final testPlan = PlaybackPlan(
+        itemId: 'ep1',
+        mediaSourceId: 'src_ep1',
+        playSessionId: 'sess_ep1',
+        streamUri: Uri.parse('http://localhost/ep1.mp4'),
+        method: PlaybackMethod.directPlay,
+        duration: const Duration(minutes: 40),
+      );
 
-    coordinator.registerActivePlayback(
-      account: null,
-      item: const MediaItem(
-        id: 'ep1',
-        name: 'Episode 1',
-        kind: MediaItemKind.episode,
-        runTime: Duration(minutes: 40),
-      ),
-      plan: testPlan,
-      runtime: runtime,
-    );
+      coordinator.registerActivePlayback(
+        account: null,
+        item: const MediaItem(
+          id: 'ep1',
+          name: 'Episode 1',
+          kind: MediaItemKind.episode,
+          runTime: Duration(minutes: 40),
+        ),
+        plan: testPlan,
+        runtime: runtime,
+      );
 
-    // Initial position before any playback progress
-    expect(coordinator.getEffectivePosition('ep1'), isNull);
+      // Initial position before any playback progress
+      expect(coordinator.getEffectivePosition('ep1'), isNull);
 
-    // Seek to 10 minutes
-    await coordinator.seekRelative(const Duration(minutes: 10));
-    expect(coordinator.getEffectivePosition('ep1'), const Duration(minutes: 10));
-    expect(
-      container.read(globalPlaybackCoordinatorProvider).progressFor('ep1', const Duration(minutes: 40)),
-      0.25,
-    );
+      // Seek to 10 minutes
+      await coordinator.seekRelative(const Duration(minutes: 10));
+      expect(
+        coordinator.getEffectivePosition('ep1'),
+        const Duration(minutes: 10),
+      );
+      expect(
+        container
+            .read(globalPlaybackCoordinatorProvider)
+            .progressFor('ep1', const Duration(minutes: 40)),
+        0.25,
+      );
 
-    // Manually record another item position
-    coordinator.recordPosition('ep2', const Duration(minutes: 20));
-    expect(coordinator.getEffectivePosition('ep2'), const Duration(minutes: 20));
+      // Manually record another item position
+      coordinator.recordPosition('ep2', const Duration(minutes: 20));
+      expect(
+        coordinator.getEffectivePosition('ep2'),
+        const Duration(minutes: 20),
+      );
 
-    // Close
-    await coordinator.close();
-    expect(container.read(globalPlaybackCoordinatorProvider).mode, PlaybackPresentationMode.hidden);
-    // Recent position persists after close
-    expect(coordinator.getEffectivePosition('ep1'), const Duration(minutes: 10));
-    expect(coordinator.getEffectivePosition('ep2'), const Duration(minutes: 20));
-  });
+      // Close
+      await coordinator.close();
+      expect(
+        container.read(globalPlaybackCoordinatorProvider).mode,
+        PlaybackPresentationMode.hidden,
+      );
+      // Recent position persists after close
+      expect(
+        coordinator.getEffectivePosition('ep1'),
+        const Duration(minutes: 10),
+      );
+      expect(
+        coordinator.getEffectivePosition('ep2'),
+        const Duration(minutes: 20),
+      );
+    },
+  );
 }

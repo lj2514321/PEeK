@@ -213,7 +213,9 @@ class MediaItem {
         json['imageHeaders'] as Map? ?? const {},
       ),
       chapters: (json['chapters'] as List? ?? const [])
-          .map((c) => MediaChapter.fromJson(Map<String, dynamic>.from(c as Map)))
+          .map(
+            (c) => MediaChapter.fromJson(Map<String, dynamic>.from(c as Map)),
+          )
           .toList(),
       people: (json['people'] as List? ?? const [])
           .map((p) => MediaPerson.fromJson(Map<String, dynamic>.from(p as Map)))
@@ -252,7 +254,10 @@ class MediaItem {
       height: json['height'] as int?,
       bitrate: json['bitrate'] as int?,
       mediaSources: (json['mediaSources'] as List? ?? const [])
-          .map((s) => MediaSourceInfo.fromJson(Map<String, dynamic>.from(s as Map)))
+          .map(
+            (s) =>
+                MediaSourceInfo.fromJson(Map<String, dynamic>.from(s as Map)),
+          )
           .toList(),
     );
   }

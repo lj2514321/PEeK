@@ -150,7 +150,10 @@ class _BangumiSummaryCardState extends State<BangumiSummaryCard> {
               const Spacer(),
               if (subject.rank != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(6),
@@ -207,26 +210,29 @@ class _BangumiSummaryCardState extends State<BangumiSummaryCard> {
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: subject.tags.take(6).map((tag) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Text(
-                    tag,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                );
-              }).toList(growable: false),
+              children: subject.tags
+                  .take(6)
+                  .map((tag) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Text(
+                        tag,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    );
+                  })
+                  .toList(growable: false),
             ),
           ],
         ],
@@ -239,7 +245,10 @@ class _BangumiSummaryCardState extends State<BangumiSummaryCard> {
       return const SizedBox(
         width: 16,
         height: 16,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF09199)),
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: Color(0xFFF09199),
+        ),
       );
     }
 
@@ -261,12 +270,18 @@ class _BangumiSummaryCardState extends State<BangumiSummaryCard> {
                   type.label,
                   style: TextStyle(
                     color: isSelected ? const Color(0xFFF09199) : Colors.white,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
                   ),
                 ),
                 if (isSelected) ...[
                   const Spacer(),
-                  const Icon(Icons.check_rounded, color: Color(0xFFF09199), size: 16),
+                  const Icon(
+                    Icons.check_rounded,
+                    color: Color(0xFFF09199),
+                    size: 16,
+                  ),
                 ],
               ],
             ),

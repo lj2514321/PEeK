@@ -17,8 +17,9 @@ import 'package:embyplayer/src/features/player/domain/player_window_payload.dart
 import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:embyplayer/src/features/player/presentation/playback_runtime.dart';
 
-final playerWindowCoordinatorProvider =
-    Provider<PlayerWindowCoordinator>((ref) {
+final playerWindowCoordinatorProvider = Provider<PlayerWindowCoordinator>((
+  ref,
+) {
   final coordinator = PlayerWindowCoordinator(ref);
   ref.onDispose(coordinator.dispose);
   return coordinator;
@@ -185,9 +186,7 @@ class PlayerWindowCoordinator {
     if (_playerWindow == null) {
       try {
         final controller = await WindowController.create(
-          WindowConfiguration(
-            arguments: jsonEncode(payload.toJson()),
-          ),
+          WindowConfiguration(arguments: jsonEncode(payload.toJson())),
         );
         _playerWindow = controller;
         await controller.show();
@@ -206,9 +205,7 @@ class PlayerWindowCoordinator {
         // If window crashed or closed without notification, recreate it
         try {
           final controller = await WindowController.create(
-            WindowConfiguration(
-              arguments: jsonEncode(payload.toJson()),
-            ),
+            WindowConfiguration(arguments: jsonEncode(payload.toJson())),
           );
           _playerWindow = controller;
           await controller.show();
@@ -249,9 +246,7 @@ class PlayerWindowCoordinator {
       } catch (_) {}
       _playerWindow = null;
     }
-    ref
-        .read(globalPlaybackCoordinatorProvider.notifier)
-        .clearActivePlayback();
+    ref.read(globalPlaybackCoordinatorProvider.notifier).clearActivePlayback();
   }
 
   void dispose() {

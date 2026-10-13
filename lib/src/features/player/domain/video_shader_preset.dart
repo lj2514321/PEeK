@@ -11,14 +11,20 @@ enum VideoShaderPreset {
     label: 'Anime4K 极致重构 (Mode A)',
     description: '针对动漫与老番：AI 级边缘线条抗锯齿、伪影消除与超采样',
     gpuLoad: '高负载 (推荐独立显卡)',
-    shaderFilenames: ['Anime4K_Restore_CNN_M.glsl', 'Anime4K_Upscale_CNN_x2_M.glsl'],
+    shaderFilenames: [
+      'Anime4K_Restore_CNN_M.glsl',
+      'Anime4K_Upscale_CNN_x2_M.glsl',
+    ],
   ),
   anime4kModeB(
     id: 'anime4k_b',
     label: 'Anime4K 平衡增强 (Mode B)',
     description: '轻量级动漫纹理细化与抗锯齿，适合轻薄本核显流畅运行',
     gpuLoad: '中低负载 (适合核显)',
-    shaderFilenames: ['Anime4K_Clamp_Highlights.glsl', 'Anime4K_Restore_CNN_Soft_M.glsl'],
+    shaderFilenames: [
+      'Anime4K_Clamp_Highlights.glsl',
+      'Anime4K_Restore_CNN_Soft_M.glsl',
+    ],
   ),
   fsr(
     id: 'fsr',

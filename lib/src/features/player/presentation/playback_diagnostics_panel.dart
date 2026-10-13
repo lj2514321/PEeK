@@ -49,97 +49,103 @@ class PlaybackDiagnosticsPanel extends StatelessWidget {
                   : PeekSmoothScroll(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _SectionLabel(label: '播放路径'),
-                          const SizedBox(height: 8),
-                          _DiagnosticsGrid(
-                            items: [
-                              _DiagnosticValue('播放方式', data.methodLabel),
-                              _DiagnosticValue('实际解码', data.decoderLabel),
-                              _DiagnosticValue(
-                                '传输协议',
-                                data.sourceProtocol.toUpperCase(),
-                              ),
-                              _DiagnosticValue(
-                                '解码偏好',
-                                data.requestedDecodingMode.label,
-                              ),
-                            ],
-                          ),
-                          if (data.method == PlaybackMethod.transcode) ...[
-                            const SizedBox(height: 10),
-                            _TranscodingReasons(
-                              reasons: data.transcodingReasons,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _SectionLabel(label: '播放路径'),
+                            const SizedBox(height: 8),
+                            _DiagnosticsGrid(
+                              items: [
+                                _DiagnosticValue('播放方式', data.methodLabel),
+                                _DiagnosticValue('实际解码', data.decoderLabel),
+                                _DiagnosticValue(
+                                  '传输协议',
+                                  data.sourceProtocol.toUpperCase(),
+                                ),
+                                _DiagnosticValue(
+                                  '解码偏好',
+                                  data.requestedDecodingMode.label,
+                                ),
+                              ],
                             ),
-                          ],
-                          const SizedBox(height: 18),
-                          _SectionLabel(label: '媒体信息'),
-                          const SizedBox(height: 8),
-                          _DiagnosticsGrid(
-                            items: [
-                              _DiagnosticValue(
-                                '视频编码',
-                                _available(data.videoCodec),
+                            if (data.method == PlaybackMethod.transcode) ...[
+                              const SizedBox(height: 10),
+                              _TranscodingReasons(
+                                reasons: data.transcodingReasons,
                               ),
-                              _DiagnosticValue(
-                                '音频编码',
-                                _available(data.audioCodec),
-                              ),
-                              _DiagnosticValue('分辨率', data.resolutionLabel),
-                              _DiagnosticValue('帧率', data.frameRateLabel),
-                              _DiagnosticValue(
-                                '封装格式',
-                                _available(data.container),
-                              ),
-                              _DiagnosticValue('色彩信息', data.colorLabel),
                             ],
-                          ),
-                          const SizedBox(height: 18),
-                          _SectionLabel(label: '实时状态'),
-                          const SizedBox(height: 8),
-                          _DiagnosticsGrid(
-                            items: [
-                              _DiagnosticValue('视频码率', data.videoBitrateLabel),
-                              _DiagnosticValue('音频码率', data.audioBitrateLabel),
-                              _DiagnosticValue(
-                                data.buffering ? '缓存 · 正在缓冲' : '缓存',
-                                data.cacheLabel,
-                              ),
-                              _DiagnosticValue('丢帧', data.droppedFramesLabel),
-                              _DiagnosticValue(
-                                '视频输出',
-                                _available(data.videoOutput),
-                              ),
-                              _DiagnosticValue('采样时间', _time(data.sampledAt)),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          const Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                Icons.privacy_tip_outlined,
-                                size: 17,
-                                color: AppColors.textTertiary,
-                              ),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '复制内容不会包含媒体地址、Token、用户或媒体标识。',
-                                  style: TextStyle(
-                                    color: AppColors.textTertiary,
-                                    fontSize: 12,
-                                    height: 1.5,
+                            const SizedBox(height: 18),
+                            _SectionLabel(label: '媒体信息'),
+                            const SizedBox(height: 8),
+                            _DiagnosticsGrid(
+                              items: [
+                                _DiagnosticValue(
+                                  '视频编码',
+                                  _available(data.videoCodec),
+                                ),
+                                _DiagnosticValue(
+                                  '音频编码',
+                                  _available(data.audioCodec),
+                                ),
+                                _DiagnosticValue('分辨率', data.resolutionLabel),
+                                _DiagnosticValue('帧率', data.frameRateLabel),
+                                _DiagnosticValue(
+                                  '封装格式',
+                                  _available(data.container),
+                                ),
+                                _DiagnosticValue('色彩信息', data.colorLabel),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            _SectionLabel(label: '实时状态'),
+                            const SizedBox(height: 8),
+                            _DiagnosticsGrid(
+                              items: [
+                                _DiagnosticValue(
+                                  '视频码率',
+                                  data.videoBitrateLabel,
+                                ),
+                                _DiagnosticValue(
+                                  '音频码率',
+                                  data.audioBitrateLabel,
+                                ),
+                                _DiagnosticValue(
+                                  data.buffering ? '缓存 · 正在缓冲' : '缓存',
+                                  data.cacheLabel,
+                                ),
+                                _DiagnosticValue('丢帧', data.droppedFramesLabel),
+                                _DiagnosticValue(
+                                  '视频输出',
+                                  _available(data.videoOutput),
+                                ),
+                                _DiagnosticValue('采样时间', _time(data.sampledAt)),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            const Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.privacy_tip_outlined,
+                                  size: 17,
+                                  color: AppColors.textTertiary,
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '复制内容不会包含媒体地址、Token、用户或媒体标识。',
+                                    style: TextStyle(
+                                      color: AppColors.textTertiary,
+                                      fontSize: 12,
+                                      height: 1.5,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                     ),
             ),
           ],

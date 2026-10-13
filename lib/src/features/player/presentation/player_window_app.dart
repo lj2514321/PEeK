@@ -202,20 +202,18 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
     }
     final posAfterClose =
         _playbackKey.currentState?.currentPosition ?? Duration.zero;
-    final finalPos =
-        posAfterClose > Duration.zero ? posAfterClose : posBeforeClose;
+    final finalPos = posAfterClose > Duration.zero
+        ? posAfterClose
+        : posBeforeClose;
 
     // 3. Notify main window coordinator
     try {
       final currentItemId =
           _playbackKey.currentState?.currentItem.id ?? _payload.item.id;
-      await _channel.invokeMethod(
-        PlayerWindowProtocol.methodReportClosed,
-        {
-          'itemId': currentItemId,
-          'positionMs': finalPos.inMilliseconds,
-        },
-      );
+      await _channel.invokeMethod(PlayerWindowProtocol.methodReportClosed, {
+        'itemId': currentItemId,
+        'positionMs': finalPos.inMilliseconds,
+      });
     } catch (_) {}
 
     // 4. Clear preventClose so WM_CLOSE is handled normally by Windows, then destroy native subwindow
@@ -225,7 +223,9 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
       } catch (_) {}
 
       try {
-        await const MethodChannel('peek/subwindow').invokeMethod('destroyWindow');
+        await const MethodChannel(
+          'peek/subwindow',
+        ).invokeMethod('destroyWindow');
       } catch (_) {
         try {
           await windowManager.close();
@@ -250,10 +250,8 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
     // 2. Capture latest playback state
     final currentPos =
         _playbackKey.currentState?.currentPosition ?? Duration.zero;
-    final currentItem =
-        _playbackKey.currentState?.currentItem ?? _payload.item;
-    final currentPlan =
-        _playbackKey.currentState?.currentPlan ?? _payload.plan;
+    final currentItem = _playbackKey.currentState?.currentItem ?? _payload.item;
+    final currentPlan = _playbackKey.currentState?.currentPlan ?? _payload.plan;
     final currentQueue =
         _playbackKey.currentState?.currentQueue ?? _payload.queue;
     final isPlaying = _playbackKey.currentState?.isPlaying ?? true;
@@ -277,22 +275,20 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
 
     // 4. Notify main window coordinator to adopt playback in mini player
     try {
-      await _channel.invokeMethod(
-        PlayerWindowProtocol.methodHandoverToMiniPlayer,
-        {
-          'account': _payload.account?.toJson(),
-          'item': currentItem.toJson(),
-          'plan': currentPlan.toJson(),
-          'queue': currentQueue?.toJson(),
-          'positionMs': currentPos.inMilliseconds,
-          'playing': isPlaying,
-          'hardwareDecodingMode': _payload.hardwareDecodingMode.name,
-          'maxStreamingBitrate': currentBitrate.name,
-          'subtitlePreferences': currentSubPref.toJson(),
-          'skipIntroPreferences': currentSkipPref.toJson(),
-          'danmakuPreferences': currentDanmakuPref.toJson(),
-        },
-      );
+      await _channel
+          .invokeMethod(PlayerWindowProtocol.methodHandoverToMiniPlayer, {
+            'account': _payload.account?.toJson(),
+            'item': currentItem.toJson(),
+            'plan': currentPlan.toJson(),
+            'queue': currentQueue?.toJson(),
+            'positionMs': currentPos.inMilliseconds,
+            'playing': isPlaying,
+            'hardwareDecodingMode': _payload.hardwareDecodingMode.name,
+            'maxStreamingBitrate': currentBitrate.name,
+            'subtitlePreferences': currentSubPref.toJson(),
+            'skipIntroPreferences': currentSkipPref.toJson(),
+            'danmakuPreferences': currentDanmakuPref.toJson(),
+          });
     } catch (e) {
       debugPrint('[PlayerWindow] Error during handover to mini player: $e');
     }
@@ -308,7 +304,9 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
       } catch (_) {}
 
       try {
-        await const MethodChannel('peek/subwindow').invokeMethod('destroyWindow');
+        await const MethodChannel(
+          'peek/subwindow',
+        ).invokeMethod('destroyWindow');
       } catch (_) {
         try {
           await windowManager.close();
@@ -323,13 +321,10 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
         _payload = _payload.copyWith(item: item, plan: plan);
       });
     }
-    _channel.invokeMethod(
-      PlayerWindowProtocol.methodReportMediaChanged,
-      {
-        'item': item.toJson(),
-        'plan': plan.toJson(),
-      },
-    );
+    _channel.invokeMethod(PlayerWindowProtocol.methodReportMediaChanged, {
+      'item': item.toJson(),
+      'plan': plan.toJson(),
+    });
   }
 
   Future<void> _toggleAlwaysOnTop() async {
@@ -355,21 +350,18 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
   void _onProgressUpdated(Duration position, Duration duration, bool playing) {
     final currentItemId =
         _playbackKey.currentState?.currentItem.id ?? _payload.item.id;
-    _channel.invokeMethod(
-      PlayerWindowProtocol.methodReportProgress,
-      {
-        'itemId': currentItemId,
-        'positionMs': position.inMilliseconds,
-        'durationMs': duration.inMilliseconds,
-        'playing': playing,
-      },
-    );
+    _channel.invokeMethod(PlayerWindowProtocol.methodReportProgress, {
+      'itemId': currentItemId,
+      'positionMs': position.inMilliseconds,
+      'durationMs': duration.inMilliseconds,
+      'playing': playing,
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final isFloating = !_isMaximized && !_isFullScreen;
-    final radius = isFloating ? 12.0 : 0.0;
+    final radius = isFloating ? AppRadius.value : 0.0;
     final borderRadius = BorderRadius.circular(radius);
 
     return Scaffold(
@@ -382,18 +374,9 @@ class _PlayerWindowPageState extends State<PlayerWindowPage>
             borderRadius: borderRadius,
             border: isFloating
                 ? Border.all(
-                    color: Colors.white.withValues(alpha: 0.14),
+                    color: Colors.white.withValues(alpha: 0.16),
                     width: 1.0,
                   )
-                : null,
-            boxShadow: isFloating
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.60),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                    ),
-                  ]
                 : null,
           ),
           child: ClipRRect(

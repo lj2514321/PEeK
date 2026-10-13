@@ -43,9 +43,7 @@ class BangumiSubject {
 
   String get displayName => nameCn.isNotEmpty ? nameCn : name;
 
-  BangumiSubject copyWith({
-    BangumiCollectionType? userCollectionType,
-  }) {
+  BangumiSubject copyWith({BangumiCollectionType? userCollectionType}) {
     return BangumiSubject(
       id: id,
       name: name,
@@ -61,11 +59,12 @@ class BangumiSubject {
 
   factory BangumiSubject.fromJson(Map<String, dynamic> json) {
     final rating = json['rating'] as Map<String, dynamic>?;
-    final score = (rating?['score'] as num?)?.toDouble() ??
+    final score =
+        (rating?['score'] as num?)?.toDouble() ??
         (json['score'] as num?)?.toDouble() ??
         0.0;
-    final rank = (rating?['rank'] as num?)?.toInt() ??
-        (json['rank'] as num?)?.toInt();
+    final rank =
+        (rating?['rank'] as num?)?.toInt() ?? (json['rank'] as num?)?.toInt();
     final totalVotes = (rating?['total'] as num?)?.toInt() ?? 0;
 
     final tagsList = <String>[];

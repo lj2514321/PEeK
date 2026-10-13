@@ -218,7 +218,10 @@ class SecureTokenStore {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return null;
-      final deviceId = _string(decoded['deviceId'], await getOrCreateDeviceId());
+      final deviceId = _string(
+        decoded['deviceId'],
+        await getOrCreateDeviceId(),
+      );
       return _profileFromJson({...decoded, 'deviceId': deviceId});
     } catch (_) {
       return null;
@@ -228,7 +231,9 @@ class SecureTokenStore {
   List<ServerProfile> _decodeProfiles(String raw) {
     try {
       final decoded = jsonDecode(raw);
-      final values = decoded is Map<String, dynamic> ? decoded['profiles'] : null;
+      final values = decoded is Map<String, dynamic>
+          ? decoded['profiles']
+          : null;
       if (values is! List) return <ServerProfile>[];
       return values
           .whereType<Map<String, dynamic>>()

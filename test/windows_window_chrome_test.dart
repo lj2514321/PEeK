@@ -9,11 +9,11 @@ void main() {
     expect(source, contains('#define DWMWA_BORDER_COLOR 34'));
     expect(source, contains('#define DWMWA_COLOR_NONE 0xFFFFFFFE'));
     expect(source, contains('#define DWMWA_WINDOW_CORNER_PREFERENCE 33'));
-    expect(source, contains('kDwmCornerPreferenceRound = 2'));
+    expect(source, contains('kDwmCornerPreferenceDoNotRound = 1'));
     expect(
       source,
       contains(
-        'DwmSetWindowAttribute(window, DWMWA_BORDER_COLOR, &border_color,',
+        'DwmSetWindowAttribute(window, DWMWA_BORDER_COLOR, &color_none,',
       ),
     );
     expect(source, contains('WS_OVERLAPPEDWINDOW'));

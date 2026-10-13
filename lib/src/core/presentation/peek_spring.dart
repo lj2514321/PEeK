@@ -38,20 +38,20 @@ class PeekSprings {
 class PeekCurves {
   const PeekCurves._();
 
-  /// Spatial drop-in curve with natural deceleration and zero jerk.
-  static const Curve spatialEnter = Cubic(0.08, 0.94, 0.22, 1.0);
+  /// Spatial drop-in curve with balanced acceleration and silky deceleration.
+  static const Curve spatialEnter = Cubic(0.22, 0.84, 0.26, 1.0);
 
   /// Depth recess curve for background elements retreating along Z-axis.
-  static const Curve depthRecess = Cubic(0.2, 0.0, 0.0, 1.0);
+  static const Curve depthRecess = Cubic(0.24, 0.08, 0.22, 1.0);
 
   /// Fluid elongation curve for jelly squash & stretch acceleration.
-  static const Curve jellyStretch = Cubic(0.16, 1.0, 0.3, 1.0);
+  static const Curve jellyStretch = Cubic(0.20, 0.88, 0.28, 1.0);
 
   /// Micro-overshoot spring bounce for settling into place.
-  static const Curve springSnap = Cubic(0.34, 1.45, 0.64, 1.0);
+  static const Curve springSnap = Cubic(0.34, 1.38, 0.64, 1.0);
 
   /// Silky smooth cinema dissolve curve.
-  static const Curve cinemaFade = Cubic(0.12, 0.88, 0.22, 1.0);
+  static const Curve cinemaFade = Cubic(0.22, 0.80, 0.26, 1.0);
 }
 
 /// A smooth physics-inspired spring animated builder for a target double value.
@@ -87,10 +87,8 @@ class _PeekSpringValueBuilderState extends State<PeekSpringValueBuilder>
     super.initState();
     _from = widget.value;
     _target = widget.value;
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    )..addListener(() => setState(() {}));
+    _controller = AnimationController(vsync: this, duration: widget.duration)
+      ..addListener(() => setState(() {}));
   }
 
   @override

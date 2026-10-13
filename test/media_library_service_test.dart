@@ -63,7 +63,10 @@ void main() {
 
     expect(request?.uri.path, '/Users/user-id/Items');
     expect(request?.uri.queryParameters['Recursive'], 'true');
-    expect(request?.uri.queryParameters['IncludeItemTypes'], 'Movie,Series,Episode,Video');
+    expect(
+      request?.uri.queryParameters['IncludeItemTypes'],
+      'Movie,Series,Episode,Video',
+    );
     expect(request?.uri.queryParameters['Fields'], 'People');
     expect(request?.uri.queryParameters.containsKey('ParentId'), isFalse);
     expect(request?.uri.queryParameters['StartIndex'], '0');
@@ -391,15 +394,16 @@ void main() {
         ),
       );
 
-    await MediaLibraryService(dio).getItems(
-      account,
-      parentId: 'movies-id',
-      collapseBoxSets: true,
-    );
+    await MediaLibraryService(
+      dio,
+    ).getItems(account, parentId: 'movies-id', collapseBoxSets: true);
 
     expect(request?.uri.queryParameters['CollapseBoxSetItems'], 'true');
     expect(request?.uri.queryParameters['GroupItemsIntoCollections'], 'true');
-    expect(request?.uri.queryParameters.containsKey('ExcludeItemTypes'), isFalse);
+    expect(
+      request?.uri.queryParameters.containsKey('ExcludeItemTypes'),
+      isFalse,
+    );
   });
 
   test('does not exclude BoxSet when collectionType is boxsets', () async {
@@ -420,13 +424,14 @@ void main() {
         ),
       );
 
-    await MediaLibraryService(dio).getItems(
-      account,
-      parentId: 'boxsets-id',
-      collectionType: 'boxsets',
-    );
+    await MediaLibraryService(
+      dio,
+    ).getItems(account, parentId: 'boxsets-id', collectionType: 'boxsets');
 
-    expect(request?.uri.queryParameters.containsKey('ExcludeItemTypes'), isFalse);
+    expect(
+      request?.uri.queryParameters.containsKey('ExcludeItemTypes'),
+      isFalse,
+    );
   });
 
   test('loads global favorites across all media libraries', () async {
@@ -989,7 +994,7 @@ void main() {
     );
     expect(requestCount, 2);
 
-    now = DateTime(2026, 7, 19, 0, 1);
+    now = DateTime(2026, 7, 20, 0, 0);
     expect(
       (await service.getRecommendations(account)).single.id,
       'recommendation-3',
@@ -1044,339 +1049,358 @@ void main() {
     expect(items.single.id, 'random-id');
   });
 
-  test('searchRemoteSubtitles sends correct Jellyfin API request and parses results', () async {
-    RequestOptions? request;
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            request = options;
-            handler.resolve(
-              Response<List<dynamic>>(
-                requestOptions: options,
-                statusCode: 200,
-                data: [
-                  {
-                    'Id': 'sub-123',
-                    'Name': '正片中英双语字幕',
-                    'ProviderName': 'OpenSubtitles',
-                    'Format': 'srt',
-                    'Comment': '4K 蓝光',
-                  },
-                ],
-              ),
-            );
-          },
-        ),
-      );
-
-    final subs = await MediaLibraryService(dio).searchRemoteSubtitles(
-      account,
-      itemId: 'item-100',
-      language: 'chi',
-    );
-
-    expect(request?.uri.path, '/Items/item-100/RemoteSearch/Subtitles/chi');
-    expect(subs, hasLength(1));
-    expect(subs.first.id, 'sub-123');
-    expect(subs.first.name, '正片中英双语字幕');
-    expect(subs.first.providerName, 'OpenSubtitles');
-  });
-
-  test('downloadRemoteSubtitle sends POST request to Jellyfin server', () async {
-    RequestOptions? request;
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            request = options;
-            handler.resolve(
-              Response<void>(
-                requestOptions: options,
-                statusCode: 200,
-              ),
-            );
-          },
-        ),
-      );
-
-    final success = await MediaLibraryService(dio).downloadRemoteSubtitle(
-      account,
-      itemId: 'item-100',
-      subtitleId: 'sub-123',
-    );
-
-    expect(request?.method, 'POST');
-    expect(request?.uri.path, '/Items/item-100/RemoteSearch/Subtitles/sub-123');
-    expect(success, isTrue);
-  });
-
-  test('searchRemoteMetadata sends POST request to Items/RemoteSearch/{Type} and parses results', () async {
-    RequestOptions? request;
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            request = options;
-            handler.resolve(
-              Response<List<dynamic>>(
-                requestOptions: options,
-                statusCode: 200,
-                data: [
-                  {
-                    'Name': '奥本海默',
-                    'OriginalTitle': 'Oppenheimer',
-                    'ProductionYear': 2023,
-                    'ImageUrl': 'https://image.tmdb.org/t/p/w500/oppenheimer.jpg',
-                    'Overview': '物理学家奥本海默领导曼哈顿计划的故事。',
-                    'ProviderIds': {'Tmdb': '872585', 'Imdb': 'tt15398776'},
-                  },
-                ],
-              ),
-            );
-          },
-        ),
-      );
-
-    final results = await MediaLibraryService(dio).searchRemoteMetadata(
-      account,
-      itemId: 'movie-100',
-      kind: MediaItemKind.movie,
-      name: '奥本海默',
-      year: 2023,
-      providerIds: const {'Tmdb': '872585'},
-    );
-
-    expect(request?.method, 'POST');
-    expect(request?.uri.path, '/Items/RemoteSearch/Movie');
-    expect(request?.headers['X-Emby-Token'], 'secret-token');
-    final body = request?.data as Map<String, dynamic>?;
-    expect(body?['ItemId'], 'movie-100');
-    final searchInfo = body?['SearchInfo'] as Map<String, dynamic>?;
-    expect(searchInfo?['Name'], '奥本海默');
-    expect(searchInfo?['Year'], 2023);
-    expect(searchInfo?['ProviderIds'], {'Tmdb': '872585'});
-
-    expect(results, hasLength(1));
-    final first = results.first;
-    expect(first.name, '奥本海默');
-    expect(first.originalTitle, 'Oppenheimer');
-    expect(first.productionYear, 2023);
-    expect(first.imageUrl, 'https://image.tmdb.org/t/p/w500/oppenheimer.jpg');
-    expect(first.overview, '物理学家奥本海默领导曼哈顿计划的故事。');
-    expect(first.providerIds['Tmdb'], '872585');
-    expect(first.providerIds['Imdb'], 'tt15398776');
-  });
-
-  test('searchRemoteMetadata handles response wrapped in Items map for Series', () async {
-    RequestOptions? request;
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            request = options;
-            handler.resolve(
-              Response<Map<String, dynamic>>(
-                requestOptions: options,
-                statusCode: 200,
-                data: const {
-                  'Items': [
-                    {
-                      'Name': '黑镜',
-                      'ProductionYear': 2011,
-                      'ProviderIds': {'Tmdb': '42009'},
-                    },
-                  ],
-                },
-              ),
-            );
-          },
-        ),
-      );
-
-    final results = await MediaLibraryService(dio).searchRemoteMetadata(
-      account,
-      itemId: 'series-200',
-      kind: MediaItemKind.series,
-      name: '黑镜',
-    );
-
-    expect(request?.method, 'POST');
-    expect(request?.uri.path, '/Items/RemoteSearch/Series');
-    expect(results, hasLength(1));
-    expect(results.first.name, '黑镜');
-    expect(results.first.productionYear, 2011);
-  });
-
-  test('applyRemoteMetadata sends POST to Items/RemoteSearch/Apply/:itemId and invalidates cache', () async {
-    RequestOptions? request;
-    final trackingCache = _TrackingCacheStore();
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            request = options;
-            handler.resolve(
-              Response<void>(
-                requestOptions: options,
-                statusCode: 204,
-              ),
-            );
-          },
-        ),
-      );
-
-    final candidate = RemoteSearchResult.fromJson(const {
-      'Name': '奥本海默',
-      'ProductionYear': 2023,
-      'ProviderIds': {'Tmdb': '872585'},
-    });
-
-    await MediaLibraryService(dio, trackingCache).applyRemoteMetadata(
-      account,
-      itemId: 'item-100',
-      result: candidate,
-      replaceAllImages: true,
-    );
-
-    expect(request?.method, 'POST');
-    expect(request?.uri.path, '/Items/RemoteSearch/Apply/item-100');
-    expect(request?.uri.queryParameters['ReplaceAllImages'], 'true');
-    expect(request?.headers['X-Emby-Token'], 'secret-token');
-    expect(request?.data, candidate.rawPayload);
-    expect(trackingCache.clearCount, 1);
-  });
-
-  test('getExternalIdInfos fetches external providers including plugins like Douban and Bangumi', () async {
-    RequestOptions? request;
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            request = options;
-            handler.resolve(
-              Response<List<dynamic>>(
-                requestOptions: options,
-                statusCode: 200,
-                data: [
-                  {'Name': 'TheMovieDb', 'Key': 'Tmdb', 'Type': 'Movie'},
-                  {'Name': 'IMDb', 'Key': 'Imdb', 'Type': 'Movie'},
-                  {'Name': '豆瓣', 'Key': 'Douban', 'Type': 'Movie'},
-                  {'Name': 'Bangumi', 'Key': 'Bangumi', 'Type': 'Series'},
-                ],
-              ),
-            );
-          },
-        ),
-      );
-
-    final providers = await MediaLibraryService(dio).getExternalIdInfos(
-      account,
-      itemId: 'item-movie-1',
-    );
-
-    expect(request?.method, 'GET');
-    expect(request?.uri.path, '/Items/item-movie-1/ExternalIdInfos');
-    expect(request?.headers['X-Emby-Token'], 'secret-token');
-    expect(providers, hasLength(4));
-    expect(providers.map((p) => p.name).toList(), ['TheMovieDb', 'IMDb', '豆瓣', 'Bangumi']);
-    expect(providers.map((p) => p.key).toList(), ['Tmdb', 'Imdb', 'Douban', 'Bangumi']);
-  });
-
-  test('getCollectionsForItem returns collections from primary /Items/{id}/Collections', () async {
-    RequestOptions? request;
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            request = options;
-            handler.resolve(
-              Response<Map<String, dynamic>>(
-                requestOptions: options,
-                statusCode: 200,
-                data: const {
-                  'TotalRecordCount': 1,
-                  'Items': [
-                    {
-                      'Id': 'boxset-matrix',
-                      'Name': '黑客帝国（系列）',
-                      'Type': 'BoxSet',
-                      'Overview': 'Matrix trilogy collection',
-                    },
-                  ],
-                },
-              ),
-            );
-          },
-        ),
-      );
-
-    final collections = await MediaLibraryService(dio).getCollectionsForItem(
-      account,
-      'movie-matrix-1',
-    );
-
-    expect(request?.uri.path, '/Items/movie-matrix-1/Collections');
-    expect(request?.uri.queryParameters['UserId'], 'user-id');
-    expect(collections, hasLength(1));
-    expect(collections.first.id, 'boxset-matrix');
-    expect(collections.first.name, '黑客帝国（系列）');
-    expect(collections.first.kind, MediaItemKind.folder);
-  });
-
-  test('getCollectionsForItem falls back to /Items/{id}/Ancestors when /Collections is unavailable', () async {
-    final requestedPaths = <String>[];
-    final dio = Dio()
-      ..interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) {
-            requestedPaths.add(options.uri.path);
-            if (options.uri.path.contains('/Collections')) {
-              handler.reject(
-                DioException(
-                  requestOptions: options,
-                  response: Response(
-                    requestOptions: options,
-                    statusCode: 404,
-                  ),
-                  type: DioExceptionType.badResponse,
-                ),
-              );
-            } else {
+  test(
+    'searchRemoteSubtitles sends correct Jellyfin API request and parses results',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
               handler.resolve(
                 Response<List<dynamic>>(
                   requestOptions: options,
                   statusCode: 200,
-                  data: const [
+                  data: [
                     {
-                      'Id': 'boxset-lotr',
-                      'Name': '指环王三部曲',
-                      'Type': 'BoxSet',
-                    },
-                    {
-                      'Id': 'folder-movies',
-                      'Name': '电影库',
-                      'Type': 'Folder',
+                      'Id': 'sub-123',
+                      'Name': '正片中英双语字幕',
+                      'ProviderName': 'OpenSubtitles',
+                      'Format': 'srt',
+                      'Comment': '4K 蓝光',
                     },
                   ],
                 ),
               );
-            }
-          },
-        ),
+            },
+          ),
+        );
+
+      final subs = await MediaLibraryService(
+        dio,
+      ).searchRemoteSubtitles(account, itemId: 'item-100', language: 'chi');
+
+      expect(request?.uri.path, '/Items/item-100/RemoteSearch/Subtitles/chi');
+      expect(subs, hasLength(1));
+      expect(subs.first.id, 'sub-123');
+      expect(subs.first.name, '正片中英双语字幕');
+      expect(subs.first.providerName, 'OpenSubtitles');
+    },
+  );
+
+  test(
+    'downloadRemoteSubtitle sends POST request to Jellyfin server',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
+              handler.resolve(
+                Response<void>(requestOptions: options, statusCode: 200),
+              );
+            },
+          ),
+        );
+
+      final success = await MediaLibraryService(dio).downloadRemoteSubtitle(
+        account,
+        itemId: 'item-100',
+        subtitleId: 'sub-123',
       );
 
-    final collections = await MediaLibraryService(dio).getCollectionsForItem(
-      account,
-      'movie-lotr-1',
-    );
+      expect(request?.method, 'POST');
+      expect(
+        request?.uri.path,
+        '/Items/item-100/RemoteSearch/Subtitles/sub-123',
+      );
+      expect(success, isTrue);
+    },
+  );
 
-    expect(requestedPaths, contains('/Items/movie-lotr-1/Collections'));
-    expect(requestedPaths, contains('/Items/movie-lotr-1/Ancestors'));
-    expect(collections, hasLength(1));
-    expect(collections.first.id, 'boxset-lotr');
-    expect(collections.first.name, '指环王三部曲');
-  });
+  test(
+    'searchRemoteMetadata sends POST request to Items/RemoteSearch/{Type} and parses results',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
+              handler.resolve(
+                Response<List<dynamic>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: [
+                    {
+                      'Name': '奥本海默',
+                      'OriginalTitle': 'Oppenheimer',
+                      'ProductionYear': 2023,
+                      'ImageUrl':
+                          'https://image.tmdb.org/t/p/w500/oppenheimer.jpg',
+                      'Overview': '物理学家奥本海默领导曼哈顿计划的故事。',
+                      'ProviderIds': {'Tmdb': '872585', 'Imdb': 'tt15398776'},
+                    },
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+
+      final results = await MediaLibraryService(dio).searchRemoteMetadata(
+        account,
+        itemId: 'movie-100',
+        kind: MediaItemKind.movie,
+        name: '奥本海默',
+        year: 2023,
+        providerIds: const {'Tmdb': '872585'},
+      );
+
+      expect(request?.method, 'POST');
+      expect(request?.uri.path, '/Items/RemoteSearch/Movie');
+      expect(request?.headers['X-Emby-Token'], 'secret-token');
+      final body = request?.data as Map<String, dynamic>?;
+      expect(body?['ItemId'], 'movie-100');
+      final searchInfo = body?['SearchInfo'] as Map<String, dynamic>?;
+      expect(searchInfo?['Name'], '奥本海默');
+      expect(searchInfo?['Year'], 2023);
+      expect(searchInfo?['ProviderIds'], {'Tmdb': '872585'});
+
+      expect(results, hasLength(1));
+      final first = results.first;
+      expect(first.name, '奥本海默');
+      expect(first.originalTitle, 'Oppenheimer');
+      expect(first.productionYear, 2023);
+      expect(first.imageUrl, 'https://image.tmdb.org/t/p/w500/oppenheimer.jpg');
+      expect(first.overview, '物理学家奥本海默领导曼哈顿计划的故事。');
+      expect(first.providerIds['Tmdb'], '872585');
+      expect(first.providerIds['Imdb'], 'tt15398776');
+    },
+  );
+
+  test(
+    'searchRemoteMetadata handles response wrapped in Items map for Series',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
+              handler.resolve(
+                Response<Map<String, dynamic>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: const {
+                    'Items': [
+                      {
+                        'Name': '黑镜',
+                        'ProductionYear': 2011,
+                        'ProviderIds': {'Tmdb': '42009'},
+                      },
+                    ],
+                  },
+                ),
+              );
+            },
+          ),
+        );
+
+      final results = await MediaLibraryService(dio).searchRemoteMetadata(
+        account,
+        itemId: 'series-200',
+        kind: MediaItemKind.series,
+        name: '黑镜',
+      );
+
+      expect(request?.method, 'POST');
+      expect(request?.uri.path, '/Items/RemoteSearch/Series');
+      expect(results, hasLength(1));
+      expect(results.first.name, '黑镜');
+      expect(results.first.productionYear, 2011);
+    },
+  );
+
+  test(
+    'applyRemoteMetadata sends POST to Items/RemoteSearch/Apply/:itemId and invalidates cache',
+    () async {
+      RequestOptions? request;
+      final trackingCache = _TrackingCacheStore();
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
+              handler.resolve(
+                Response<void>(requestOptions: options, statusCode: 204),
+              );
+            },
+          ),
+        );
+
+      final candidate = RemoteSearchResult.fromJson(const {
+        'Name': '奥本海默',
+        'ProductionYear': 2023,
+        'ProviderIds': {'Tmdb': '872585'},
+      });
+
+      await MediaLibraryService(dio, trackingCache).applyRemoteMetadata(
+        account,
+        itemId: 'item-100',
+        result: candidate,
+        replaceAllImages: true,
+      );
+
+      expect(request?.method, 'POST');
+      expect(request?.uri.path, '/Items/RemoteSearch/Apply/item-100');
+      expect(request?.uri.queryParameters['ReplaceAllImages'], 'true');
+      expect(request?.headers['X-Emby-Token'], 'secret-token');
+      expect(request?.data, candidate.rawPayload);
+      expect(trackingCache.clearCount, 1);
+    },
+  );
+
+  test(
+    'getExternalIdInfos fetches external providers including plugins like Douban and Bangumi',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
+              handler.resolve(
+                Response<List<dynamic>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: [
+                    {'Name': 'TheMovieDb', 'Key': 'Tmdb', 'Type': 'Movie'},
+                    {'Name': 'IMDb', 'Key': 'Imdb', 'Type': 'Movie'},
+                    {'Name': '豆瓣', 'Key': 'Douban', 'Type': 'Movie'},
+                    {'Name': 'Bangumi', 'Key': 'Bangumi', 'Type': 'Series'},
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+
+      final providers = await MediaLibraryService(
+        dio,
+      ).getExternalIdInfos(account, itemId: 'item-movie-1');
+
+      expect(request?.method, 'GET');
+      expect(request?.uri.path, '/Items/item-movie-1/ExternalIdInfos');
+      expect(request?.headers['X-Emby-Token'], 'secret-token');
+      expect(providers, hasLength(4));
+      expect(providers.map((p) => p.name).toList(), [
+        'TheMovieDb',
+        'IMDb',
+        '豆瓣',
+        'Bangumi',
+      ]);
+      expect(providers.map((p) => p.key).toList(), [
+        'Tmdb',
+        'Imdb',
+        'Douban',
+        'Bangumi',
+      ]);
+    },
+  );
+
+  test(
+    'getCollectionsForItem returns collections from primary /Items/{id}/Collections',
+    () async {
+      RequestOptions? request;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              request = options;
+              handler.resolve(
+                Response<Map<String, dynamic>>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: const {
+                    'TotalRecordCount': 1,
+                    'Items': [
+                      {
+                        'Id': 'boxset-matrix',
+                        'Name': '黑客帝国（系列）',
+                        'Type': 'BoxSet',
+                        'Overview': 'Matrix trilogy collection',
+                      },
+                    ],
+                  },
+                ),
+              );
+            },
+          ),
+        );
+
+      final collections = await MediaLibraryService(
+        dio,
+      ).getCollectionsForItem(account, 'movie-matrix-1');
+
+      expect(request?.uri.path, '/Items/movie-matrix-1/Collections');
+      expect(request?.uri.queryParameters['UserId'], 'user-id');
+      expect(collections, hasLength(1));
+      expect(collections.first.id, 'boxset-matrix');
+      expect(collections.first.name, '黑客帝国（系列）');
+      expect(collections.first.kind, MediaItemKind.folder);
+    },
+  );
+
+  test(
+    'getCollectionsForItem falls back to /Items/{id}/Ancestors when /Collections is unavailable',
+    () async {
+      final requestedPaths = <String>[];
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requestedPaths.add(options.uri.path);
+              if (options.uri.path.contains('/Collections')) {
+                handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 404,
+                    ),
+                    type: DioExceptionType.badResponse,
+                  ),
+                );
+              } else {
+                handler.resolve(
+                  Response<List<dynamic>>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: const [
+                      {'Id': 'boxset-lotr', 'Name': '指环王三部曲', 'Type': 'BoxSet'},
+                      {'Id': 'folder-movies', 'Name': '电影库', 'Type': 'Folder'},
+                    ],
+                  ),
+                );
+              }
+            },
+          ),
+        );
+
+      final collections = await MediaLibraryService(
+        dio,
+      ).getCollectionsForItem(account, 'movie-lotr-1');
+
+      expect(requestedPaths, contains('/Items/movie-lotr-1/Collections'));
+      expect(requestedPaths, contains('/Items/movie-lotr-1/Ancestors'));
+      expect(collections, hasLength(1));
+      expect(collections.first.id, 'boxset-lotr');
+      expect(collections.first.name, '指环王三部曲');
+    },
+  );
 
   test('getCollectionItems fetches items inside the collection', () async {
     RequestOptions? request;
@@ -1402,10 +1426,9 @@ void main() {
         ),
       );
 
-    final items = await MediaLibraryService(dio).getCollectionItems(
-      account,
-      'boxset-matrix',
-    );
+    final items = await MediaLibraryService(
+      dio,
+    ).getCollectionItems(account, 'boxset-matrix');
 
     expect(request?.uri.path, '/Users/user-id/Items');
     expect(request?.uri.queryParameters['ParentId'], 'boxset-matrix');
@@ -1419,7 +1442,7 @@ class _TrackingCacheStore implements MediaCacheStore {
   int clearCount = 0;
 
   @override
-  Future<void> clear() async {
+  Future<void> clear({bool preserveRecommendations = false}) async {
     clearCount += 1;
   }
 

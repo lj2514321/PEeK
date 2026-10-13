@@ -118,9 +118,7 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final store = JsonPlaybackSettingsStore(directory: directory);
 
-    await store.write(
-      const PlaybackSettings(enableMiniPlayer: false),
-    );
+    await store.write(const PlaybackSettings(enableMiniPlayer: false));
 
     final restored = await store.read();
     expect(restored.enableMiniPlayer, isFalse);
@@ -136,7 +134,8 @@ void main() {
     await store.write(
       const PlaybackSettings(
         useExternalPlayer: true,
-        externalPlayerPath: r'F:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe',
+        externalPlayerPath:
+            r'F:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe',
       ),
     );
 
@@ -155,28 +154,29 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final store = JsonPlaybackSettingsStore(directory: directory);
 
-    await store.write(
-      const PlaybackSettings(longPressSpeed: 2.5),
-    );
+    await store.write(const PlaybackSettings(longPressSpeed: 2.5));
 
     final restored = await store.read();
     expect(restored.longPressSpeed, 2.5);
   });
 
-  test('falls back to 2.0 for missing longPressSpeed in legacy settings', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'peek-playback-settings-',
-    );
-    addTearDown(() => directory.delete(recursive: true));
-    final file = File(
-      '${directory.path}${Platform.pathSeparator}playback_settings_v1.json',
-    );
-    await file.writeAsString('{"version":2,"maxStreamingBitrate":"mbps20"}');
+  test(
+    'falls back to 2.0 for missing longPressSpeed in legacy settings',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'peek-playback-settings-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}playback_settings_v1.json',
+      );
+      await file.writeAsString('{"version":2,"maxStreamingBitrate":"mbps20"}');
 
-    final restored = await JsonPlaybackSettingsStore(
-      directory: directory,
-    ).read();
+      final restored = await JsonPlaybackSettingsStore(
+        directory: directory,
+      ).read();
 
-    expect(restored.longPressSpeed, 2.0);
-  });
+      expect(restored.longPressSpeed, 2.0);
+    },
+  );
 }

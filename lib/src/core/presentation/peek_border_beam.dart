@@ -8,7 +8,7 @@ class PeekBorderBeam extends StatefulWidget {
   const PeekBorderBeam({
     super.key,
     required this.child,
-    this.borderRadius = const BorderRadius.all(Radius.circular(20)),
+    this.borderRadius = AppRadius.borderRadius,
     this.borderWidth = 1.4,
     this.beamColor = AppColors.spotlight,
     this.secondaryColor = AppColors.spotlightLight,
@@ -36,10 +36,8 @@ class _PeekBorderBeamState extends State<PeekBorderBeam>
   void initState() {
     super.initState();
     if (!AppMotion.isTest && widget.active) {
-      _controller = AnimationController(
-        vsync: this,
-        duration: widget.duration,
-      )..repeat();
+      _controller = AnimationController(vsync: this, duration: widget.duration)
+        ..repeat();
     }
   }
 
@@ -48,10 +46,8 @@ class _PeekBorderBeamState extends State<PeekBorderBeam>
     super.didUpdateWidget(oldWidget);
     if (AppMotion.isTest) return;
     if (widget.active && _controller == null) {
-      _controller = AnimationController(
-        vsync: this,
-        duration: widget.duration,
-      )..repeat();
+      _controller = AnimationController(vsync: this, duration: widget.duration)
+        ..repeat();
     } else if (!widget.active && _controller != null) {
       _controller?.stop();
     }

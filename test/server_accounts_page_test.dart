@@ -117,9 +117,7 @@ void main() {
     await tester.pumpWidget(
       _app(
         state: _state(),
-        playbackSettings: const PlaybackSettings(
-          longPressSpeed: 2.0,
-        ),
+        playbackSettings: const PlaybackSettings(longPressSpeed: 2.0),
         onLongPressSpeedChanged: (value) => selected = value,
       ),
     );

@@ -82,93 +82,96 @@ class ServerAccountsPage extends StatelessWidget {
         return PeekSmoothScroll(
           child: SingleChildScrollView(
             key: const ValueKey('server-accounts-page'),
-          padding: EdgeInsets.fromLTRB(padding, 32, padding, 48),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1180),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _PageHeader(compact: compact, onAddServer: onAddServer),
-                  const SizedBox(height: 24),
-                  PlaybackSettingsSection(
-                    settings: playbackSettings,
-                    loading: playbackSettingsLoading,
-                    saving: playbackSettingsSaving,
-                    error: playbackSettingsError,
-                    onBitrateChanged: onPlaybackBitrateChanged,
-                    onHardwareDecodingModeChanged:
-                        onHardwareDecodingModeChanged,
-                    onLongPressSpeedChanged: onLongPressSpeedChanged,
-                    onEnableMiniPlayerChanged: onEnableMiniPlayerChanged,
-                    onUseExternalPlayerChanged: onUseExternalPlayerChanged,
-                    onExternalPlayerPathChanged: onExternalPlayerPathChanged,
-                  ),
-                  const SizedBox(height: 32),
-                  _LocalLibrarySection(
-                    libraries: localLibraries,
-                    adding: addingLocalLibrary,
-                    busyLibraryId: busyLocalLibraryId,
-                    onAdd: onAddLocalLibrary,
-                    onRemove: onRemoveLocalLibrary,
-                  ),
-                  const SizedBox(height: 32),
-                  const _BangumiSettingsSection(),
-                  const SizedBox(height: 32),
-                  Text('服务器与账户', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 14),
-                  _ActiveSourceStage(
-                    state: state,
-                    compact: compact,
-                    onAddServer: onAddServer,
-                    onGoHome: onGoHome,
-                  ),
-                  const SizedBox(height: 32),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '已保存的放映源',
-                          style: Theme.of(context).textTheme.titleLarge,
+            padding: EdgeInsets.fromLTRB(padding, 32, padding, 48),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1180),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _PageHeader(compact: compact, onAddServer: onAddServer),
+                    const SizedBox(height: 24),
+                    PlaybackSettingsSection(
+                      settings: playbackSettings,
+                      loading: playbackSettingsLoading,
+                      saving: playbackSettingsSaving,
+                      error: playbackSettingsError,
+                      onBitrateChanged: onPlaybackBitrateChanged,
+                      onHardwareDecodingModeChanged:
+                          onHardwareDecodingModeChanged,
+                      onLongPressSpeedChanged: onLongPressSpeedChanged,
+                      onEnableMiniPlayerChanged: onEnableMiniPlayerChanged,
+                      onUseExternalPlayerChanged: onUseExternalPlayerChanged,
+                      onExternalPlayerPathChanged: onExternalPlayerPathChanged,
+                    ),
+                    const SizedBox(height: 32),
+                    _LocalLibrarySection(
+                      libraries: localLibraries,
+                      adding: addingLocalLibrary,
+                      busyLibraryId: busyLocalLibraryId,
+                      onAdd: onAddLocalLibrary,
+                      onRemove: onRemoveLocalLibrary,
+                    ),
+                    const SizedBox(height: 32),
+                    const _BangumiSettingsSection(),
+                    const SizedBox(height: 32),
+                    Text(
+                      '服务器与账户',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 14),
+                    _ActiveSourceStage(
+                      state: state,
+                      compact: compact,
+                      onAddServer: onAddServer,
+                      onGoHome: onGoHome,
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '已保存的放映源',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
                         ),
-                      ),
-                      Text(
-                        '${accounts.length} 个账户',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  if (accounts.isEmpty)
-                    _EmptyAccounts(onAddServer: onAddServer)
-                  else
-                    for (var index = 0; index < accounts.length; index++) ...[
-                      _ServerAccountCard(
-                        account: accounts[index],
-                        active: accounts[index].profile.id == activeId,
-                        compact: compact,
-                        busy: accounts[index].profile.id == busyProfileId,
-                        onSwitch: () => onSwitch(accounts[index]),
-                        onLogin: () => onLogin(accounts[index]),
-                        onLogout: () =>
-                            _confirmLogout(context, accounts[index]),
-                        onRemove: () =>
-                            _confirmRemove(context, accounts[index]),
-                      ),
-                      if (index != accounts.length - 1)
-                        const SizedBox(height: 12),
-                    ],
-                  const SizedBox(height: 24),
-                  const _SecurityNote(),
-                ],
+                        Text(
+                          '${accounts.length} 个账户',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (accounts.isEmpty)
+                      _EmptyAccounts(onAddServer: onAddServer)
+                    else
+                      for (var index = 0; index < accounts.length; index++) ...[
+                        _ServerAccountCard(
+                          account: accounts[index],
+                          active: accounts[index].profile.id == activeId,
+                          compact: compact,
+                          busy: accounts[index].profile.id == busyProfileId,
+                          onSwitch: () => onSwitch(accounts[index]),
+                          onLogin: () => onLogin(accounts[index]),
+                          onLogout: () =>
+                              _confirmLogout(context, accounts[index]),
+                          onRemove: () =>
+                              _confirmRemove(context, accounts[index]),
+                        ),
+                        if (index != accounts.length - 1)
+                          const SizedBox(height: 12),
+                      ],
+                    const SizedBox(height: 24),
+                    const _SecurityNote(),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
   Future<void> _confirmLogout(
     BuildContext context,
@@ -939,7 +942,8 @@ class _BangumiSettingsSection extends StatefulWidget {
   const _BangumiSettingsSection();
 
   @override
-  State<_BangumiSettingsSection> createState() => _BangumiSettingsSectionState();
+  State<_BangumiSettingsSection> createState() =>
+      _BangumiSettingsSectionState();
 }
 
 class _BangumiSettingsSectionState extends State<_BangumiSettingsSection> {
@@ -1009,68 +1013,68 @@ class _BangumiSettingsSectionState extends State<_BangumiSettingsSection> {
           decoration: AppGlass.decoration(radius: 20, elevated: false),
           child: Row(
             children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF09199).withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.tv_rounded,
-                        color: Color(0xFFF09199),
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _profile != null
-                                ? '${_profile!.nickname} (@${_profile!.username})'
-                                : '番组计划账号绑定',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _profile != null
-                                ? '自动打卡已${_profile!.autoScrobble ? '开启' : '关闭'} · 播放进度达到 80% 自动上报标记已看'
-                                : '绑定 Bangumi 开发者访问令牌后，可在播放完动画时自动打卡，并在媒体详情页同步番组评分与排名。',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary.withValues(alpha: 0.85),
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF09199).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.tv_rounded,
+                  color: Color(0xFFF09199),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _profile != null
+                          ? '${_profile!.nickname} (@${_profile!.username})'
+                          : '番组计划账号绑定',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFF09199),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                      ),
-                      onPressed: _openBindingDialog,
-                      child: Text(
-                        _profile != null ? '管理联动' : '绑定账号',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                    const SizedBox(height: 4),
+                    Text(
+                      _profile != null
+                          ? '自动打卡已${_profile!.autoScrobble ? '开启' : '关闭'} · 播放进度达到 80% 自动上报标记已看'
+                          : '绑定 Bangumi 开发者访问令牌后，可在播放完动画时自动打卡，并在媒体详情页同步番组评分与排名。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary.withValues(alpha: 0.85),
+                        height: 1.4,
                       ),
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: 16),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF09199),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                ),
+                onPressed: _openBindingDialog,
+                child: Text(
+                  _profile != null ? '管理联动' : '绑定账号',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

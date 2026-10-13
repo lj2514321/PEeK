@@ -11,11 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class IdentifyDialog extends ConsumerStatefulWidget {
-  const IdentifyDialog({
-    super.key,
-    required this.account,
-    required this.item,
-  });
+  const IdentifyDialog({super.key, required this.account, required this.item});
 
   final AuthenticatedServer account;
   final MediaItem item;
@@ -51,7 +47,9 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
 
     for (final entry in widget.item.providerIds.entries) {
       if (entry.value.isNotEmpty) {
-        _providerControllers[entry.key] = TextEditingController(text: entry.value);
+        _providerControllers[entry.key] = TextEditingController(
+          text: entry.value,
+        );
         _showAdvancedIds = true;
       }
     }
@@ -305,7 +303,8 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
                   suffixIcon: _nameController.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear_rounded, size: 16),
-                          onPressed: () => setState(() => _nameController.clear()),
+                          onPressed: () =>
+                              setState(() => _nameController.clear()),
                         )
                       : null,
                 ),
@@ -331,7 +330,10 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
             FilledButton.icon(
               onPressed: _searching || _applying ? null : _executeSearch,
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 14,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -385,7 +387,10 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
                     ] else if (_serverProviders.isNotEmpty) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.spotlight.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
@@ -425,7 +430,9 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
     final rows = <Widget>[];
     for (var i = 0; i < providersToRender.length; i += 2) {
       final p1 = providersToRender[i];
-      final p2 = (i + 1 < providersToRender.length) ? providersToRender[i + 1] : null;
+      final p2 = (i + 1 < providersToRender.length)
+          ? providersToRender[i + 1]
+          : null;
 
       rows.add(
         Row(
@@ -477,7 +484,8 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
   Widget _buildProviderField(ExternalIdInfo info) {
     final controller = _providerControllers.putIfAbsent(
       info.key,
-      () => TextEditingController(text: widget.item.providerIds[info.key] ?? ''),
+      () =>
+          TextEditingController(text: widget.item.providerIds[info.key] ?? ''),
     );
 
     return TextField(
@@ -487,7 +495,10 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
         labelText: '${info.name.isNotEmpty ? info.name : info.key} ID',
         hintText: '输入 ${info.name} 编号',
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
       onSubmitted: (_) => _executeSearch(),
     );
@@ -517,12 +528,19 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 40),
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppColors.error,
+                size: 40,
+              ),
               const SizedBox(height: 12),
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 14),
               OutlinedButton.icon(
@@ -543,7 +561,11 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.search_off_rounded, color: AppColors.textTertiary, size: 44),
+              const Icon(
+                Icons.search_off_rounded,
+                color: AppColors.textTertiary,
+                size: 44,
+              ),
               const SizedBox(height: 14),
               const Text(
                 '未找到匹配条目',
@@ -608,16 +630,26 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
                 width: 54,
                 height: 80,
                 color: Colors.white10,
-                child: candidate.imageUrl != null && candidate.imageUrl!.isNotEmpty
+                child:
+                    candidate.imageUrl != null && candidate.imageUrl!.isNotEmpty
                     ? Image.network(
                         candidate.imageUrl!,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Center(
-                          child: Icon(Icons.movie_outlined, color: Colors.white30, size: 24),
-                        ),
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Center(
+                              child: Icon(
+                                Icons.movie_outlined,
+                                color: Colors.white30,
+                                size: 24,
+                              ),
+                            ),
                       )
                     : const Center(
-                        child: Icon(Icons.movie_outlined, color: Colors.white30, size: 24),
+                        child: Icon(
+                          Icons.movie_outlined,
+                          color: Colors.white30,
+                          size: 24,
+                        ),
                       ),
               ),
             ),
@@ -677,13 +709,20 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
                     runSpacing: 4,
                     children: [
                       if (candidate.searchProviderName != null)
-                        _buildBadge(candidate.searchProviderName!, Icons.source_rounded),
+                        _buildBadge(
+                          candidate.searchProviderName!,
+                          Icons.source_rounded,
+                        ),
                       for (final entry in candidate.providerIds.entries)
-                        _buildBadge('${entry.key}: ${entry.value}', Icons.tag_rounded),
+                        _buildBadge(
+                          '${entry.key}: ${entry.value}',
+                          Icons.tag_rounded,
+                        ),
                     ],
                   ),
 
-                  if (candidate.overview != null && candidate.overview!.isNotEmpty) ...[
+                  if (candidate.overview != null &&
+                      candidate.overview!.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text(
                       candidate.overview!,
@@ -758,14 +797,19 @@ class _IdentifyDialogState extends ConsumerState<IdentifyDialog> {
                 ),
                 const Text(
                   '覆盖替换全部海报/背景图',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
           ),
           const Spacer(),
           TextButton(
-            onPressed: _applying ? null : () => Navigator.of(context).pop(false),
+            onPressed: _applying
+                ? null
+                : () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
           const SizedBox(width: 12),

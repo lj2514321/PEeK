@@ -1,68 +1,133 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:flutter/material.dart';
 
+@immutable
+class SpatialAmbientState {
+  const SpatialAmbientState({
+    this.itemId,
+    this.imageUri,
+    this.imageHeaders = const {},
+    this.paletteSeed = 0,
+  });
+
+  final String? itemId;
+  final Uri? imageUri;
+  final Map<String, String> imageHeaders;
+  final int paletteSeed;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is SpatialAmbientState &&
+        other.itemId == itemId &&
+        other.imageUri == imageUri &&
+        other.paletteSeed == paletteSeed;
+  }
+
+  @override
+  int get hashCode => Object.hash(itemId, imageUri, paletteSeed);
+}
+
+class SpatialAmbientController extends ValueNotifier<SpatialAmbientState> {
+  SpatialAmbientController._() : super(const SpatialAmbientState());
+
+  static final SpatialAmbientController instance = SpatialAmbientController._();
+
+  void update({
+    String? itemId,
+    Uri? imageUri,
+    Map<String, String> imageHeaders = const {},
+    int paletteSeed = 0,
+  }) {
+    final next = SpatialAmbientState(
+      itemId: itemId,
+      imageUri: imageUri,
+      imageHeaders: imageHeaders,
+      paletteSeed: paletteSeed,
+    );
+    if (value != next) {
+      value = next;
+    }
+  }
+}
+
+class AmbientBackdropScope extends InheritedWidget {
+  const AmbientBackdropScope({super.key, required super.child});
+
+  static bool hasAncestor(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<AmbientBackdropScope>() !=
+        null;
+  }
+
+  @override
+  bool updateShouldNotify(covariant AmbientBackdropScope oldWidget) => false;
+}
+
 abstract final class AppGlass {
-  static const radiusSmall = 12.0;
-  static const radiusMedium = 18.0;
-  static const radiusLarge = 26.0;
+  static const radiusSmall = AppRadius.value;
+  static const radiusMedium = AppRadius.value;
+  static const radiusLarge = AppRadius.value;
 
   static BoxDecoration decoration({
-    double radius = radiusMedium,
+    double radius = AppRadius.value,
     Color? tint,
     bool elevated = false,
     bool selected = false,
   }) {
-    final base =
-        tint ?? (selected ? AppColors.glassSelected : AppColors.glassSurface);
+    final topAlpha = selected ? 0.28 : (elevated ? 0.18 : 0.14);
+    final bottomAlpha = selected ? 0.14 : (elevated ? 0.07 : 0.05);
+    final borderAlpha = selected ? 0.52 : (elevated ? 0.34 : 0.26);
+
     return BoxDecoration(
-      color: base,
+      color: tint ?? Colors.white.withValues(alpha: bottomAlpha),
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color.alphaBlend(Colors.white.withValues(alpha: 0.045), base),
-          Color.alphaBlend(AppColors.indigo.withValues(alpha: 0.025), base),
+          Colors.white.withValues(alpha: topAlpha),
+          Colors.white.withValues(alpha: bottomAlpha),
         ],
       ),
       borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: Colors.white.withValues(alpha: borderAlpha),
+        width: 1.2,
+      ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: elevated ? 0.34 : 0.18),
-          blurRadius: elevated ? 38 : 22,
-          offset: Offset(0, elevated ? 18 : 10),
+          color: Colors.black.withValues(alpha: elevated ? 0.36 : 0.22),
+          blurRadius: elevated ? 40 : 24,
+          offset: Offset(0, elevated ? 16 : 10),
         ),
         if (selected)
           BoxShadow(
-            color: AppColors.indigo.withValues(alpha: 0.16),
-            blurRadius: 26,
+            color: Colors.white.withValues(alpha: 0.14),
+            blurRadius: 24,
           ),
       ],
     );
   }
 
   static BoxDecoration visionOSDecoration({
-    double radius = radiusLarge,
+    double radius = AppRadius.value,
     Color? tint,
     bool elevated = true,
     Color? glowColor,
-    double borderOpacity = 0.22,
+    double borderOpacity = 0.32,
   }) {
-    final base = tint ?? Colors.black.withValues(alpha: 0.62);
-    final glow = glowColor ?? const Color(0x384A90E2);
+    final glow = glowColor ?? Colors.white.withValues(alpha: 0.08);
     return BoxDecoration(
-      color: base,
+      color: tint ?? Colors.white.withValues(alpha: 0.08),
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
           Colors.white.withValues(alpha: 0.18),
-          Colors.white.withValues(alpha: 0.04),
-          Colors.black.withValues(alpha: 0.50),
+          Colors.white.withValues(alpha: 0.06),
         ],
-        stops: const [0.0, 0.40, 1.0],
       ),
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
@@ -70,13 +135,9 @@ abstract final class AppGlass {
         width: 1.2,
       ),
       boxShadow: [
+        BoxShadow(color: glow, blurRadius: 32, spreadRadius: 0),
         BoxShadow(
-          color: glow,
-          blurRadius: 36,
-          spreadRadius: 1,
-        ),
-        BoxShadow(
-          color: Colors.black.withValues(alpha: elevated ? 0.58 : 0.32),
+          color: Colors.black.withValues(alpha: elevated ? 0.42 : 0.26),
           blurRadius: elevated ? 42 : 24,
           offset: Offset(0, elevated ? 18 : 10),
         ),
@@ -94,9 +155,9 @@ class PosterAmbientGlow extends StatelessWidget {
     super.key,
     required this.child,
     this.glowColor,
-    this.borderRadius = 18.0,
+    this.borderRadius = AppRadius.value,
     this.blurRadius = 38.0,
-    this.spreadRadius = 3.0,
+    this.spreadRadius = 2.0,
     this.offset = const Offset(0, 12),
   });
 
@@ -109,7 +170,7 @@ class PosterAmbientGlow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final glow = glowColor ?? const Color(0x40767BEA);
+    final glow = glowColor ?? Colors.white.withValues(alpha: 0.14);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(borderRadius),
@@ -121,7 +182,7 @@ class PosterAmbientGlow extends StatelessWidget {
             offset: offset,
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.45),
+            color: Colors.black.withValues(alpha: 0.40),
             blurRadius: 28,
             offset: const Offset(0, 16),
           ),
@@ -139,7 +200,7 @@ class VisionGlassCapsuleIsland extends StatelessWidget {
     required this.child,
     this.padding,
     this.margin,
-    this.radius = 99,
+    this.radius = AppRadius.value,
   });
 
   final Widget child;
@@ -151,14 +212,17 @@ class VisionGlassCapsuleIsland extends StatelessWidget {
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.circular(radius);
     return Container(
-      margin: margin ?? const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      margin:
+          margin ?? const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: AppGlass.visionOSDecoration(radius: radius, elevated: true),
       child: ClipRRect(
         borderRadius: borderRadius,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          filter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
           child: Padding(
-            padding: padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding:
+                padding ??
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: child,
           ),
         ),
@@ -169,11 +233,7 @@ class VisionGlassCapsuleIsland extends StatelessWidget {
 
 /// VisionOS 3D Metallic Glass Badge for quality metrics (4K, HDR, Atmos).
 class VisionGlassBadge extends StatelessWidget {
-  const VisionGlassBadge({
-    super.key,
-    required this.label,
-    this.icon,
-  });
+  const VisionGlassBadge({super.key, required this.label, this.icon});
 
   final String label;
   final IconData? icon;
@@ -181,26 +241,20 @@ class VisionGlassBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: AppRadius.borderRadius,
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.25),
+          color: Colors.white.withValues(alpha: 0.32),
           width: 1.0,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.indigo.withValues(alpha: 0.15),
-            blurRadius: 10,
-          ),
-        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 12, color: AppColors.spotlight),
+            Icon(icon, size: 12, color: Colors.white),
             const SizedBox(width: 5),
           ],
           Text(
@@ -209,7 +263,7 @@ class VisionGlassBadge extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
-              color: AppColors.textPrimary,
+              color: Colors.white,
             ),
           ),
         ],
@@ -224,7 +278,7 @@ class GlassSurface extends StatelessWidget {
     required this.child,
     this.padding,
     this.radius = AppGlass.radiusMedium,
-    this.blur = 18,
+    this.blur = 28,
     this.tint,
     this.elevated = false,
     this.selected = false,
@@ -265,6 +319,11 @@ class GlassSurface extends StatelessWidget {
   }
 }
 
+/// Global Apple VisionOS Full-Window Spatial Ambient Backdrop.
+///
+/// Sits at the root of `HomeShell` behind the sidebar, top bar, and all pages,
+/// refracting the active movie's artwork and multi-hue spatial color wash
+/// (`暖金环境光` / `赛博紫环境光` / `深空蓝环境光`) across the entire window.
 class AmbientBackdrop extends StatefulWidget {
   const AmbientBackdrop({super.key, required this.child});
 
@@ -274,134 +333,128 @@ class AmbientBackdrop extends StatefulWidget {
   State<AmbientBackdrop> createState() => _AmbientBackdropState();
 }
 
-class _AmbientBackdropState extends State<AmbientBackdrop>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 10),
-    );
-    bool isTest = false;
-    assert(() {
-      if (WidgetsBinding.instance.runtimeType
-          .toString()
-          .contains('TestWidgetsFlutterBinding')) {
-        isTest = true;
-      }
-      return true;
-    }());
-    if (!isTest) {
-      _controller.repeat();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+class _AmbientBackdropState extends State<AmbientBackdrop> {
+  static const _ambientThemes = [
+    // 0: 暖金沙漠环境光 (Warm Dune Amber / Sunset Cinema)
+    [Color(0xFF6B421B), Color(0xFF33213B), Color(0xFF101729)],
+    // 1: 赛博霓虹紫环境光 (Cyberpunk Violet / Indigo Nebula)
+    [Color(0xFF542373), Color(0xFF1F2F63), Color(0xFF0D1324)],
+    // 2: 深空星云蓝环境光 (Interstellar Deep Nebula Blue / Cyan)
+    [Color(0xFF174F7A), Color(0xFF1E355E), Color(0xFF0C1222)],
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final t = _controller.value * 2 * math.pi;
+    return AmbientBackdropScope(
+      child: ValueListenableBuilder<SpatialAmbientState>(
+        valueListenable: SpatialAmbientController.instance,
+        builder: (context, ambient, child) {
+          final themeIndex =
+              ((ambient.itemId?.hashCode.abs() ?? ambient.paletteSeed) +
+                  ambient.paletteSeed) %
+              _ambientThemes.length;
+          final colors = _ambientThemes[themeIndex];
 
-        final align1 = Alignment(
-          0.65 + 0.35 * math.cos(t),
-          -0.65 + 0.30 * math.sin(t),
-        );
-        final radius1 = 0.85 + 0.15 * math.sin(t * 1.5);
-
-        final align2 = Alignment(
-          -0.60 + 0.30 * math.sin(t * 0.8),
-          0.65 + 0.25 * math.cos(t * 0.8),
-        );
-        final radius2 = 0.80 + 0.15 * math.cos(t);
-
-        final align3 = Alignment(
-          0.10 + 0.20 * math.cos(t * 0.5),
-          -0.10 + 0.20 * math.sin(t * 0.5),
-        );
-
-        return DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.canvasLift,
-                AppColors.canvas,
-                Color(0xFF070814),
-              ],
-              stops: [0.0, 0.5, 1.0],
-            ),
-          ),
-          child: Stack(
+          return Stack(
             fit: StackFit.expand,
             children: [
-              // Orb 1: Indigo / Violet Glow
+              // Cached static RepaintBoundary for spatial ambient backdrop & frost veil
+              // Only re-rasterizes when SpatialAmbientState transitions, eliminating idle GPU blur thrashing
               Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: align1,
-                      radius: radius1,
-                      colors: const [
-                        Color(0x65767BEA),
-                        Color(0x24767BEA),
-                        Colors.transparent,
+                child: IgnorePointer(
+                  child: RepaintBoundary(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: AppMotion.responsive(
+                            context,
+                            const Duration(milliseconds: 680),
+                          ),
+                          switchInCurve: const Cubic(0.16, 1.0, 0.3, 1.0),
+                          switchOutCurve: Curves.easeInCubic,
+                          child: Stack(
+                            key: ValueKey(
+                              'global-ambient-${ambient.itemId ?? 'default'}-${ambient.paletteSeed}',
+                            ),
+                            fit: StackFit.expand,
+                            children: [
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: colors,
+                                    stops: const [0.0, 0.52, 1.0],
+                                  ),
+                                ),
+                              ),
+                              if (ambient.imageUri != null)
+                                Transform.scale(
+                                  scale: 1.14,
+                                  child: Opacity(
+                                    opacity: 0.52,
+                                    child: PeekMediaImage(
+                                      uri: ambient.imageUri,
+                                      headers: ambient.imageHeaders,
+                                      kind: PeekMediaImageKind.backdrop,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: RadialGradient(
+                                    center: const Alignment(-0.38, -0.48),
+                                    radius: 1.15,
+                                    colors: [
+                                      colors.first.withValues(alpha: 0.55),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: RadialGradient(
+                                    center: Alignment(0.58, 0.44),
+                                    radius: 1.05,
+                                    colors: [
+                                      Color(0x4438BDF8),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 42, sigmaY: 42),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.18),
+                                  Colors.black.withValues(alpha: 0.38),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
-                      stops: const [0.0, 0.5, 1.0],
                     ),
                   ),
                 ),
               ),
-              // Orb 2: Cyan / Emerald Glow
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: align2,
-                      radius: radius2,
-                      colors: const [
-                        Color(0x5558C9C5),
-                        Color(0x1B58C9C5),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.5, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-              // Orb 3: Soft Rose / Magenta Glow
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: align3,
-                      radius: 0.95,
-                      colors: const [
-                        Color(0x35E056FD),
-                        Color(0x10E056FD),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.45, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-              widget.child,
+              child!,
             ],
-          ),
-        );
-      },
-      child: widget.child,
+          );
+        },
+        child: widget.child,
+      ),
     );
   }
 }

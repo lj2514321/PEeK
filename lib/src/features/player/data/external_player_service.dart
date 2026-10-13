@@ -119,7 +119,8 @@ class ExternalPlayerService {
   Future<String> resolvePlayableUrl(PlaybackPlan plan) async {
     if (plan.streamUri.isScheme('file')) {
       final filePath = plan.streamUri.toFilePath();
-      if (filePath.toLowerCase().endsWith('.strm') && File(filePath).existsSync()) {
+      if (filePath.toLowerCase().endsWith('.strm') &&
+          File(filePath).existsSync()) {
         try {
           final lines = await File(filePath).readAsLines();
           for (final line in lines) {
@@ -142,8 +143,11 @@ class ExternalPlayerService {
 
     // Only attach Emby/Jellyfin token if this is a server stream (has MediaSourceId, Videos/Items path, or server query params)
     final lowerPath = uri.path.toLowerCase();
-    final queryKeysLower = uri.queryParameters.keys.map((k) => k.toLowerCase()).toSet();
-    final isServerStream = lowerPath.contains('/videos/') ||
+    final queryKeysLower = uri.queryParameters.keys
+        .map((k) => k.toLowerCase())
+        .toSet();
+    final isServerStream =
+        lowerPath.contains('/videos/') ||
         lowerPath.contains('/items/') ||
         queryKeysLower.contains('mediasourceid') ||
         queryKeysLower.contains('api_key') ||
@@ -151,7 +155,8 @@ class ExternalPlayerService {
         queryKeysLower.contains('token');
 
     if (isServerStream) {
-      final token = plan.httpHeaders['X-Emby-Token'] ??
+      final token =
+          plan.httpHeaders['X-Emby-Token'] ??
           plan.httpHeaders['X-MediaBrowser-Token'] ??
           plan.httpHeaders['api_key'] ??
           uri.queryParameters['X-Emby-Token'] ??
@@ -181,8 +186,9 @@ class ExternalPlayerService {
         plan.httpHeaders.forEach((k, v) {
           request.headers.set(k, v);
         });
-        final response =
-            await request.close().timeout(const Duration(seconds: 3));
+        final response = await request.close().timeout(
+          const Duration(seconds: 3),
+        );
         if (response.statusCode == 200) {
           final body = await response.transform(utf8.decoder).join();
           for (final line in body.split('\n')) {
@@ -239,8 +245,11 @@ class ExternalPlayerService {
     // 5. Headers (separated by CRLF; token formatted without internal quotes)
     // Only send server auth headers if targetUrl is a server stream
     final streamLowerPath = streamUri?.path.toLowerCase() ?? '';
-    final streamQueryKeysLower = streamUri?.queryParameters.keys.map((k) => k.toLowerCase()).toSet() ?? const {};
-    final isServerUrl = streamUri != null &&
+    final streamQueryKeysLower =
+        streamUri?.queryParameters.keys.map((k) => k.toLowerCase()).toSet() ??
+        const {};
+    final isServerUrl =
+        streamUri != null &&
         (streamLowerPath.contains('/videos/') ||
             streamLowerPath.contains('/items/') ||
             streamQueryKeysLower.contains('mediasourceid') ||
@@ -249,7 +258,8 @@ class ExternalPlayerService {
             streamQueryKeysLower.contains('token'));
 
     if (isServerUrl) {
-      final token = httpHeaders['X-Emby-Token'] ??
+      final token =
+          httpHeaders['X-Emby-Token'] ??
           httpHeaders['X-MediaBrowser-Token'] ??
           httpHeaders['api_key'];
       final headerLines = <String>[];
@@ -354,20 +364,24 @@ class ExternalPlayerService {
     if (Platform.isWindows) {
       try {
         final potScheme = 'potplayer://$targetUrl';
-        final result = await Process.run(
-          'powershell',
-          ['-NoProfile', '-Command', 'Start-Process', potScheme],
-        );
+        final result = await Process.run('powershell', [
+          '-NoProfile',
+          '-Command',
+          'Start-Process',
+          potScheme,
+        ]);
         if (result.exitCode == 0) return true;
       } on Object {
         // Continue to generic open
       }
 
       try {
-        final result = await Process.run(
-          'powershell',
-          ['-NoProfile', '-Command', 'Start-Process', targetUrl],
-        );
+        final result = await Process.run('powershell', [
+          '-NoProfile',
+          '-Command',
+          'Start-Process',
+          targetUrl,
+        ]);
         return result.exitCode == 0;
       } on Object {
         return false;

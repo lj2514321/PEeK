@@ -68,12 +68,7 @@ class _DownloadsPageState extends State<DownloadsPage>
       method: PlaybackMethod.directPlay,
     );
 
-    AppRoutes.openPlayback(
-      context,
-      account: null,
-      item: localItem,
-      plan: plan,
-    );
+    AppRoutes.openPlayback(context, account: null, item: localItem, plan: plan);
   }
 
   @override
@@ -90,7 +85,8 @@ class _DownloadsPageState extends State<DownloadsPage>
 
         final totalCompletedBytes = completedTasks.fold<int>(
           0,
-          (sum, t) => sum + (t.downloadedBytes > 0 ? t.downloadedBytes : t.totalBytes),
+          (sum, t) =>
+              sum + (t.downloadedBytes > 0 ? t.downloadedBytes : t.totalBytes),
         );
 
         final totalSpeed = downloadingTasks
@@ -281,16 +277,8 @@ class _DownloadsPageState extends State<DownloadsPage>
         unselectedLabelColor: AppColors.textSecondary,
         labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
         tabs: [
-          Tab(
-            text: downloadingCount > 0
-                ? '传输中 ($downloadingCount)'
-                : '传输中',
-          ),
-          Tab(
-            text: completedCount > 0
-                ? '已完成 ($completedCount)'
-                : '已完成',
-          ),
+          Tab(text: downloadingCount > 0 ? '传输中 ($downloadingCount)' : '传输中'),
+          Tab(text: completedCount > 0 ? '已完成 ($completedCount)' : '已完成'),
         ],
       ),
     );
@@ -395,20 +383,32 @@ class _DownloadsPageState extends State<DownloadsPage>
               if (task.status == DownloadTaskStatus.downloading)
                 IconButton(
                   tooltip: '暂停',
-                  icon: const Icon(Icons.pause_rounded, color: Colors.white70, size: 20),
+                  icon: const Icon(
+                    Icons.pause_rounded,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
                   onPressed: () => _manager.pauseTask(task.id),
                   splashRadius: 18,
                 )
               else
                 IconButton(
                   tooltip: '继续',
-                  icon: const Icon(Icons.play_arrow_rounded, color: AppColors.spotlight, size: 20),
+                  icon: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: AppColors.spotlight,
+                    size: 20,
+                  ),
                   onPressed: () => _manager.resumeTask(task.id),
                   splashRadius: 18,
                 ),
               IconButton(
                 tooltip: '取消并删除任务',
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white54, size: 20),
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.white54,
+                  size: 20,
+                ),
                 onPressed: () => _manager.deleteTask(task.id),
                 splashRadius: 18,
               ),
@@ -429,7 +429,10 @@ class _DownloadsPageState extends State<DownloadsPage>
             children: [
               Text(
                 '${DownloadTaskItem.formatBytes(task.downloadedBytes)} / ${DownloadTaskItem.formatBytes(task.totalBytes)} (${(task.progress * 100).toStringAsFixed(1)}%)',
-                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const Spacer(),
               if (task.isDownloading)
@@ -486,7 +489,9 @@ class _DownloadsPageState extends State<DownloadsPage>
   }
 
   Widget _buildCompletedTaskCard(DownloadTaskItem task) {
-    final size = task.downloadedBytes > 0 ? task.downloadedBytes : task.totalBytes;
+    final size = task.downloadedBytes > 0
+        ? task.downloadedBytes
+        : task.totalBytes;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -544,13 +549,20 @@ class _DownloadsPageState extends State<DownloadsPage>
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             ),
             icon: const Icon(Icons.play_arrow_rounded, size: 18),
-            label: const Text('播放', style: TextStyle(fontWeight: FontWeight.bold)),
+            label: const Text(
+              '播放',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             onPressed: () => _playTask(task),
           ),
           const SizedBox(width: 8),
           IconButton(
             tooltip: '删除离线文件',
-            icon: const Icon(Icons.delete_outline_rounded, color: Colors.white54, size: 20),
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: Colors.white54,
+              size: 20,
+            ),
             onPressed: () => _manager.deleteTask(task.id, deleteFile: true),
             splashRadius: 18,
           ),

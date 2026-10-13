@@ -7,9 +7,7 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
-          body: PeekSmoothScroll(
-            child: Text('Smooth Scroll Child'),
-          ),
+          body: PeekSmoothScroll(child: Text('Smooth Scroll Child')),
         ),
       ),
     );
@@ -18,40 +16,42 @@ void main() {
   });
 
   testWidgets(
-      'PeekSmoothScroll automatically provides SmoothScrollController to descendant ScrollView on desktop',
-      (tester) async {
-    late BuildContext innerContext;
+    'PeekSmoothScroll automatically provides SmoothScrollController to descendant ScrollView on desktop',
+    (tester) async {
+      late BuildContext innerContext;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: PeekSmoothScroll(
-            child: Builder(
-              builder: (context) {
-                innerContext = context;
-                return ListView(
-                  children: List.generate(
-                    50,
-                    (i) => SizedBox(height: 50, child: Text('Item $i')),
-                  ),
-                );
-              },
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PeekSmoothScroll(
+              child: Builder(
+                builder: (context) {
+                  innerContext = context;
+                  return ListView(
+                    children: List.generate(
+                      50,
+                      (i) => SizedBox(height: 50, child: Text('Item $i')),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    final primary = PrimaryScrollController.maybeOf(innerContext);
-    expect(primary, isNotNull);
-    expect(primary, isA<SmoothScrollController>());
+      final primary = PrimaryScrollController.maybeOf(innerContext);
+      expect(primary, isNotNull);
+      expect(primary, isA<SmoothScrollController>());
 
-    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
-    expect(scrollable.position, isA<SmoothScrollPosition>());
-  });
+      final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+      expect(scrollable.position, isA<SmoothScrollPosition>());
+    },
+  );
 
-  testWidgets('SmoothScrollPosition handles momentum and direction reversal',
-      (tester) async {
+  testWidgets('SmoothScrollPosition handles momentum and direction reversal', (
+    tester,
+  ) async {
     final controller = SmoothScrollController();
 
     await tester.pumpWidget(

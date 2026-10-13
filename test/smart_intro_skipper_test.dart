@@ -34,10 +34,7 @@ void main() {
 
     test('detects outro chapter by keyword ED / Ending / 片尾', () {
       final chapters = [
-        const MediaChapter(
-          name: 'Part A',
-          startPosition: Duration(seconds: 0),
-        ),
+        const MediaChapter(name: 'Part A', startPosition: Duration(seconds: 0)),
         const MediaChapter(
           name: '片尾曲 (Ending)',
           startPosition: Duration(minutes: 22),

@@ -20,19 +20,22 @@ void main() {
       expect(dir.path, isNotEmpty);
     });
 
-    test('logsDirectory, downloadsDirectory, and actorFavoritesDirectory are subdirectories', () {
-      final root = AppStoragePath.defaultDirectory;
-      final logs = AppStoragePath.logsDirectory;
-      final downloads = AppStoragePath.downloadsDirectory;
-      final favorites = AppStoragePath.actorFavoritesDirectory;
+    test(
+      'logsDirectory, downloadsDirectory, and actorFavoritesDirectory are subdirectories',
+      () {
+        final root = AppStoragePath.defaultDirectory;
+        final logs = AppStoragePath.logsDirectory;
+        final downloads = AppStoragePath.downloadsDirectory;
+        final favorites = AppStoragePath.actorFavoritesDirectory;
 
-      expect(logs.path.startsWith(root.path), isTrue);
-      expect(logs.path.endsWith('logs'), isTrue);
-      expect(downloads.path.startsWith(root.path), isTrue);
-      expect(downloads.path.endsWith('Downloads'), isTrue);
-      expect(favorites.path.startsWith(root.path), isTrue);
-      expect(favorites.path.endsWith('ActorFavorites'), isTrue);
-    });
+        expect(logs.path.startsWith(root.path), isTrue);
+        expect(logs.path.endsWith('logs'), isTrue);
+        expect(downloads.path.startsWith(root.path), isTrue);
+        expect(downloads.path.endsWith('Downloads'), isTrue);
+        expect(favorites.path.startsWith(root.path), isTrue);
+        expect(favorites.path.endsWith('ActorFavorites'), isTrue);
+      },
+    );
 
     test('overrideDirectory overrides all resolved paths and can be reset', () {
       final tempDir = Directory.systemTemp.createTempSync('app_storage_test');
@@ -45,7 +48,10 @@ void main() {
 
       AppStoragePath.overrideDirectory = tempDir;
       expect(AppStoragePath.defaultDirectory.path, tempDir.path);
-      expect(AppStoragePath.logsDirectory.path, '${tempDir.path}${Platform.pathSeparator}logs');
+      expect(
+        AppStoragePath.logsDirectory.path,
+        '${tempDir.path}${Platform.pathSeparator}logs',
+      );
 
       AppStoragePath.overrideDirectory = null;
       expect(AppStoragePath.defaultDirectory.path, isNot(tempDir.path));

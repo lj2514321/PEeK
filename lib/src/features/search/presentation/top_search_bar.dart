@@ -5,6 +5,7 @@ import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
@@ -200,20 +201,13 @@ class TopSearchBarState extends ConsumerState<TopSearchBar> {
           imageUri: item.imageUri,
           imageHeaders: item.imageHeaders,
         ),
-        onOpen: (work) => AppRoutes.openMediaDetail(
-          context,
-          account: account,
-          item: work,
-        ),
+        onOpen: (work) =>
+            AppRoutes.openMediaDetail(context, account: account, item: work),
       );
       return;
     }
 
-    AppRoutes.openMediaDetail(
-      context,
-      account: account,
-      item: item,
-    );
+    AppRoutes.openMediaDetail(context, account: account, item: item);
   }
 
   void _openDropdown() {
@@ -258,9 +252,9 @@ class TopSearchBarState extends ConsumerState<TopSearchBar> {
         link: _layerLink,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+            color: Colors.white.withValues(alpha: 0.14),
+            borderRadius: AppRadius.borderRadius,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
           ),
           child: IconButton(
             tooltip: '搜索媒体库（Ctrl+K）',
@@ -285,32 +279,32 @@ class TopSearchBarState extends ConsumerState<TopSearchBar> {
           height: 36,
           decoration: BoxDecoration(
             color: hasFocus
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(18),
+                ? Colors.white.withValues(alpha: 0.22)
+                : Colors.white.withValues(alpha: 0.12),
+            borderRadius: AppRadius.borderRadius,
             border: Border.all(
               color: hasFocus
-                  ? AppColors.spotlight.withValues(alpha: 0.60)
-                  : Colors.white.withValues(alpha: 0.12),
-              width: 1,
+                  ? Colors.white.withValues(alpha: 0.65)
+                  : Colors.white.withValues(alpha: 0.28),
+              width: 1.1,
             ),
             boxShadow: hasFocus
                 ? [
                     BoxShadow(
-                      color: AppColors.spotlight.withValues(alpha: 0.20),
-                      blurRadius: 14,
-                      spreadRadius: 0.5,
+                      color: Colors.white.withValues(alpha: 0.16),
+                      blurRadius: 16,
+                      spreadRadius: 0,
                     ),
                   ]
                 : null,
           ),
           child: Row(
             children: [
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Icon(
                 Icons.search_rounded,
                 size: 16,
-                color: hasFocus ? AppColors.spotlight : AppColors.textTertiary,
+                color: hasFocus ? Colors.white : Colors.white70,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -325,15 +319,13 @@ class TopSearchBarState extends ConsumerState<TopSearchBar> {
                     _rememberQuery();
                   },
                   style: const TextStyle(
-                    color: AppColors.textPrimary,
+                    color: Colors.white,
                     fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
                   ),
                   decoration: const InputDecoration(
                     hintText: '搜索电影、剧集与人物...',
-                    hintStyle: TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 12,
-                    ),
+                    hintStyle: TextStyle(color: Colors.white70, fontSize: 12),
                     isDense: true,
                     filled: false,
                     fillColor: Colors.transparent,
@@ -351,7 +343,7 @@ class TopSearchBarState extends ConsumerState<TopSearchBar> {
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: AppRadius.borderRadius,
                     onTap: () {
                       _queryController.clear();
                       _onQueryChanged('');
@@ -361,7 +353,7 @@ class TopSearchBarState extends ConsumerState<TopSearchBar> {
                       child: Icon(
                         Icons.close_rounded,
                         size: 14,
-                        color: AppColors.textTertiary,
+                        color: Colors.white70,
                       ),
                     ),
                   ),
@@ -419,44 +411,36 @@ class _SearchDropdownOverlay extends StatelessWidget {
     final barrier = GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: onDismiss,
-      child: Container(color: Colors.black.withValues(alpha: 0.18)),
+      child: Container(color: Colors.black.withValues(alpha: 0.16)),
     );
 
     final panel = ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: AppRadius.borderRadius,
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        filter: ImageFilter.blur(sigmaX: 38, sigmaY: 38),
         child: Container(
           key: const ValueKey('search-dropdown-panel'),
           constraints: BoxConstraints(maxHeight: maxPanelHeight),
           decoration: BoxDecoration(
-            // Translucent liquid glass tint (not opaque!)
-            color: const Color(0x70101426),
+            color: const Color(0x8A121A2E),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white.withValues(alpha: 0.16),
-                Colors.white.withValues(alpha: 0.04),
-                Colors.black.withValues(alpha: 0.50),
+                Colors.white.withValues(alpha: 0.24),
+                Colors.white.withValues(alpha: 0.08),
               ],
-              stops: const [0.0, 0.35, 1.0],
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: AppRadius.borderRadius,
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.20),
+              color: Colors.white.withValues(alpha: 0.36),
               width: 1.2,
             ),
             boxShadow: [
-              const BoxShadow(
-                color: Color(0x384A90E2),
-                blurRadius: 36,
-                spreadRadius: 1,
-              ),
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.45),
-                blurRadius: 32,
-                offset: const Offset(0, 14),
+                color: Colors.black.withValues(alpha: 0.42),
+                blurRadius: 36,
+                offset: const Offset(0, 16),
               ),
             ],
           ),
@@ -579,10 +563,15 @@ class _SearchDropdownOverlay extends StatelessWidget {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
-          return _SearchResultTile(
-            item: item,
-            account: account!,
-            onTap: () => onItemSelected(item),
+          return PeekStaggeredGridItem(
+            key: ValueKey('search-stagger-$index-${item.id}'),
+            index: index,
+            columns: 1,
+            child: _SearchResultTile(
+              item: item,
+              account: account!,
+              onTap: () => onItemSelected(item),
+            ),
           );
         },
       ),

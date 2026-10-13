@@ -22,10 +22,7 @@ class BangumiScrobbleService {
 
   Options _publicOptions() {
     return Options(
-      headers: {
-        'User-Agent': _userAgent,
-        'Content-Type': 'application/json',
-      },
+      headers: {'User-Agent': _userAgent, 'Content-Type': 'application/json'},
     );
   }
 
@@ -41,7 +38,8 @@ class BangumiScrobbleService {
         final username = data['username']?.toString() ?? '';
         final nickname = data['nickname']?.toString() ?? username;
         final avatar = data['avatar'] as Map<String, dynamic>?;
-        final avatarUrl = avatar?['large']?.toString() ??
+        final avatarUrl =
+            avatar?['large']?.toString() ??
             avatar?['medium']?.toString() ??
             avatar?['small']?.toString() ??
             '';
@@ -64,11 +62,20 @@ class BangumiScrobbleService {
   Future<int?> searchSubjectId(String keyword) async {
     try {
       final cleanKeyword = keyword
-          .replaceAll(RegExp(r'(第[0-9一二三四五六七八九十]+季|Season\s*\d+|S\d+)', caseSensitive: false), '')
+          .replaceAll(
+            RegExp(
+              r'(第[0-9一二三四五六七八九十]+季|Season\s*\d+|S\d+)',
+              caseSensitive: false,
+            ),
+            '',
+          )
           .trim();
       final response = await _dio.get<Map<String, dynamic>>(
         '$_baseUrl/search/subjects',
-        queryParameters: {'keyword': cleanKeyword.isNotEmpty ? cleanKeyword : keyword, 'type': 2},
+        queryParameters: {
+          'keyword': cleanKeyword.isNotEmpty ? cleanKeyword : keyword,
+          'type': 2,
+        },
         options: _publicOptions(),
       );
       final data = response.data;
@@ -94,7 +101,9 @@ class BangumiScrobbleService {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '$_baseUrl/subjects/$subjectId',
-        options: accessToken != null ? _authOptions(accessToken) : _publicOptions(),
+        options: accessToken != null
+            ? _authOptions(accessToken)
+            : _publicOptions(),
       );
       final data = response.data;
       if (data is! Map<String, dynamic>) return null;

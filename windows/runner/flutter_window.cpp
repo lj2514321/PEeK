@@ -17,9 +17,44 @@ namespace {
 
 static std::map<HWND, std::shared_ptr<WindowsMediaSessionBridge>> g_subwindow_media_sessions;
 
+static void EnforceFramelessTransparentDwm(HWND hwnd) {
+  if (!hwnd) {
+    return;
+  }
+  constexpr DWORD kDwmCornerPreferenceDoNotRound = 1;
+  constexpr DWORD kDwmwaWindowCornerPreference = 33;
+  constexpr DWORD kDwmwaBorderColor = 34;
+  constexpr DWORD kDwmwaCaptionColor = 35;
+  constexpr DWORD kDwmwaSystemBackdropType = 38;
+  constexpr DWORD kDwmsbtNone = 1;
+  constexpr COLORREF kDwmwaColorNone = 0xFFFFFFFE;
+  constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
+
+  DwmSetWindowAttribute(hwnd, kDwmwaWindowCornerPreference,
+                        &kDwmCornerPreferenceDoNotRound,
+                        sizeof(kDwmCornerPreferenceDoNotRound));
+  const COLORREF color_none = kDwmwaColorNone;
+  DwmSetWindowAttribute(hwnd, kDwmwaBorderColor, &color_none,
+                        sizeof(color_none));
+  DwmSetWindowAttribute(hwnd, kDwmwaCaptionColor, &color_none,
+                        sizeof(color_none));
+  const DWORD backdrop_none = kDwmsbtNone;
+  DwmSetWindowAttribute(hwnd, kDwmwaSystemBackdropType, &backdrop_none,
+                        sizeof(backdrop_none));
+  BOOL enable_dark_mode = TRUE;
+  DwmSetWindowAttribute(hwnd, kDwmwaUseImmersiveDarkMode,
+                        &enable_dark_mode, sizeof(enable_dark_mode));
+  SetWindowRgn(hwnd, nullptr, FALSE);
+  const MARGINS margins = {0, 0, 0, 0};
+  DwmExtendFrameIntoClientArea(hwnd, &margins);
+}
+
 static LRESULT CALLBACK SubwindowMediaSessionSubclassProc(
     HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+  if (uMsg == WM_SHOWWINDOW) {
+    EnforceFramelessTransparentDwm(hwnd);
+  }
   auto* bridge = reinterpret_cast<WindowsMediaSessionBridge*>(dwRefData);
   if (bridge && bridge->HandleWindowMessage(uMsg, wParam, lParam)) {
     return 0;
@@ -64,21 +99,7 @@ bool FlutterWindow::OnCreate() {
       HWND child_native = flutter_view_controller->view()->GetNativeWindow();
       HWND root_hwnd = ::GetAncestor(child_native, GA_ROOT);
       if (root_hwnd != nullptr) {
-        constexpr DWORD kDwmCornerPreferenceRound = 2;
-        constexpr DWORD kDwmwaWindowCornerPreference = 33;
-        constexpr DWORD kDwmwaBorderColor = 34;
-        constexpr COLORREF kDwmwaColorNone = 0xFFFFFFFE;
-        constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
-
-        DwmSetWindowAttribute(root_hwnd, kDwmwaWindowCornerPreference,
-                              &kDwmCornerPreferenceRound,
-                              sizeof(kDwmCornerPreferenceRound));
-        const COLORREF border_color = kDwmwaColorNone;
-        DwmSetWindowAttribute(root_hwnd, kDwmwaBorderColor,
-                              &border_color, sizeof(border_color));
-        BOOL enable_dark_mode = TRUE;
-        DwmSetWindowAttribute(root_hwnd, kDwmwaUseImmersiveDarkMode,
-                              &enable_dark_mode, sizeof(enable_dark_mode));
+        EnforceFramelessTransparentDwm(root_hwnd);
 
         static std::map<HWND, std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>> g_subwindow_channels;
         auto subwindow_channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -144,6 +165,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
                                                       lparam);
+
     if (result) {
       return *result;
     }

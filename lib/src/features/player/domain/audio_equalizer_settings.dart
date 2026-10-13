@@ -91,11 +91,8 @@ class AudioEqualizerSettings {
       activePreset: AudioEqualizerPreset.flat,
       bands: freqs
           .map(
-            (f) => AudioEqualizerBand(
-              frequencyHz: f.$1,
-              label: f.$2,
-              gainDb: 0.0,
-            ),
+            (f) =>
+                AudioEqualizerBand(frequencyHz: f.$1, label: f.$2, gainDb: 0.0),
           )
           .toList(growable: false),
     );

@@ -92,9 +92,7 @@ class PlayerWindowPayload {
 
   factory PlayerWindowPayload.fromJson(Map<String, dynamic> json) {
     return PlayerWindowPayload(
-      item: MediaItem.fromJson(
-        Map<String, dynamic>.from(json['item'] as Map),
-      ),
+      item: MediaItem.fromJson(Map<String, dynamic>.from(json['item'] as Map)),
       plan: PlaybackPlan.fromJson(
         Map<String, dynamic>.from(json['plan'] as Map),
       ),

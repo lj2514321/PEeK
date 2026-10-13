@@ -45,9 +45,7 @@ void main() {
   test('ActorFavoritesNotifier toggles favorite state', () async {
     final store = MemoryActorFavoritesStore();
     final container = ProviderContainer(
-      overrides: [
-        actorFavoritesStoreProvider.overrideWithValue(store),
-      ],
+      overrides: [actorFavoritesStoreProvider.overrideWithValue(store)],
     );
     addTearDown(container.dispose);
 

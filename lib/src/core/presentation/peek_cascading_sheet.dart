@@ -42,30 +42,30 @@ class PeekCascadingSheet extends StatelessWidget {
         duration: duration,
         curve: curve,
         child: Stack(
-        fit: StackFit.passthrough,
-        children: [
-          child,
-          if (depth > 0)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: dimAlpha > 0.001 ? 1.0 : 0.0,
-                  duration: duration,
-                  curve: curve,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: dimAlpha),
-                      borderRadius: BorderRadius.circular(24),
+          fit: StackFit.passthrough,
+          children: [
+            child,
+            if (depth > 0)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: dimAlpha > 0.001 ? 1.0 : 0.0,
+                    duration: duration,
+                    curve: curve,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: dimAlpha),
+                        borderRadius: AppRadius.borderRadius,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 /// A multi-step cascading card stack that allows forward navigation into sub-panels
@@ -91,13 +91,20 @@ class _PeekCascadingStackState extends State<PeekCascadingStack> {
   Widget build(BuildContext context) {
     if (widget.pages.isEmpty) return const SizedBox.shrink();
     if (AppMotion.isTest) {
-      return widget.pages[widget.currentIndex.clamp(0, widget.pages.length - 1)];
+      return widget.pages[widget.currentIndex.clamp(
+        0,
+        widget.pages.length - 1,
+      )];
     }
 
     return Stack(
       alignment: Alignment.bottomCenter,
       children: [
-        for (var i = 0; i <= widget.currentIndex && i < widget.pages.length; i++)
+        for (
+          var i = 0;
+          i <= widget.currentIndex && i < widget.pages.length;
+          i++
+        )
           PeekCascadingSheet(
             depth: widget.currentIndex - i,
             child: widget.pages[i],

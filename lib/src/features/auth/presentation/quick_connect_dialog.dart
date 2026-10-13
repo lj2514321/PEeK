@@ -59,7 +59,10 @@ class _QuickConnectDialogState extends State<QuickConnectDialog> {
       _loading = false;
     });
 
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollState());
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _pollState(),
+    );
   }
 
   Future<void> _pollState() async {

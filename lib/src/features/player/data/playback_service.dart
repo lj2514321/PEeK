@@ -598,15 +598,15 @@ class PlaybackService {
   Uri _appendPath(Uri base, String path) {
     final baseSegments = base.pathSegments.where((s) => s.isNotEmpty);
     final additionalSegments = path.split('/').where((s) => s.isNotEmpty);
-    return base.replace(
-      pathSegments: [...baseSegments, ...additionalSegments],
-    );
+    return base.replace(pathSegments: [...baseSegments, ...additionalSegments]);
   }
 
   Map<String, String> _serverHeaders(AuthenticatedServer account) {
     final token = account.accessToken;
     final deviceId = account.deviceId;
-    final scheme = account.server.kind == ServerKind.emby ? 'Emby' : 'MediaBrowser';
+    final scheme = account.server.kind == ServerKind.emby
+        ? 'Emby'
+        : 'MediaBrowser';
     final authValue = deviceId.isNotEmpty
         ? '$scheme Client="PEeK", Device="Windows", DeviceId="$deviceId", Version="0.1.0", Token="$token"'
         : 'MediaBrowser Token="$token"';

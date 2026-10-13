@@ -11,11 +11,8 @@ class CinematicScrollPhysics extends BouncingScrollPhysics {
   }
 
   @override
-  SpringDescription get spring => const SpringDescription(
-        mass: 0.7,
-        stiffness: 120,
-        damping: 14,
-      );
+  SpringDescription get spring =>
+      const SpringDescription(mass: 0.7, stiffness: 120, damping: 14);
 }
 
 /// Global scroll behavior providing fluid physics and mouse drag scrolling across desktop.
@@ -24,14 +21,16 @@ class CinematicScrollBehavior extends MaterialScrollBehavior {
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.stylus,
-        PointerDeviceKind.trackpad,
-      };
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.trackpad,
+  };
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) {
-    return const CinematicScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+    return const CinematicScrollPhysics(
+      parent: AlwaysScrollableScrollPhysics(),
+    );
   }
 }

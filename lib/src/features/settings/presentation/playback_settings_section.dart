@@ -205,7 +205,8 @@ class PlaybackSettingsSection extends StatelessWidget {
                   key: const ValueKey('setting-enable-mini-player'),
                   value: settings.enableMiniPlayer,
                   activeTrackColor: AppColors.indigo,
-                  onChanged: (!loading && !saving && onEnableMiniPlayerChanged != null)
+                  onChanged:
+                      (!loading && !saving && onEnableMiniPlayerChanged != null)
                       ? onEnableMiniPlayerChanged
                       : null,
                 ),
@@ -213,7 +214,10 @@ class PlaybackSettingsSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 28),
-          Text('外部播放器（如 PotPlayer / VLC）', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            '外部播放器（如 PotPlayer / VLC）',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 6),
           const Text(
             '调用系统外部独立播放器播放视频流，支持 PotPlayer、VLC 等，享受自定义渲染器（如 MadVR）或独立窗口多屏播放。',
@@ -693,10 +697,7 @@ class _ExternalPlayerConfigCardState extends State<_ExternalPlayerConfigCard> {
   }
 
   Future<void> _pickExecutable() async {
-    const typeGroup = XTypeGroup(
-      label: '可执行程序',
-      extensions: ['exe'],
-    );
+    const typeGroup = XTypeGroup(label: '可执行程序', extensions: ['exe']);
     final file = await openFile(acceptedTypeGroups: [typeGroup]);
     if (file != null && mounted) {
       widget.onExternalPlayerPathChanged?.call(file.path);
@@ -713,22 +714,22 @@ class _ExternalPlayerConfigCardState extends State<_ExternalPlayerConfigCard> {
           mode: ProcessStartMode.detached,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已成功启动外部播放器：$executablePath')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('已成功启动外部播放器：$executablePath')));
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('指定的播放器文件不存在，请重新选择。')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('指定的播放器文件不存在，请重新选择。')));
         }
       }
     } on Object catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('启动外部播放器失败：$error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('启动外部播放器失败：$error')));
       }
     } finally {
       if (mounted) setState(() => _testingLaunch = false);
@@ -742,7 +743,9 @@ class _ExternalPlayerConfigCardState extends State<_ExternalPlayerConfigCard> {
     final hasValidFile = activePath != null && File(activePath).existsSync();
     final isCustomPath = settings.externalPlayerPath != null;
     final enabled =
-        !widget.loading && !widget.saving && widget.onUseExternalPlayerChanged != null;
+        !widget.loading &&
+        !widget.saving &&
+        widget.onUseExternalPlayerChanged != null;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -904,8 +907,9 @@ class _ExternalPlayerConfigCardState extends State<_ExternalPlayerConfigCard> {
                   runSpacing: 8,
                   children: [
                     OutlinedButton.icon(
-                      onPressed:
-                          widget.loading || widget.saving ? null : _pickExecutable,
+                      onPressed: widget.loading || widget.saving
+                          ? null
+                          : _pickExecutable,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -916,14 +920,18 @@ class _ExternalPlayerConfigCardState extends State<_ExternalPlayerConfigCard> {
                         ),
                       ),
                       icon: const Icon(Icons.folder_open_rounded, size: 16),
-                      label: const Text('更改播放器路径...', style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        '更改播放器路径...',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     if (isCustomPath)
                       TextButton.icon(
                         onPressed: widget.loading || widget.saving
                             ? null
-                            : () =>
-                                widget.onExternalPlayerPathChanged?.call(null),
+                            : () => widget.onExternalPlayerPathChanged?.call(
+                                null,
+                              ),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -931,11 +939,15 @@ class _ExternalPlayerConfigCardState extends State<_ExternalPlayerConfigCard> {
                           ),
                         ),
                         icon: const Icon(Icons.restart_alt_rounded, size: 16),
-                        label: const Text('恢复自动检测', style: TextStyle(fontSize: 12)),
+                        label: const Text(
+                          '恢复自动检测',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
                     if (hasValidFile)
                       FilledButton.tonalIcon(
-                        onPressed: _testingLaunch || widget.loading || widget.saving
+                        onPressed:
+                            _testingLaunch || widget.loading || widget.saving
                             ? null
                             : () => _testLaunch(activePath),
                         style: FilledButton.styleFrom(
@@ -950,10 +962,18 @@ class _ExternalPlayerConfigCardState extends State<_ExternalPlayerConfigCard> {
                         icon: _testingLaunch
                             ? const SizedBox.square(
                                 dimension: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
-                            : const Icon(Icons.play_circle_outline_rounded, size: 16),
-                        label: const Text('测试启动', style: TextStyle(fontSize: 12)),
+                            : const Icon(
+                                Icons.play_circle_outline_rounded,
+                                size: 16,
+                              ),
+                        label: const Text(
+                          '测试启动',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
                   ],
                 ),
@@ -965,4 +985,3 @@ class _ExternalPlayerConfigCardState extends State<_ExternalPlayerConfigCard> {
     );
   }
 }
-

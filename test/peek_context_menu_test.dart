@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('shows context menu on secondary tap (right click)', (tester) async {
+  testWidgets('shows context menu on secondary tap (right click)', (
+    tester,
+  ) async {
     var tapped = false;
 
     await tester.pumpWidget(

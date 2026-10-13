@@ -68,7 +68,9 @@ class DandanPlayService {
               if (episodes is List) {
                 for (final ep in episodes) {
                   if (ep is Map<String, dynamic>) {
-                    final epId = int.tryParse(ep['episodeId']?.toString() ?? '');
+                    final epId = int.tryParse(
+                      ep['episodeId']?.toString() ?? '',
+                    );
                     final epTitle = ep['episodeTitle']?.toString() ?? '';
                     if (epId != null) {
                       results.add(

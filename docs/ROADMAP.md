@@ -93,4 +93,6 @@
 - [x] 跨媒体库全量演员检索与 ParentId 独立分类过滤
 - [x] 小窗/画中画全局播放进度实时双向同步（`GlobalPlaybackCoordinator` 乐观广播、内存镜像与活跃会话避让）
 - [x] 顶部命令栏用户状态胶囊无障碍 Affordance 规范化，清除无效的向下展开标志
+- [x] VisionOS Spatial Cinema 空间流体玻璃美学重构与多色域动态环境光（`AmbientBackdrop` + `SpatialAmbientController`）
+- [x] 2026 四合一空间流体动效体系（光学景深对焦溶解转场 `PeekIndexedTransitionStack`、二维斜向错峰瀑布流 `PeekStaggeredGridItem`、点击锚点空间容器形变 `PeekSpatialPageRoute`、灵动岛非对称流体拉伸侧栏光轨 `_LiquidRailIndicator`）
 

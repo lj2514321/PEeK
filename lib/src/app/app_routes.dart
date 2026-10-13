@@ -40,20 +40,14 @@ abstract final class AppRoutes {
           imageUri: item.imageUri,
           imageHeaders: item.imageHeaders,
         ),
-        onOpen: (work) => openMediaDetail(
-          context,
-          item: work,
-          account: account,
-        ),
+        onOpen: (work) =>
+            openMediaDetail(context, item: work, account: account),
       );
       return Future.value(null);
     }
     return Navigator.of(context).push<MediaItem>(
       Peek3DPageRoute(
-        builder: (_) => MediaDetailPage(
-          initialItem: item,
-          account: account,
-        ),
+        builder: (_) => MediaDetailPage(initialItem: item, account: account),
       ),
     );
   }
@@ -82,8 +76,10 @@ abstract final class AppRoutes {
       try {
         final coordinator = ref != null
             ? ref.read(playerWindowCoordinatorProvider)
-            : ProviderScope.containerOf(context, listen: false)
-                .read(playerWindowCoordinatorProvider);
+            : ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(playerWindowCoordinatorProvider);
         final payload = PlayerWindowPayload(
           account: account,
           item: item,
@@ -135,11 +131,8 @@ abstract final class AppRoutes {
   }) {
     return Navigator.of(context).push<void>(
       Peek3DPageRoute(
-        builder: (_) => PersonWorksPage(
-          account: account,
-          person: person,
-          onOpen: onOpen,
-        ),
+        builder: (_) =>
+            PersonWorksPage(account: account, person: person, onOpen: onOpen),
       ),
     );
   }

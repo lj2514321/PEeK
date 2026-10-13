@@ -53,10 +53,7 @@ void main() {
         subtitleStreamIndex: 2,
       );
 
-      final queue = PlaybackQueue(
-        items: [item],
-        currentIndex: 0,
-      );
+      final queue = PlaybackQueue(items: [item], currentIndex: 0);
 
       final payload = PlayerWindowPayload(
         account: account,
@@ -65,9 +62,7 @@ void main() {
         queue: queue,
         hardwareDecodingMode: HardwareDecodingMode.automatic,
         maxStreamingBitrate: PlaybackBitrate.mbps20,
-        subtitlePreferences: const SubtitlePreferences(
-          delayMilliseconds: 200,
-        ),
+        subtitlePreferences: const SubtitlePreferences(delayMilliseconds: 200),
         skipIntroPreferences: const SkipIntroPreferences(autoSkip: true),
         danmakuPreferences: const DanmakuPreferences(enabled: true),
       );
@@ -164,11 +159,7 @@ void main() {
         startPosition: const Duration(minutes: 5),
       );
 
-      coordinator.registerWindowPlayback(
-        account: null,
-        item: item,
-        plan: plan,
-      );
+      coordinator.registerWindowPlayback(account: null, item: item, plan: plan);
 
       final state = container.read(globalPlaybackCoordinatorProvider);
       expect(state.mode, equals(PlaybackPresentationMode.window));
@@ -274,7 +265,11 @@ void main() {
         method: PlaybackMethod.directPlay,
       );
 
-      coordinator.registerWindowPlayback(account: null, item: item1, plan: plan);
+      coordinator.registerWindowPlayback(
+        account: null,
+        item: item1,
+        plan: plan,
+      );
       expect(
         container.read(globalPlaybackCoordinatorProvider).item?.name,
         equals('Episode 1'),

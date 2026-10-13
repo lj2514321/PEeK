@@ -74,10 +74,7 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
           Flexible(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildVideoShadersTab(),
-                _buildAudioEqualizerTab(),
-              ],
+              children: [_buildVideoShadersTab(), _buildAudioEqualizerTab()],
             ),
           ),
         ],
@@ -165,10 +162,7 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
                 Icon(Icons.auto_fix_high_rounded, size: 16),
                 SizedBox(width: 6),
                 Flexible(
-                  child: Text(
-                    '画质超分与色彩',
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Text('画质超分与色彩', overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
@@ -182,10 +176,7 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
                 Icon(Icons.equalizer_rounded, size: 16),
                 SizedBox(width: 6),
                 Flexible(
-                  child: Text(
-                    '10段图形均衡器',
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Text('10段图形均衡器', overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
@@ -198,75 +189,75 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
   Widget _buildVideoShadersTab() {
     return PeekSmoothScroll(
       child: SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'GLSL 画面增强与超分辨率着色器',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                'libmpv 动态挂载',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textTertiary.withValues(alpha: 0.8),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ...VideoShaderPreset.values.map(_buildShaderPresetCard),
-          const SizedBox(height: 20),
-          const Text(
-            'HDR 色调映射算法 (Tone Mapping)',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final algorithm in ToneMappingAlgorithm.values) ...[
-                ChoiceChip(
-                  label: Text(algorithm.label),
-                  selected: _toneMapping == algorithm,
-                  selectedColor: AppColors.spotlight.withValues(alpha: 0.25),
-                  side: BorderSide(
-                    color: _toneMapping == algorithm
-                        ? AppColors.spotlight
-                        : Colors.white12,
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'GLSL 画面增强与超分辨率着色器',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
                   ),
-                  labelStyle: TextStyle(
-                    color: _toneMapping == algorithm
-                        ? AppColors.spotlight
-                        : AppColors.textSecondary,
-                    fontSize: 12,
+                ),
+                const Spacer(),
+                Text(
+                  'libmpv 动态挂载',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textTertiary.withValues(alpha: 0.8),
                   ),
-                  onSelected: (selected) {
-                    if (selected) {
-                      setState(() => _toneMapping = algorithm);
-                      widget.onToneMappingChanged(algorithm);
-                    }
-                  },
                 ),
               ],
-            ],
-          ),
-          const SizedBox(height: 12),
-        ],
-      ),
+            ),
+            const SizedBox(height: 10),
+            ...VideoShaderPreset.values.map(_buildShaderPresetCard),
+            const SizedBox(height: 20),
+            const Text(
+              'HDR 色调映射算法 (Tone Mapping)',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final algorithm in ToneMappingAlgorithm.values) ...[
+                  ChoiceChip(
+                    label: Text(algorithm.label),
+                    selected: _toneMapping == algorithm,
+                    selectedColor: AppColors.spotlight.withValues(alpha: 0.25),
+                    side: BorderSide(
+                      color: _toneMapping == algorithm
+                          ? AppColors.spotlight
+                          : Colors.white12,
+                    ),
+                    labelStyle: TextStyle(
+                      color: _toneMapping == algorithm
+                          ? AppColors.spotlight
+                          : AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() => _toneMapping = algorithm);
+                        widget.onToneMappingChanged(algorithm);
+                      }
+                    },
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
@@ -325,7 +316,9 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isSelected ? Colors.white : AppColors.textPrimary,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppColors.textPrimary,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -371,156 +364,180 @@ class _AudioEnhancementSheetState extends State<AudioEnhancementSheet>
   Widget _buildAudioEqualizerTab() {
     return PeekSmoothScroll(
       child: SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '10 段图形均衡器 (Graphic Equalizer)',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '10 段图形均衡器 (Graphic Equalizer)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'FFmpeg 高保真声学滤波 · -12dB ~ +12dB',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textTertiary.withValues(alpha: 0.8),
+                    const SizedBox(height: 2),
+                    Text(
+                      'FFmpeg 高保真声学滤波 · -12dB ~ +12dB',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textTertiary.withValues(alpha: 0.8),
+                      ),
                     ),
+                  ],
+                ),
+                const Spacer(),
+                Switch(
+                  value: _eqSettings.enabled,
+                  activeThumbColor: AppColors.spotlight,
+                  onChanged: (val) {
+                    final updated = _eqSettings.copyWith(enabled: val);
+                    setState(() => _eqSettings = updated);
+                    widget.onEqualizerSettingsChanged(updated);
+                  },
+                ),
+                IconButton(
+                  tooltip: '重置为原音直通 (Flat)',
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    size: 20,
+                    color: Colors.white70,
                   ),
-                ],
+                  onPressed: () {
+                    final updated = _eqSettings.applyPreset(
+                      AudioEqualizerPreset.flat,
+                    );
+                    setState(() => _eqSettings = updated);
+                    widget.onEqualizerSettingsChanged(updated);
+                  },
+                  splashRadius: 18,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Acoustic Presets
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: AudioEqualizerPreset.values
+                    .map((preset) {
+                      final isSelected = _eqSettings.activePreset == preset;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(preset.label),
+                          selected: isSelected,
+                          selectedColor: AppColors.spotlight.withValues(
+                            alpha: 0.25,
+                          ),
+                          side: BorderSide(
+                            color: isSelected
+                                ? AppColors.spotlight
+                                : Colors.white12,
+                          ),
+                          labelStyle: TextStyle(
+                            color: isSelected
+                                ? AppColors.spotlight
+                                : AppColors.textSecondary,
+                            fontSize: 11,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              final updated = _eqSettings.applyPreset(preset);
+                              setState(() => _eqSettings = updated);
+                              widget.onEqualizerSettingsChanged(updated);
+                            }
+                          },
+                        ),
+                      );
+                    })
+                    .toList(growable: false),
               ),
-              const Spacer(),
-              Switch(
-                value: _eqSettings.enabled,
-                activeThumbColor: AppColors.spotlight,
-                onChanged: (val) {
-                  final updated = _eqSettings.copyWith(enabled: val);
-                  setState(() => _eqSettings = updated);
-                  widget.onEqualizerSettingsChanged(updated);
+            ),
+            const SizedBox(height: 14),
+            // 10-Band Sliders Console
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final itemWidth =
+                      (constraints.maxWidth / _eqSettings.bands.length).clamp(
+                        38.0,
+                        56.0,
+                      );
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        for (var i = 0; i < _eqSettings.bands.length; i++)
+                          _buildBandSlider(i, itemWidth),
+                      ],
+                    ),
+                  );
                 },
               ),
-              IconButton(
-                tooltip: '重置为原音直通 (Flat)',
-                icon: const Icon(Icons.refresh_rounded, size: 20, color: Colors.white70),
-                onPressed: () {
-                  final updated = _eqSettings.applyPreset(AudioEqualizerPreset.flat);
-                  setState(() => _eqSettings = updated);
-                  widget.onEqualizerSettingsChanged(updated);
-                },
-                splashRadius: 18,
+            ),
+            const SizedBox(height: 18),
+            // Dynamic Audio Processing Section
+            const Text(
+              '声场动态扩展与夜间防打扰 (Dynamic Audio Processing)',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Acoustic Presets
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: AudioEqualizerPreset.values.map((preset) {
-                final isSelected = _eqSettings.activePreset == preset;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(preset.label),
-                    selected: isSelected,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final mode in AudioEnhancementMode.values) ...[
+                  ChoiceChip(
+                    label: Text(mode.label),
+                    selected: _audioMode == mode,
                     selectedColor: AppColors.spotlight.withValues(alpha: 0.25),
                     side: BorderSide(
-                      color: isSelected ? AppColors.spotlight : Colors.white12,
+                      color: _audioMode == mode
+                          ? AppColors.spotlight
+                          : Colors.white12,
                     ),
                     labelStyle: TextStyle(
-                      color: isSelected ? AppColors.spotlight : AppColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: _audioMode == mode
+                          ? AppColors.spotlight
+                          : AppColors.textSecondary,
+                      fontSize: 12,
                     ),
                     onSelected: (selected) {
                       if (selected) {
-                        final updated = _eqSettings.applyPreset(preset);
-                        setState(() => _eqSettings = updated);
-                        widget.onEqualizerSettingsChanged(updated);
+                        setState(() => _audioMode = mode);
+                        widget.onAudioModeChanged(mode);
                       }
                     },
                   ),
-                );
-              }).toList(growable: false),
-            ),
-          ),
-          const SizedBox(height: 14),
-          // 10-Band Sliders Console
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final itemWidth = (constraints.maxWidth / _eqSettings.bands.length).clamp(38.0, 56.0);
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      for (var i = 0; i < _eqSettings.bands.length; i++)
-                        _buildBandSlider(i, itemWidth),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 18),
-          // Dynamic Audio Processing Section
-          const Text(
-            '声场动态扩展与夜间防打扰 (Dynamic Audio Processing)',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final mode in AudioEnhancementMode.values) ...[
-                ChoiceChip(
-                  label: Text(mode.label),
-                  selected: _audioMode == mode,
-                  selectedColor: AppColors.spotlight.withValues(alpha: 0.25),
-                  side: BorderSide(
-                    color: _audioMode == mode ? AppColors.spotlight : Colors.white12,
-                  ),
-                  labelStyle: TextStyle(
-                    color: _audioMode == mode ? AppColors.spotlight : AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                  onSelected: (selected) {
-                    if (selected) {
-                      setState(() => _audioMode = mode);
-                      widget.onAudioModeChanged(mode);
-                    }
-                  },
-                ),
+                ],
               ],
-            ],
-          ),
-          const SizedBox(height: 12),
-        ],
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildBandSlider(int index, double width) {
     final band = _eqSettings.bands[index];

@@ -34,7 +34,9 @@ class ActorFavorite {
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '未知演员',
       role: json['role'] as String?,
-      imageUri: json['imageUri'] != null ? Uri.tryParse(json['imageUri'] as String) : null,
+      imageUri: json['imageUri'] != null
+          ? Uri.tryParse(json['imageUri'] as String)
+          : null,
       imageHeaders: json['imageHeaders'] is Map
           ? Map<String, String>.from(json['imageHeaders'] as Map)
           : const {},

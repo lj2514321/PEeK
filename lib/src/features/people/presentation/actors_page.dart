@@ -1,16 +1,15 @@
-import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -176,8 +175,8 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         _totalItemCount = isShortPage
             ? page.items.length
             : (page.totalRecordCount > page.items.length
-                ? page.totalRecordCount
-                : page.items.length + _pageSize);
+                  ? page.totalRecordCount
+                  : page.items.length + _pageSize);
         _nextStartIndex = page.nextStartIndex;
       });
     } on MediaLibraryException catch (error) {
@@ -242,8 +241,8 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
         _totalItemCount = isShortPage
             ? _items.length
             : (page.totalRecordCount > _items.length
-                ? page.totalRecordCount
-                : _items.length + _pageSize);
+                  ? page.totalRecordCount
+                  : _items.length + _pageSize);
         _nextStartIndex = page.nextStartIndex;
       });
     } on MediaLibraryException catch (error) {
@@ -277,35 +276,57 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
   void _openWork(MediaItem item) {
     final account = widget.account;
     if (account == null) return;
-    AppRoutes.openMediaDetail(
-      context,
-      account: account,
-      item: item,
-    );
+    AppRoutes.openMediaDetail(context, account: account, item: item);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: AmbientBackdrop(
-        child: PeekSmoothScroll(
+      backgroundColor: Colors.transparent,
+      body: PeekSmoothScroll(
+        controller: _scrollController,
+        child: CustomScrollView(
+          key: const PageStorageKey('actors-scroll-view'),
           controller: _scrollController,
-          child: CustomScrollView(
-            key: const PageStorageKey('actors-scroll-view'),
-            controller: _scrollController,
           slivers: [
-            SliverAppBar(
-              pinned: true,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              shadowColor: Colors.transparent,
-              surfaceTintColor: Colors.transparent,
-              backgroundColor: AppColors.glassStrong.withValues(alpha: 0.92),
-              title: const Text('演员列表'),
-              actions: [
-                if (defaultTargetPlatform == TargetPlatform.windows)
-                  const SizedBox(width: AppChrome.windowControlsWidth),
-              ],
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 6),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.spotlight.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.people_alt_rounded,
+                        color: AppColors.spotlight,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'CAST & CREW',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '演员列表',
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             if (widget.account != null)
               SliverToBoxAdapter(
@@ -376,9 +397,16 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
                       itemCount: _items.length,
                       itemBuilder: (context, index) {
                         final item = _items[index];
-                        return _ActorCard(
-                          item: item,
-                          onOpen: () => _openActor(item),
+                        return PeekStaggeredGridItem(
+                          key: ValueKey(
+                            'actor-stagger-$_requestGeneration-$index-${_selectedLibraryId ?? "all"}-${item.id}',
+                          ),
+                          index: index,
+                          columns: columns,
+                          child: _ActorCard(
+                            item: item,
+                            onOpen: () => _openActor(item),
+                          ),
                         );
                       },
                     ),
@@ -413,7 +441,6 @@ class ActorsPageState extends ConsumerState<ActorsPage> {
           ],
         ),
       ),
-    ),
     );
   }
 }
@@ -508,14 +535,17 @@ class _LibraryChip extends StatelessWidget {
       padding: const EdgeInsets.only(right: 8),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: AppRadius.borderRadius,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(99),
+          borderRadius: AppRadius.borderRadius,
           child: AnimatedContainer(
             duration: AppMotion.fast,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: AppGlass.decoration(radius: 99, selected: selected),
+            decoration: AppGlass.decoration(
+              radius: AppRadius.value,
+              selected: selected,
+            ),
             child: Text(
               label,
               style: TextStyle(
@@ -548,68 +578,81 @@ class _ActorCard extends StatelessWidget {
     return Semantics(
       button: true,
       label: '查看 ${item.name} 的作品',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: Peek3DCard(
-              onTap: onOpen,
-              borderRadius: 16,
-              child: Material(
-                color: AppColors.surfaceLow,
-                borderRadius: BorderRadius.circular(16),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  key: ValueKey('actor-${item.id}'),
-                  onTap: onOpen,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      PeekMediaImage(
-                        uri: item.imageUri,
-                        headers: item.imageHeaders,
-                        kind: PeekMediaImageKind.person,
-                        placeholderBackground: AppColors.surfaceHigh,
-                        placeholderIcon: Icons.person_outline_rounded,
-                        placeholderIconSize: 42,
-                      ),
-                      const DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black26,
-                              Colors.black54,
-                            ],
-                            stops: [0.5, 0.8, 1.0],
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: AppGlass.decoration(radius: AppRadius.value),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Peek3DCard(
+                onTap: onOpen,
+                borderRadius: AppRadius.value,
+                child: Material(
+                  color: AppColors.surfaceLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: AppRadius.borderRadius,
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.20),
+                      width: 1,
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: ValueKey('actor-${item.id}'),
+                    onTap: onOpen,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        PeekMediaImage(
+                          uri: item.imageUri,
+                          headers: item.imageHeaders,
+                          kind: PeekMediaImageKind.person,
+                          placeholderBackground: AppColors.surfaceHigh,
+                          placeholderIcon: Icons.person_outline_rounded,
+                          placeholderIconSize: 42,
+                        ),
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black26,
+                                Colors.black54,
+                              ],
+                              stops: [0.5, 0.8, 1.0],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _metadata(item),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              _metadata(item),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
@@ -8,6 +9,7 @@ import 'package:embyplayer/src/core/domain/server.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
 import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
@@ -140,8 +142,9 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
 
   Future<void> _toggleFavorite() async {
     final favorite = ActorFavorite.fromMediaPerson(widget.person);
-    final isNowFav =
-        await ref.read(actorFavoritesProvider.notifier).toggleFavorite(favorite);
+    final isNowFav = await ref
+        .read(actorFavoritesProvider.notifier)
+        .toggleFavorite(favorite);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -160,8 +163,9 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
     final isFav = ref
         .watch(actorFavoritesProvider)
         .maybeWhen(
-          data: (_) =>
-              ref.read(actorFavoritesProvider.notifier).isFavorite(widget.person.id),
+          data: (_) => ref
+              .read(actorFavoritesProvider.notifier)
+              .isFavorite(widget.person.id),
           orElse: () => false,
         );
 
@@ -172,141 +176,178 @@ class _PersonWorksPageState extends ConsumerState<PersonWorksPage> {
           child: CustomScrollView(
             key: const PageStorageKey('person-works-scroll'),
             controller: _scrollController,
-          slivers: [
-            SliverAppBar(
-              pinned: true,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              shadowColor: Colors.transparent,
-              surfaceTintColor: Colors.transparent,
-              backgroundColor: AppColors.canvas.withValues(alpha: 0.85),
-              leading: IconButton(
-                tooltip: '返回',
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              title: Text(
-                widget.person.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-              ),
-              actions: [
-                IconButton(
-                  key: const ValueKey('actor-favorite-button'),
-                  tooltip: isFav ? '已收藏演员' : '收藏演员',
-                  icon: Icon(
-                    isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                    size: 20,
-                    color: isFav ? const Color(0xFFFF4081) : Colors.white70,
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                shadowColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                backgroundColor: Colors.transparent,
+                flexibleSpace: Padding(
+                  padding: EdgeInsets.only(
+                    right: defaultTargetPlatform == TargetPlatform.windows
+                        ? AppChrome.windowControlsWidth + 10.0
+                        : 0,
                   ),
-                  onPressed: _toggleFavorite,
-                ),
-                if (defaultTargetPlatform == TargetPlatform.windows)
-                  const SizedBox(width: AppChrome.windowControlsWidth),
-              ],
-            ),
-            SliverToBoxAdapter(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1180),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
-                    child: _PersonWorksHeader(
-                      person: widget.person,
-                      total: _totalItemCount,
-                      loading: _loading,
-                      isFavorite: isFav,
-                      onToggleFavorite: _toggleFavorite,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (_loading && _items.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null && _items.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _PersonWorksMessage(
-                  icon: Icons.cloud_off_rounded,
-                  title: '暂时无法读取作品',
-                  message: _error!,
-                  actionLabel: '重新加载',
-                  onAction: () => _loadInitial(forceRefresh: true),
-                ),
-              )
-            else if (_items.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: _PersonWorksMessage(
-                  icon: Icons.movie_filter_outlined,
-                  title: '媒体库中暂无相关作品',
-                  message: '服务器没有返回这位演员参演的电影、剧集或视频。',
-                ),
-              )
-            else
-              SliverLayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.crossAxisExtent;
-                  final columns = switch (width) {
-                    < 520 => 2,
-                    < 760 => 3,
-                    < 1000 => 4,
-                    < 1260 => 5,
-                    _ => 6,
-                  };
-                  return SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
-                    sliver: SliverGrid.builder(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 22,
-                        childAspectRatio: 0.62,
+                  child: ClipRRect(
+                    borderRadius: AppRadius.borderRadius,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                      child: DecoratedBox(
+                        decoration: AppGlass.decoration(
+                          radius: kAppCornerRadius,
+                        ),
+                        child: const SizedBox.expand(),
                       ),
-                      itemCount: _items.length,
-                      itemBuilder: (context, index) {
-                        final item = _items[index];
-                        return _PersonWorkCard(
-                          item: item,
-                          onOpen: () => widget.onOpen(item),
-                        );
-                      },
                     ),
-                  );
-                },
+                  ),
+                ),
+                leading: IconButton(
+                  tooltip: '返回',
+                  icon: const Icon(
+                    Icons.arrow_back_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                title: Text(
+                  widget.person.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    key: const ValueKey('actor-favorite-button'),
+                    tooltip: isFav ? '已收藏演员' : '收藏演员',
+                    icon: Icon(
+                      isFav
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      size: 20,
+                      color: isFav ? const Color(0xFFFF4081) : Colors.white70,
+                    ),
+                    onPressed: _toggleFavorite,
+                  ),
+                  if (defaultTargetPlatform == TargetPlatform.windows)
+                    const SizedBox(width: AppChrome.windowControlsWidth + 16),
+                ],
               ),
-            if (_items.isNotEmpty &&
-                (_loadingMore || _paginationError != null || _hasMore))
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
-                  child: Center(
-                    child: _loadingMore
-                        ? const SizedBox.square(
-                            dimension: 28,
-                            child: CircularProgressIndicator(strokeWidth: 2.4),
-                          )
-                        : TextButton.icon(
-                            onPressed: _loadMore,
-                            icon: Icon(
-                              _paginationError == null
-                                  ? Icons.expand_more_rounded
-                                  : Icons.refresh_rounded,
-                            ),
-                            label: Text(
-                              _paginationError == null ? '加载更多' : '加载失败，点击重试',
-                            ),
-                          ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1180),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+                      child: _PersonWorksHeader(
+                        person: widget.person,
+                        total: _totalItemCount,
+                        loading: _loading,
+                        isFavorite: isFav,
+                        onToggleFavorite: _toggleFavorite,
+                      ),
+                    ),
                   ),
                 ),
               ),
-          ],
-        ),
+              if (_loading && _items.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_error != null && _items.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _PersonWorksMessage(
+                    icon: Icons.cloud_off_rounded,
+                    title: '暂时无法读取作品',
+                    message: _error!,
+                    actionLabel: '重新加载',
+                    onAction: () => _loadInitial(forceRefresh: true),
+                  ),
+                )
+              else if (_items.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _PersonWorksMessage(
+                    icon: Icons.movie_filter_outlined,
+                    title: '媒体库中暂无相关作品',
+                    message: '服务器没有返回这位演员参演的电影、剧集或视频。',
+                  ),
+                )
+              else
+                SliverLayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.crossAxisExtent;
+                    final columns = switch (width) {
+                      < 520 => 2,
+                      < 760 => 3,
+                      < 1000 => 4,
+                      < 1260 => 5,
+                      _ => 6,
+                    };
+                    return SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+                      sliver: SliverGrid.builder(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 22,
+                          childAspectRatio: 0.62,
+                        ),
+                        itemCount: _items.length,
+                        itemBuilder: (context, index) {
+                          final item = _items[index];
+                          return PeekStaggeredGridItem(
+                            key: ValueKey(
+                              'person-work-stagger-$index-${item.id}',
+                            ),
+                            index: index,
+                            columns: columns,
+                            child: _PersonWorkCard(
+                              item: item,
+                              onOpen: () => widget.onOpen(item),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              if (_items.isNotEmpty &&
+                  (_loadingMore || _paginationError != null || _hasMore))
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                    child: Center(
+                      child: _loadingMore
+                          ? const SizedBox.square(
+                              dimension: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                              ),
+                            )
+                          : TextButton.icon(
+                              onPressed: _loadMore,
+                              icon: Icon(
+                                _paginationError == null
+                                    ? Icons.expand_more_rounded
+                                    : Icons.refresh_rounded,
+                              ),
+                              label: Text(
+                                _paginationError == null ? '加载更多' : '加载失败，点击重试',
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -332,13 +373,13 @@ class _PersonWorksHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(22),
-      decoration: AppGlass.decoration(radius: 20, selected: true),
+      decoration: AppGlass.decoration(radius: kAppCornerRadius, selected: true),
       child: Row(
         children: [
           SizedBox.square(
             dimension: 72,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: AppRadius.borderRadius,
               child: PeekMediaImage(
                 uri: person.imageUri,
                 headers: person.imageHeaders,
@@ -406,10 +447,10 @@ class _PersonWorkCard extends StatelessWidget {
           Expanded(
             child: Peek3DCard(
               onTap: onOpen,
-              borderRadius: 15,
+              borderRadius: kAppCornerRadius,
               child: Material(
                 color: AppColors.surfaceLow,
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: AppRadius.borderRadius,
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   key: ValueKey('person-work-${item.id}'),
