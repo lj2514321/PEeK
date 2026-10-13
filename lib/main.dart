@@ -17,25 +17,36 @@ import 'package:window_manager/window_manager.dart';
 /// hitching during initial page load animations on desktop.
 void _warmupGraphicsPipeline() {
   try {
-    PaintingBinding.instance.imageCache.maximumSizeBytes = 256 * 1024 * 1024;
-    PaintingBinding.instance.imageCache.maximumSize = 1200;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 512 * 1024 * 1024;
+    PaintingBinding.instance.imageCache.maximumSize = 1500;
 
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 100, 100));
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 160, 160));
 
-    // 1. Skia blur shader warm-up
-    final paintBlur = Paint()
-      ..imageFilter = ui.ImageFilter.blur(
-        sigmaX: 32,
-        sigmaY: 32,
-        tileMode: TileMode.decal,
-      );
-    canvas.drawRect(const Rect.fromLTWH(0, 0, 100, 100), paintBlur);
+    // 1. Skia blur shader warm-up across all sigmas used in the application
+    for (final sigma in [5.0, 18.0, 28.0, 32.0, 34.0, 42.0]) {
+      final paintBlurDecal = Paint()
+        ..imageFilter = ui.ImageFilter.blur(
+          sigmaX: sigma,
+          sigmaY: sigma,
+          tileMode: TileMode.decal,
+        );
+      canvas.drawRect(const Rect.fromLTWH(0, 0, 30, 30), paintBlurDecal);
+
+      final paintBlurClamp = Paint()
+        ..imageFilter = ui.ImageFilter.blur(
+          sigmaX: sigma,
+          sigmaY: sigma,
+          tileMode: TileMode.clamp,
+        );
+      canvas.drawRect(const Rect.fromLTWH(0, 0, 30, 30), paintBlurClamp);
+    }
 
     // 2. Skia linear & radial gradient shaders warm-up
     final paintGrad = Paint()
       ..shader = ui.Gradient.linear(Offset.zero, const Offset(100, 100), const [
         Color(0xFF6B421B),
+        Color(0xFF33213B),
         Color(0xFF101729),
       ]);
     canvas.drawRRect(
@@ -46,19 +57,35 @@ void _warmupGraphicsPipeline() {
       paintGrad,
     );
 
+    final paintRadial = Paint()
+      ..shader = ui.Gradient.radial(const Offset(50, 50), 60, const [
+        Color(0x8838BDF8),
+        Color(0x00000000),
+      ]);
+    canvas.drawCircle(const Offset(50, 50), 50, paintRadial);
+
     // 3. Skia 3D perspective transform matrix warm-up
     final matrix = Matrix4.identity()
-      ..setEntry(3, 2, 0.001)
-      ..rotateX(0.04)
-      ..rotateY(0.04);
+      ..setEntry(3, 2, 0.0012)
+      ..rotateX(0.05)
+      ..rotateY(0.05);
     canvas.transform(matrix.storage);
     canvas.drawRect(
       const Rect.fromLTWH(0, 0, 50, 50),
       Paint()..color = const Color(0x1AFFFFFF),
     );
 
+    // 4. Typography glyph atlas pre-rasterization
+    final paragraphBuilder =
+        ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: 14))
+          ..pushStyle(ui.TextStyle(color: const Color(0xFFFFFFFF)))
+          ..addText('PEeK 媒体库 首页 收藏 设置 演员 播放 正在缓冲 0123456789');
+    final paragraph = paragraphBuilder.build()
+      ..layout(const ui.ParagraphConstraints(width: 300));
+    canvas.drawParagraph(paragraph, Offset.zero);
+
     final picture = recorder.endRecording();
-    final image = picture.toImageSync(100, 100);
+    final image = picture.toImageSync(160, 160);
     image.dispose();
     picture.dispose();
   } catch (_) {

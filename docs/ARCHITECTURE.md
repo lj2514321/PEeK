@@ -44,7 +44,8 @@ UI 只依赖统一领域模型，不直接读取 Jellyfin 或 Emby 的 JSON DTO�
    - `PeekMotionOrigin` 捕获全局与卡片指针按下坐标，驱动 `PeekSpatialPageRoute` 实现从点击源锚点展开/收缩的空间容器形变；
    - 侧栏导航采用 `_LiquidRailIndicator` 非对称前后沿区间与挤压拉伸算法。
 6. **动效零削减性能优化架构 (Zero-Cut Motion Performance Architecture)**：
-   - **Skia 光栅化管线启动预热 (`lib/main.dart: _warmupGraphicsPipeline`)**：在 UI 挂载前通过离屏 `PictureRecorder` 预热高斯模糊 (`ImageFilter.blur`)、渐变 (`Gradient.linear/radial`) 与 3D 透视矩阵 Shader，杜绝桌面首帧 JIT 着色器编译卡顿，并将 `PaintingBinding` 图片内存上限扩充至 256MB/1200 项，消除并发卡片加载时的 Cache 颠簸；
+   - **应用启动预热门控与硬件着色器预编译 (`src/app/peek_warmup_gate.dart: PeekWarmupGate`)**：应用冷启动时呈现 VisionOS 空间流体预热微屏（约 520ms），在原生 Direct3D 视口内挂载 `_HardwarePipelineExerciser` 强制由显卡硬件预编译全套模糊 (5/18/28/32/34/42 sigma)、3D 透视矩阵、空间渐变与字体/图标字形图集，同时并发预加载会话凭据与媒体库元数据；就绪后通过 `PeekCurves.cinemaFade` 胶片级溶解切入主界面，使主页卡片流获得 100% 满帧即刻响应体验；
+   - **Skia 引擎级管线预热 (`lib/main.dart: _warmupGraphicsPipeline`)**：在 UI 挂载前通过离屏 `PictureRecorder` 预热高斯模糊 (`ImageFilter.blur`)、渐变 (`Gradient.linear/radial`)、3D 透视矩阵与中英文字形，并将 `PaintingBinding` 图片显存上限扩充至 512MB/1500 项，消除并发卡片加载时的 Cache 颠簸与 GC 回收压力；
    - **分层解耦与 BackdropFilter 静态化隔离 (`glass.dart` / `authenticated_home_page.dart`)**：将毛玻璃面板中的 `BackdropFilter` 抽离为 `Stack` 下层的 `Positioned.fill` 静态背景层，与动态卡片/文字内容解耦，彻底避免上层内容动效每帧重复触发 Skia 重滤镜光栅化；
    - **自适应内存降采样图层解码 (`peek_media_image.dart`)**：根据卡片类型与视口尺寸注入 `memCacheWidth`（海报 440px、剧集 600px、背景 960px、头像 280px），单张图片 GPU 解码内存从 24MB 锐减至 1MB（降幅 95%）；
    - **超大环境光弥散图层降采样 (`AmbientBackdrop`)**：在 42px 大半径全屏环境光漫反射层指定 `memCacheWidth: 320`，在 100% 保持 VisionOS 空间光品质的前提下将全屏光栅化开销降低逾百倍；

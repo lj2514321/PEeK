@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:embyplayer/src/app/app_chrome.dart';
+import 'package:embyplayer/src/app/peek_warmup_gate.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/cinematic_scroll_behavior.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
@@ -65,7 +66,7 @@ class EmbyPlayerApp extends StatelessWidget {
           },
         );
       },
-      home: const HomeShell(),
+      home: const PeekWarmupGate(child: HomeShell()),
     );
   }
 }
