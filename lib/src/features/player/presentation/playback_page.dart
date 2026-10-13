@@ -231,6 +231,7 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
   @override
   void initState() {
     super.initState();
+    SpatialAmbientController.instance.setTheaterBlackout(true);
     _pageFocusNode.requestFocus();
     _diagnosticLog = ref.read(playbackDiagnosticLogProvider);
     _systemMediaSession = ref.read(windowsMediaSessionProvider)();
@@ -2632,6 +2633,7 @@ class PlaybackPageState extends ConsumerState<PlaybackPage> {
 
   @override
   void dispose() {
+    SpatialAmbientController.instance.setTheaterBlackout(false);
     _cursorHideTimer?.cancel();
     AppChrome.leaveImmersive();
     _progressTimer?.cancel();

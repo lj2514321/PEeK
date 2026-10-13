@@ -306,6 +306,24 @@ class DanmakuPreferences {
   );
 }
 
+enum SpatialBackdropTheme {
+  spatialFlow('VisionOS 空间流光', '自适应海报色散与多色域流动漫反射'),
+  pureOled('极黑深渊 (OLED)', '全黑沉浸纯度，零光晕干扰'),
+  cyberpunk('赛博霓虹', '深夜暗紫与微光电蓝漫射'),
+  deepNebula('深空星云', '星际幽蓝与冷青极光漫射'),
+  studioGray('瑞士影棚灰', '极简无色偏中性灰阶');
+
+  const SpatialBackdropTheme(this.label, this.detail);
+
+  final String label;
+  final String detail;
+
+  static SpatialBackdropTheme fromName(Object? value) {
+    return values.where((item) => item.name == value).firstOrNull ??
+        spatialFlow;
+  }
+}
+
 class PlaybackSettings {
   const PlaybackSettings({
     this.maxStreamingBitrate = PlaybackBitrate.original,
@@ -317,6 +335,7 @@ class PlaybackSettings {
     this.useExternalPlayer = false,
     this.externalPlayerPath,
     this.longPressSpeed = 2.0,
+    this.backdropTheme = SpatialBackdropTheme.spatialFlow,
   });
 
   final PlaybackBitrate maxStreamingBitrate;
@@ -328,6 +347,7 @@ class PlaybackSettings {
   final bool useExternalPlayer;
   final String? externalPlayerPath;
   final double longPressSpeed;
+  final SpatialBackdropTheme backdropTheme;
 
   PlaybackSettings copyWith({
     PlaybackBitrate? maxStreamingBitrate,
@@ -340,6 +360,7 @@ class PlaybackSettings {
     String? externalPlayerPath,
     bool clearExternalPlayerPath = false,
     double? longPressSpeed,
+    SpatialBackdropTheme? backdropTheme,
   }) {
     return PlaybackSettings(
       maxStreamingBitrate: maxStreamingBitrate ?? this.maxStreamingBitrate,
@@ -353,6 +374,7 @@ class PlaybackSettings {
           ? null
           : (externalPlayerPath ?? this.externalPlayerPath),
       longPressSpeed: longPressSpeed ?? this.longPressSpeed,
+      backdropTheme: backdropTheme ?? this.backdropTheme,
     );
   }
 
@@ -366,6 +388,7 @@ class PlaybackSettings {
     'useExternalPlayer': useExternalPlayer,
     'externalPlayerPath': externalPlayerPath,
     'longPressSpeed': longPressSpeed,
+    'backdropTheme': backdropTheme.name,
   };
 
   factory PlaybackSettings.fromJson(Map<String, dynamic> json) {
@@ -389,6 +412,7 @@ class PlaybackSettings {
       useExternalPlayer: json['useExternalPlayer'] as bool? ?? false,
       externalPlayerPath: json['externalPlayerPath'] as String?,
       longPressSpeed: (json['longPressSpeed'] as num?)?.toDouble() ?? 2.0,
+      backdropTheme: SpatialBackdropTheme.fromName(json['backdropTheme']),
     );
   }
 
@@ -403,7 +427,8 @@ class PlaybackSettings {
         other.enableMiniPlayer == enableMiniPlayer &&
         other.useExternalPlayer == useExternalPlayer &&
         other.externalPlayerPath == externalPlayerPath &&
-        other.longPressSpeed == longPressSpeed;
+        other.longPressSpeed == longPressSpeed &&
+        other.backdropTheme == backdropTheme;
   }
 
   @override
@@ -417,5 +442,6 @@ class PlaybackSettings {
     useExternalPlayer,
     externalPlayerPath,
     longPressSpeed,
+    backdropTheme,
   );
 }

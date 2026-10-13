@@ -131,6 +131,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
     try {
       final settings = await ref.read(playbackSettingsStoreProvider).read();
       if (!mounted) return;
+      SpatialAmbientController.instance.setTheme(settings.backdropTheme);
       setState(() {
         _playbackSettings = settings;
         _playbackSettingsLoading = false;
@@ -253,6 +254,13 @@ class _HomeShellState extends ConsumerState<HomeShell>
   Future<void> _changeLongPressSpeed(double speed) async {
     await _savePlaybackSettings(
       _playbackSettings.copyWith(longPressSpeed: speed),
+    );
+  }
+
+  Future<void> _changeBackdropTheme(SpatialBackdropTheme theme) async {
+    SpatialAmbientController.instance.setTheme(theme);
+    await _savePlaybackSettings(
+      _playbackSettings.copyWith(backdropTheme: theme),
     );
   }
 
@@ -735,6 +743,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
                                       (speed) => unawaited(
                                         _changeLongPressSpeed(
                                           speed,
+                                        ),
+                                      ),
+                                  onBackdropThemeChanged:
+                                      (theme) => unawaited(
+                                        _changeBackdropTheme(
+                                          theme,
                                         ),
                                       ),
                                 )
