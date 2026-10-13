@@ -161,30 +161,6 @@ void main() {
     expect(removed?.id, library.id);
     expect(find.text('Local Videos'), findsOneWidget);
   });
-
-  testWidgets('selects a spatial backdrop theme', (tester) async {
-    SpatialBackdropTheme? updatedTheme;
-    await tester.pumpWidget(
-      _app(
-        state: _state(),
-        onBackdropThemeChanged: (theme) => updatedTheme = theme,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('视窗背景与空间流光'), findsOneWidget);
-    expect(find.text('VisionOS 空间流光'), findsOneWidget);
-    expect(find.text('极黑深渊 (OLED)'), findsOneWidget);
-
-    final pureOledButton = find.byKey(
-      const ValueKey('backdrop-theme-pureOled'),
-    );
-    await tester.ensureVisible(pureOledButton);
-    await tester.tap(pureOledButton);
-    await tester.pumpAndSettle();
-
-    expect(updatedTheme, SpatialBackdropTheme.pureOled);
-  });
 }
 
 Widget _app({
@@ -195,7 +171,6 @@ Widget _app({
   ValueChanged<PlaybackBitrate>? onPlaybackBitrateChanged,
   ValueChanged<HardwareDecodingMode>? onHardwareDecodingModeChanged,
   ValueChanged<double>? onLongPressSpeedChanged,
-  ValueChanged<SpatialBackdropTheme>? onBackdropThemeChanged,
   List<LocalMediaLibrary> localLibraries = const [],
   Future<void> Function(LocalMediaLibrary)? onRemoveLocalLibrary,
 }) {
@@ -214,7 +189,6 @@ Widget _app({
         onPlaybackBitrateChanged: onPlaybackBitrateChanged,
         onHardwareDecodingModeChanged: onHardwareDecodingModeChanged,
         onLongPressSpeedChanged: onLongPressSpeedChanged,
-        onBackdropThemeChanged: onBackdropThemeChanged,
         localLibraries: localLibraries,
         onRemoveLocalLibrary: onRemoveLocalLibrary,
       ),

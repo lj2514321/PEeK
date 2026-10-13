@@ -55,13 +55,8 @@
 
 ## 层级与效果
 
-- VisionOS「活体影院」视窗背景体系（`AmbientBackdrop` + `SpatialAmbientController`）：
-  - **自适应海报色散漫反射（Dynamic Chromatic Halo）**：由顶层 `HomeShell` 统一承载，提取当前海报色谱并施加 HSV 饱和度（22%~32%）与明度（13%~20%）阻尼钳制，在 `#080A10` 曜石黑画布上柔和漫反射，杜绝眩光；
-  - **1px 晶体折射高光边框（Specular Crystal Rim Light）**：全视窗外沿渲染左上朝向的 1px 定向高光渐变（`Color(0x33FFFFFF)` → `Color(0x05FFFFFF)`），赋予界面物理玻璃立体感；
-  - **胶片银盐微晶抗断层（Anti-Banding Micro-Dither）**：内置 1.8%~2.8% 透明度的高频微晶噪波层，彻底抚平 4K/OLED 屏幕上深色渐变的 8-bit 色阶过渡断层；
-  - **剧场熄灯模式（Theater Blackout Mode）**：全屏播放视频时 680ms 平滑暗化至 OLED 纯黑（`#000000`），暂停或退出播放即柔和唤醒环境光；
-  - **五大多色域背景主题**：`VisionOS 空间流光`（默认推荐）、`极黑深渊 (OLED)`、`赛博霓虹`、`深空星云`、`瑞士影棚灰`，并在设置页提供即时切换与持久化存储。
-  - 子级一级页面（如媒体库、收藏、演员页）保持透明画布（`Colors.transparent`），严禁嵌套重复的 `AmbientBackdrop` 或不透明浅色顶栏遮挡环境光。
+- 采用 VisionOS 空间流体玻璃拟态（Spatial Glass）：悬浮胶囊岛、物理级折射微边框与双层空间投影。
+- 全局动态环境光（`AmbientBackdrop` + `SpatialAmbientController`）：由顶层 `HomeShell` 统一承载多色域电影氛围光（暖金、赛博紫、深空蓝），随首页轮播或悬停海报平滑流转；子级一级页面（如媒体库、收藏、演员页）必须保持透明画布（`Colors.transparent`），严禁嵌套重复的 `AmbientBackdrop` 或不透明浅色 `SliverAppBar` 顶栏遮挡环境光。
 - 普通卡片：1px Outline，海报卡片支持背光溢出（`PosterAmbientGlow`）与 3D 视差倾斜高光（`Peek3DCard`）。
 - 浮空胶囊与控制岛：采用 `AppGlass.visionOSDecoration`，迎光面采用 1.2px 半透白色渐变反光高光（Specular Rim Light），底部具有深邃接触阴影（blur 42）与蓝紫微光弥散层。
 - 模糊：控制面板、悬浮小窗与侧栏采用平滑毛玻璃 `ImageFilter.blur(sigmaX: 20-28, sigmaY: 20-28)`，透出底层视频动态光影与环境色。

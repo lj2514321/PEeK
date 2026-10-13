@@ -179,41 +179,4 @@ void main() {
       expect(restored.longPressSpeed, 2.0);
     },
   );
-
-  test('persists and restores backdropTheme setting', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'peek-playback-settings-',
-    );
-    addTearDown(() => directory.delete(recursive: true));
-    final store = JsonPlaybackSettingsStore(directory: directory);
-
-    await store.write(
-      const PlaybackSettings(backdropTheme: SpatialBackdropTheme.cyberpunk),
-    );
-
-    final restored = await store.read();
-    expect(restored.backdropTheme, SpatialBackdropTheme.cyberpunk);
-  });
-
-  test(
-    'falls back to spatialFlow for missing or unknown backdropTheme in legacy settings',
-    () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'peek-playback-settings-',
-      );
-      addTearDown(() => directory.delete(recursive: true));
-      final file = File(
-        '${directory.path}${Platform.pathSeparator}playback_settings_v1.json',
-      );
-      await file.writeAsString(
-        '{"version":3,"backdropTheme":"future_unknown_theme"}',
-      );
-
-      final restored = await JsonPlaybackSettingsStore(
-        directory: directory,
-      ).read();
-
-      expect(restored.backdropTheme, SpatialBackdropTheme.spatialFlow);
-    },
-  );
 }

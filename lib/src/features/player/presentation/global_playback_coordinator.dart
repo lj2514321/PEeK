@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:embyplayer/src/app/app.dart';
-import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
@@ -132,7 +131,6 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     required PlaybackRuntime runtime,
     Duration? initialPosition,
   }) {
-    SpatialAmbientController.instance.setTheaterBlackout(true);
     _cancelSubscriptions();
     _activeRuntime = runtime;
 
@@ -265,7 +263,6 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   }
 
   void closeMiniSilently() {
-    SpatialAmbientController.instance.setTheaterBlackout(false);
     _cancelSubscriptions();
     _miniProgressTimer?.cancel();
     _miniProgressTimer = null;
@@ -281,7 +278,6 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   }
 
   void clearActivePlayback() {
-    SpatialAmbientController.instance.setTheaterBlackout(false);
     _cancelSubscriptions();
     _activeRuntime = null;
     state = state.copyWith(
@@ -293,7 +289,6 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
 
   void minimize([BuildContext? context]) {
     if (state.runtime == null || state.item == null) return;
-    SpatialAmbientController.instance.setTheaterBlackout(false);
     state = state.copyWith(mode: PlaybackPresentationMode.mini);
     _syncMiniProgressTimer();
     if (context != null) {
@@ -305,7 +300,6 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
     if (state.runtime == null || state.item == null || state.plan == null) {
       return;
     }
-    SpatialAmbientController.instance.setTheaterBlackout(true);
     final item = state.item!;
     final account = state.account;
     final plan = state.plan!;
@@ -407,7 +401,6 @@ class GlobalPlaybackCoordinator extends Notifier<GlobalPlaybackState> {
   }
 
   Future<void> close({bool disposeRuntime = true}) async {
-    SpatialAmbientController.instance.setTheaterBlackout(false);
     if (state.mode == PlaybackPresentationMode.window) {
       await ref.read(playerWindowCoordinatorProvider).closeWindow();
       return;
