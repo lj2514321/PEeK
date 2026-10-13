@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
@@ -430,11 +429,7 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer>
             final opacity = Curves.easeOutQuad.transform(
               (raw * 1.4).clamp(0.0, 1.0),
             );
-            final blurSigma = widget.active
-                ? ((1.0 - (raw * 2.8).clamp(0.0, 1.0)) * 5.0).clamp(0.0, 5.0)
-                : ((1.0 - raw) * 8.0).clamp(0.0, 8.0);
-
-            Widget transformed = Transform.translate(
+            return Transform.translate(
               offset: Offset(0.0, dy),
               child: Transform.scale(
                 scale: scale,
@@ -442,19 +437,6 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer>
                 child: Opacity(opacity: opacity, child: child),
               ),
             );
-
-            if (blurSigma > 0.8) {
-              transformed = ImageFiltered(
-                imageFilter: ImageFilter.blur(
-                  sigmaX: blurSigma.clamp(0.0, 2.8),
-                  sigmaY: blurSigma.clamp(0.0, 2.8),
-                  tileMode: TileMode.decal,
-                ),
-                child: transformed,
-              );
-            }
-
-            return transformed;
           },
           child: scopedChild,
         ),
@@ -463,12 +445,12 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer>
   }
 }
 
-/// Origin-Anchored Container Morph & Optical Rack-Focus Page Route.
+/// Origin-Anchored Container Morph Page Route.
 ///
 /// Expands directly out of the screen coordinate where the user tapped
 /// ([PeekMotionOrigin.lastTapAlignment]) from `scale: 0.44 -> 1.0` with
-/// dynamic corner-radius morphing (`32px -> 0px`) and optical focus condensation
-/// (`blur 10px -> 0px`). When popped, shrinks right back into the originating card.
+/// hardware-composited scale, opacity, and container card morphing.
+/// When popped, smoothly shrinks right back into the originating card.
 class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
   PeekSpatialPageRoute({
     required WidgetBuilder builder,
@@ -484,105 +466,134 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
 
            final anchor = originAlignment ?? PeekMotionOrigin.lastTapAlignment;
 
-           final enterCurved = CurvedAnimation(
-             parent: animation,
-             curve: const Cubic(0.25, 1.05, 0.35, 1.0),
-             reverseCurve: const Cubic(0.32, 0.0, 0.22, 1.0),
-           );
-
-           final secCurved = CurvedAnimation(
-             parent: secondaryAnimation,
-             curve: PeekCurves.depthRecess,
-             reverseCurve: PeekCurves.spatialEnter,
-           );
-
-           final boundedChild = RepaintBoundary(child: child);
-
-           final current = AnimatedBuilder(
-             animation: enterCurved,
-             builder: (context, innerChild) {
-               final raw = animation.value;
-               if (raw >= 0.999 && secondaryAnimation.value <= 0.001) {
-                 return innerChild!;
-               }
-
-               final t = enterCurved.value;
-               final scale = 0.44 + (0.56 * t);
-               final opacity = Curves.easeOutCubic.transform(
-                 (raw * 1.65).clamp(0.0, 1.0),
-               );
-               final cornerRadius = ((1.0 - t) * 32.0).clamp(0.0, 32.0);
-               final blurSigma = ((1.0 - (raw * 1.55).clamp(0.0, 1.0)) * 10.0)
-                   .clamp(0.0, 10.0);
-
-               Widget morphed = cornerRadius > 0.5
-                   ? ClipRRect(
-                       borderRadius: BorderRadius.circular(cornerRadius),
-                       child: innerChild!,
-                     )
-                   : innerChild!;
-
-               if (blurSigma > 0.25) {
-                 morphed = ImageFiltered(
-                   imageFilter: ImageFilter.blur(
-                     sigmaX: blurSigma,
-                     sigmaY: blurSigma,
-                     tileMode: TileMode.decal,
-                   ),
-                   child: morphed,
-                 );
-               }
-
-               return Transform.scale(
-                 scale: scale,
-                 alignment: anchor,
-                 child: Opacity(opacity: opacity, child: morphed),
-               );
-             },
-             child: boundedChild,
-           );
-
-           return AnimatedBuilder(
-             animation: secCurved,
-             builder: (context, currentChild) {
-               final secVal = secCurved.value;
-               if (secVal <= 0.001) return currentChild!;
-
-               final recessScale = 1.0 - (secVal * 0.075);
-               final bgBlur = (secVal * 5.0).clamp(0.0, 5.0);
-
-               Widget recessed = currentChild!;
-               if (bgBlur > 0.25 && secVal < 0.999) {
-                 recessed = ImageFiltered(
-                   imageFilter: ImageFilter.blur(
-                     sigmaX: bgBlur,
-                     sigmaY: bgBlur,
-                     tileMode: TileMode.decal,
-                   ),
-                   child: recessed,
-                 );
-               }
-
-               return Transform.scale(
-                 scale: recessScale,
-                 alignment: Alignment.center,
-                 child: Stack(
-                   fit: StackFit.expand,
-                   children: [
-                     recessed,
-                     IgnorePointer(
-                       child: ColoredBox(
-                         color: Colors.black.withValues(alpha: secVal * 0.48),
-                       ),
-                     ),
-                   ],
-                 ),
-               );
-             },
-             child: current,
+           return PeekSpatialTransition(
+             animation: animation,
+             secondaryAnimation: secondaryAnimation,
+             originAlignment: anchor,
+             child: child,
            );
          },
        );
+}
+
+/// Hardware-composited container morph transition for [PeekSpatialPageRoute].
+class PeekSpatialTransition extends StatefulWidget {
+  const PeekSpatialTransition({
+    super.key,
+    required this.animation,
+    required this.secondaryAnimation,
+    required this.originAlignment,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final Animation<double> secondaryAnimation;
+  final Alignment originAlignment;
+  final Widget child;
+
+  @override
+  State<PeekSpatialTransition> createState() => _PeekSpatialTransitionState();
+}
+
+class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
+  late final CurvedAnimation _enterCurved;
+  late final CurvedAnimation _fadeCurved;
+  late final CurvedAnimation _secCurved;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _secScaleAnimation;
+  late final Animation<double> _secScrimAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _enterCurved = CurvedAnimation(
+      parent: widget.animation,
+      curve: const Cubic(0.25, 1.05, 0.35, 1.0),
+      reverseCurve: const Cubic(0.32, 0.0, 0.22, 1.0),
+    );
+
+    _fadeCurved = CurvedAnimation(
+      parent: widget.animation,
+      curve: const Interval(0.0, 0.68, curve: Curves.easeOutCubic),
+      reverseCurve: const Interval(0.15, 1.0, curve: Curves.easeInCubic),
+    );
+
+    _secCurved = CurvedAnimation(
+      parent: widget.secondaryAnimation,
+      curve: PeekCurves.depthRecess,
+      reverseCurve: PeekCurves.spatialEnter,
+    );
+
+    _scaleAnimation =
+        Tween<double>(begin: 0.44, end: 1.0).animate(_enterCurved);
+    _secScaleAnimation =
+        Tween<double>(begin: 1.0, end: 0.925).animate(_secCurved);
+    _secScrimAnimation =
+        Tween<double>(begin: 0.0, end: 0.48).animate(_secCurved);
+  }
+
+  @override
+  void dispose() {
+    _enterCurved.dispose();
+    _fadeCurved.dispose();
+    _secCurved.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final boundedChild = RepaintBoundary(child: widget.child);
+
+    final morphedChild = AnimatedBuilder(
+      animation: widget.animation,
+      builder: (context, child) {
+        if (widget.animation.value >= 0.999) {
+          return child!;
+        }
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16.0),
+          clipBehavior: Clip.antiAlias,
+          child: child!,
+        );
+      },
+      child: boundedChild,
+    );
+
+    final primary = ScaleTransition(
+      scale: _scaleAnimation,
+      alignment: widget.originAlignment,
+      child: FadeTransition(
+        opacity: _fadeCurved,
+        child: morphedChild,
+      ),
+    );
+
+    return AnimatedBuilder(
+      animation: _secCurved,
+      builder: (context, currentChild) {
+        if (widget.secondaryAnimation.value <= 0.001) {
+          return currentChild!;
+        }
+        return ScaleTransition(
+          scale: _secScaleAnimation,
+          alignment: Alignment.center,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              currentChild!,
+              FadeTransition(
+                opacity: _secScrimAnimation,
+                child: const IgnorePointer(
+                  child: ColoredBox(color: Colors.black),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      child: primary,
+    );
+  }
 }
 
 /// Backwards-compatible alias for [PeekSpatialPageRoute].

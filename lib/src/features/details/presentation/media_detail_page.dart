@@ -58,6 +58,10 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   String? _selectedMediaSourceId;
   final _scrollController = SmoothScrollController();
   double _scrollOffset = 0;
+  bool _hydrated = false;
+  Animation<double>? _routeAnimation;
+  AnimationStatusListener? _routeStatusListener;
+  Timer? _hydrationFallbackTimer;
 
   @override
   void initState() {
@@ -96,7 +100,79 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     }
     _selectedSeasonNumber = widget.initialItem.parentIndexNumber ?? 1;
     _scrollController.addListener(_onScroll);
-    Future<void>.microtask(_loadDetails);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _subscribeRouteAnimation();
+  }
+
+  void _subscribeRouteAnimation() {
+    if (_hydrated ||
+        (widget.initialItem.kind == MediaItemKind.person &&
+            widget.account != null)) {
+      return;
+    }
+
+    if (AppMotion.isTest) {
+      _scheduleHydration();
+      return;
+    }
+
+    final modalRoute = ModalRoute.of(context);
+    final animation = modalRoute?.animation;
+    if (animation == null || animation.isCompleted) {
+      _scheduleHydration();
+      return;
+    }
+
+    if (_routeAnimation == null) {
+      _routeAnimation = animation;
+      _routeStatusListener = (status) {
+        if (status == AnimationStatus.completed) {
+          _cleanRouteListener();
+          _scheduleHydration();
+        }
+      };
+      animation.addStatusListener(_routeStatusListener!);
+
+      _hydrationFallbackTimer = Timer(const Duration(milliseconds: 460), () {
+        if (mounted && !_hydrated) {
+          _cleanRouteListener();
+          _scheduleHydration();
+        }
+      });
+    }
+  }
+
+  void _cleanRouteListener() {
+    _hydrationFallbackTimer?.cancel();
+    _hydrationFallbackTimer = null;
+    if (_routeAnimation != null && _routeStatusListener != null) {
+      _routeAnimation!.removeStatusListener(_routeStatusListener!);
+      _routeStatusListener = null;
+      _routeAnimation = null;
+    }
+  }
+
+  void _scheduleHydration() {
+    if (_hydrated || !mounted) return;
+    _hydrated = true;
+    _cleanRouteListener();
+    _syncSpatialAmbient();
+    unawaited(_loadDetails());
+  }
+
+  void _syncSpatialAmbient() {
+    if (!mounted) return;
+    final ambientUri = _item.backdropUri ?? _item.imageUri;
+    SpatialAmbientController.instance.update(
+      itemId: _item.id,
+      imageUri: ambientUri,
+      imageHeaders: _item.imageHeaders,
+      paletteSeed: _item.id.hashCode.abs(),
+    );
   }
 
   void _onScroll() {
@@ -110,6 +186,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
 
   @override
   void dispose() {
+    _cleanRouteListener();
     _scrollController.dispose();
     super.dispose();
   }
@@ -212,6 +289,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
           }
         }
       });
+      _syncSpatialAmbient();
     } on MediaLibraryException catch (error) {
       if (mounted) setState(() => _detailError = error.message);
     } finally {
@@ -542,16 +620,6 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
         _seasonEpisodeMap[_selectedSeasonNumber] ??
         (_episodes.isNotEmpty ? _episodes : const <MediaItem>[]);
     final showScrolledTitle = _scrollOffset > 160;
-    final ambientUri = _item.backdropUri ?? _item.imageUri;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      SpatialAmbientController.instance.update(
-        itemId: _item.id,
-        imageUri: ambientUri,
-        imageHeaders: _item.imageHeaders,
-        paletteSeed: _item.id.hashCode.abs(),
-      );
-    });
 
     return PopScope<MediaItem>(
       canPop: false,
