@@ -340,6 +340,8 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
             builder: (context) {
               final compact = MediaQuery.sizeOf(context).width < 720;
               final leftPadding = compact ? 0.0 : 28.0;
+              const scrollbarWidth = 16.0;
+              final rightPadding = compact ? 0.0 : scrollbarWidth;
               return PeekSmoothScroll(
                 controller: _scrollController,
                 child: CustomScrollView(
@@ -351,7 +353,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                       padding: EdgeInsets.fromLTRB(
                         leftPadding,
                         compact ? 8 : 12,
-                        0,
+                        rightPadding,
                         10,
                       ),
                       sliver: SliverToBoxAdapter(
@@ -363,7 +365,12 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                       ),
                     ),
                     SliverPadding(
-                      padding: EdgeInsets.only(left: leftPadding),
+                      padding: EdgeInsets.fromLTRB(
+                        leftPadding,
+                        0,
+                        rightPadding,
+                        0,
+                      ),
                       sliver: SliverToBoxAdapter(
                         child: _loading && feed == null
                             ? const _HomeHeroSkeleton()
@@ -399,7 +406,12 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                     ),
                     if (_pageError != null && feed?.heroItem != null)
                       SliverPadding(
-                        padding: EdgeInsets.fromLTRB(leftPadding, 14, 0, 0),
+                        padding: EdgeInsets.fromLTRB(
+                          leftPadding,
+                          14,
+                          rightPadding,
+                          0,
+                        ),
                         sliver: SliverToBoxAdapter(
                           child: _HomeSectionNotice(
                             message: _pageError!,
@@ -409,7 +421,12 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                       ),
                     if (_loading && feed == null)
                       SliverPadding(
-                        padding: EdgeInsets.fromLTRB(leftPadding, 24, 0, 0),
+                        padding: EdgeInsets.fromLTRB(
+                          leftPadding,
+                          24,
+                          rightPadding,
+                          0,
+                        ),
                         sliver: const SliverToBoxAdapter(
                           child: _HomeTracksSkeleton(),
                         ),
@@ -418,6 +435,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                       ..._feedSlivers(
                         feed,
                         leftPadding: leftPadding,
+                        rightPadding: rightPadding,
                         compact: compact,
                       ),
                   ],
@@ -433,6 +451,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   List<Widget> _feedSlivers(
     HomeFeed feed, {
     required double leftPadding,
+    required double rightPadding,
     required bool compact,
   }) {
     return [
@@ -444,6 +463,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           section: feed.continueWatching,
           portrait: false,
           leftPadding: leftPadding,
+          rightPadding: rightPadding,
           compact: compact,
         ),
       for (final group in feed.latestMovies.groups)
@@ -454,6 +474,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
             section: group.section,
             portrait: true,
             leftPadding: leftPadding,
+            rightPadding: rightPadding,
             compact: compact,
             railId: 'latest-movies-${group.library.id}',
             libraryActionLabel: '全部媒体库',
@@ -465,6 +486,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           section: HomeFeedSection(error: feed.latestMovies.error),
           portrait: true,
           leftPadding: leftPadding,
+          rightPadding: rightPadding,
           compact: compact,
         ),
       if (!feed.latestEpisodes.isEmpty || feed.latestEpisodes.hasError)
@@ -474,6 +496,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           section: feed.latestEpisodes,
           portrait: false,
           leftPadding: leftPadding,
+          rightPadding: rightPadding,
           compact: compact,
         ),
     ];
@@ -485,12 +508,18 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     required HomeFeedSection section,
     required bool portrait,
     required double leftPadding,
+    required double rightPadding,
     required bool compact,
     String? railId,
     String libraryActionLabel = '查看媒体库',
   }) {
     return SliverPadding(
-      padding: EdgeInsets.fromLTRB(leftPadding, compact ? 20 : 26, 0, 0),
+      padding: EdgeInsets.fromLTRB(
+        leftPadding,
+        compact ? 20 : 26,
+        rightPadding,
+        0,
+      ),
       sliver: SliverToBoxAdapter(
         child: section.items.isEmpty
             ? _HomeSectionNotice(
@@ -919,11 +948,11 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
 
         return MouseRegion(
           onEnter: (_) {
-            _hovering = true;
+            if (!_hovering) setState(() => _hovering = true);
             _timer?.cancel();
           },
           onExit: (_) {
-            _hovering = false;
+            if (_hovering) setState(() => _hovering = false);
             _scheduleNext();
           },
           child: SizedBox(
@@ -977,7 +1006,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                     },
                   ),
 
-                  // Edge Navigation Controls - seamlessly integrated into canvas edges
+                  // Edge Navigation Controls - seamlessly integrated into canvas edges (边缘隐形)
                   if (widget.items.length > 1) ...[
                     Positioned(
                       left: compact ? 10 : 18,
@@ -988,6 +1017,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                           key: const ValueKey('hero-previous'),
                           icon: Icons.chevron_left_rounded,
                           tooltip: '上一条',
+                          visible: _hovering,
                           onTap: () => unawaited(_move(-1)),
                         ),
                       ),
@@ -1001,6 +1031,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                           key: const ValueKey('hero-next'),
                           icon: Icons.chevron_right_rounded,
                           tooltip: '下一条',
+                          visible: _hovering,
                           onTap: () => unawaited(_move(1)),
                         ),
                       ),
@@ -1034,66 +1065,79 @@ class _EdgeNavButton extends StatefulWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.visible = false,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final bool visible;
 
   @override
   State<_EdgeNavButton> createState() => _EdgeNavButtonState();
 }
 
 class _EdgeNavButtonState extends State<_EdgeNavButton> {
-  bool _hovered = false;
+  bool _buttonHovered = false;
 
   @override
   Widget build(BuildContext context) {
+    final isVisible = widget.visible || _buttonHovered;
+
     return Tooltip(
-      message: widget.tooltip,
+      message: isVisible ? widget.tooltip : '',
       waitDuration: const Duration(milliseconds: 350),
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
+        cursor: isVisible ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: (_) => setState(() => _buttonHovered = true),
+        onExit: (_) => setState(() => _buttonHovered = false),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+          child: AnimatedOpacity(
+            opacity: isVisible ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 240),
             curve: Curves.easeOutCubic,
-            width: _hovered ? 44 : 38,
-            height: _hovered ? 44 : 38,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _hovered
-                  ? Colors.white.withValues(alpha: 0.28)
-                  : const Color(0x66080B12),
-              border: Border.all(
-                color: _hovered
-                    ? Colors.white.withValues(alpha: 0.55)
-                    : Colors.white.withValues(alpha: 0.20),
-                width: _hovered ? 1.2 : 0.8,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: _hovered ? 0.40 : 0.20),
-                  blurRadius: _hovered ? 14 : 8,
-                  offset: const Offset(0, 2),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              width: _buttonHovered ? 44 : 38,
+              height: _buttonHovered ? 44 : 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _buttonHovered
+                    ? Colors.white.withValues(alpha: 0.32)
+                    : const Color(0x66080B12),
+                border: Border.all(
+                  color: _buttonHovered
+                      ? Colors.white.withValues(alpha: 0.65)
+                      : Colors.white.withValues(alpha: 0.22),
+                  width: _buttonHovered ? 1.2 : 0.8,
                 ),
-                if (_hovered)
+                boxShadow: [
                   BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    blurRadius: 10,
-                    spreadRadius: 1,
+                    color: Colors.black.withValues(
+                      alpha: _buttonHovered ? 0.45 : 0.22,
+                    ),
+                    blurRadius: _buttonHovered ? 14 : 8,
+                    offset: const Offset(0, 2),
                   ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              widget.icon,
-              size: _hovered ? 24 : 22,
-              color: Colors.white.withValues(alpha: _hovered ? 1.0 : 0.85),
+                  if (_buttonHovered)
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                widget.icon,
+                size: _buttonHovered ? 24 : 22,
+                color: Colors.white.withValues(
+                  alpha: _buttonHovered ? 1.0 : 0.88,
+                ),
+              ),
             ),
           ),
         ),
