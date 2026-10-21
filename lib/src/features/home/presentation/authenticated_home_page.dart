@@ -944,7 +944,14 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 720;
         final wideScreen = constraints.maxWidth >= 1200;
-        final totalHeight = compact ? 390.0 : (wideScreen ? 480.0 : 440.0);
+        final ultraWide = constraints.maxWidth >= 1600;
+        final totalHeight = compact
+            ? 420.0
+            : ultraWide
+                ? 580.0
+                : wideScreen
+                    ? 540.0
+                    : 480.0;
 
         return MouseRegion(
           onEnter: (_) {
@@ -999,6 +1006,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                           item: item,
                           dailyRecommendation: widget.dailyRecommendations,
                           planning: widget.planningItemId == item.id,
+                          hovering: _hovering,
                           onPlay: () => widget.onPlay(item),
                           onDetails: () => widget.onDetails(item),
                         ),
@@ -1402,6 +1410,7 @@ class _HomeHero extends ConsumerWidget {
     required this.item,
     required this.dailyRecommendation,
     required this.planning,
+    this.hovering = false,
     required this.onPlay,
     required this.onDetails,
   });
@@ -1409,6 +1418,7 @@ class _HomeHero extends ConsumerWidget {
   final MediaItem item;
   final bool dailyRecommendation;
   final bool planning;
+  final bool hovering;
   final VoidCallback onPlay;
   final VoidCallback onDetails;
 
@@ -1436,9 +1446,14 @@ class _HomeHero extends ConsumerWidget {
         return Stack(
           fit: StackFit.expand,
           children: [
-            // 1. High-fidelity full-bleed backdrop artwork
+            // 1. High-fidelity full-bleed backdrop artwork with hover breathing effect
             Positioned.fill(
-              child: _HeroArtwork(item: item),
+              child: AnimatedScale(
+                scale: hovering ? 1.038 : 1.0,
+                duration: const Duration(milliseconds: 750),
+                curve: Curves.easeOutCubic,
+                child: _HeroArtwork(item: item),
+              ),
             ),
 
             // 2. Dual-axis cinematic lighting gradient
