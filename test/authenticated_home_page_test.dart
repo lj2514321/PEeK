@@ -80,15 +80,15 @@ void main() {
     expect(find.text('02 / 03'), findsOneWidget);
   });
 
-  testWidgets('advances the daily recommendation after 24 hours', (
+  testWidgets('advances the daily recommendation automatically', (
     tester,
   ) async {
     await tester.pumpWidget(_homeApp(account, _HomeLibraryService()));
     await tester.pumpAndSettle();
 
     expect(find.text('每日推荐一'), findsOneWidget);
-    await tester.pump(const Duration(hours: 24));
-    await tester.pump(const Duration(milliseconds: 520));
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pump(const Duration(milliseconds: 650));
 
     expect(find.text('每日推荐二'), findsOneWidget);
   });
@@ -102,7 +102,7 @@ void main() {
     await tester.pumpWidget(_homeApp(account, _HomeLibraryService()));
     await tester.pumpAndSettle();
 
-    await tester.pump(const Duration(hours: 24));
+    await tester.pump(const Duration(seconds: 6));
 
     expect(find.text('每日推荐一'), findsOneWidget);
     expect(find.text('01 / 03'), findsOneWidget);

@@ -859,13 +859,29 @@ class _HomeHeroCarousel extends StatefulWidget {
 }
 
 class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
-  static const _autoAdvanceInterval = Duration(hours: 24);
+  static const _autoAdvanceInterval = Duration(seconds: 6);
+  static const int _virtualItemCount = 10000;
 
-  final _controller = PageController();
+  late PageController _controller;
   Timer? _timer;
   int _currentIndex = 0;
+  late int _currentVirtualPage;
   bool _hovering = false;
   bool _disableAnimations = false;
+
+  int _toVirtualPage(int realIndex) {
+    if (widget.items.length <= 1) return 0;
+    final middle = _virtualItemCount ~/ 2;
+    final base = middle - (middle % widget.items.length);
+    return base + (realIndex % widget.items.length);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _currentVirtualPage = _toVirtualPage(0);
+    _controller = PageController(initialPage: _currentVirtualPage);
+  }
 
   @override
   void didChangeDependencies() {
@@ -886,7 +902,10 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
     final nextIds = widget.items.map((item) => item.id).join('|');
     if (oldIds != nextIds) {
       _currentIndex = 0;
-      if (_controller.hasClients) _controller.jumpToPage(0);
+      _currentVirtualPage = _toVirtualPage(0);
+      if (_controller.hasClients) {
+        _controller.jumpToPage(_currentVirtualPage);
+      }
     }
     _scheduleNext();
   }
@@ -912,29 +931,51 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
 
   Future<void> _move(int direction) async {
     if (widget.items.length < 2 || !_controller.hasClients) return;
-    final next = (_currentIndex + direction) % widget.items.length;
-    final normalized = next < 0 ? widget.items.length - 1 : next;
-    await _jumpToIndex(normalized);
-  }
-
-  Future<void> _jumpToIndex(int index) async {
-    if (!_controller.hasClients) return;
+    final targetPage = _currentVirtualPage + direction;
     if (_disableAnimations) {
-      _controller.jumpToPage(index);
+      _controller.jumpToPage(targetPage);
     } else {
       await _controller.animateToPage(
-        index,
-        duration: const Duration(milliseconds: 480),
-        curve: const Cubic(0.12, 0.88, 0.22, 1.0),
+        targetPage,
+        duration: const Duration(milliseconds: 620),
+        curve: const Cubic(0.2, 0.0, 0.0, 1.0),
       );
     }
     if (!mounted) return;
     _scheduleNext();
   }
 
-  void _pageChanged(int index) {
-    setState(() => _currentIndex = index);
-    widget.onActiveIndexChanged(index);
+  Future<void> _jumpToIndex(int targetRealIndex) async {
+    if (!_controller.hasClients || widget.items.isEmpty) return;
+    final currentReal = _currentIndex;
+    var delta = targetRealIndex - currentReal;
+    if (delta > widget.items.length / 2) {
+      delta -= widget.items.length;
+    } else if (delta < -widget.items.length / 2) {
+      delta += widget.items.length;
+    }
+    final targetVirtual = _currentVirtualPage + delta;
+    if (_disableAnimations) {
+      _controller.jumpToPage(targetVirtual);
+    } else {
+      await _controller.animateToPage(
+        targetVirtual,
+        duration: const Duration(milliseconds: 550),
+        curve: const Cubic(0.2, 0.0, 0.0, 1.0),
+      );
+    }
+    if (!mounted) return;
+    _scheduleNext();
+  }
+
+  void _onVirtualPageChanged(int virtualIndex) {
+    _currentVirtualPage = virtualIndex;
+    final realIndex =
+        widget.items.isEmpty ? 0 : virtualIndex % widget.items.length;
+    if (_currentIndex != realIndex) {
+      setState(() => _currentIndex = realIndex);
+      widget.onActiveIndexChanged(realIndex);
+    }
     _scheduleNext();
   }
 
@@ -979,23 +1020,29 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                   PageView.builder(
                     key: const ValueKey('daily-recommendation-carousel'),
                     controller: _controller,
-                    allowImplicitScrolling: true,
-                    itemCount: widget.items.length,
-                    onPageChanged: _pageChanged,
-                    itemBuilder: (context, index) {
-                      final item = widget.items[index];
+                    allowImplicitScrolling: false,
+                    itemCount: widget.items.length > 1
+                        ? _virtualItemCount
+                        : widget.items.length,
+                    onPageChanged: _onVirtualPageChanged,
+                    itemBuilder: (context, virtualIndex) {
+                      final realIndex = widget.items.isEmpty
+                          ? 0
+                          : virtualIndex % widget.items.length;
+                      final item = widget.items[realIndex];
                       return AnimatedBuilder(
                         animation: _controller,
                         builder: (context, child) {
                           double delta = 0.0;
                           if (_controller.hasClients &&
                               _controller.position.haveDimensions) {
-                            final page =
-                                _controller.page ?? _currentIndex.toDouble();
-                            delta = (page - index).abs().clamp(0.0, 1.0);
+                            final page = _controller.page ??
+                                _currentVirtualPage.toDouble();
+                            delta = (page - virtualIndex).clamp(-1.0, 1.0);
                           }
-                          final scale = 1.0 - (delta * 0.025);
-                          final opacity = 1.0 - (delta * 0.38);
+                          final scale = 1.0 - (delta.abs() * 0.032);
+                          final opacity =
+                              (1.0 - (delta.abs() * 0.40)).clamp(0.0, 1.0);
                           return Transform.scale(
                             scale: scale,
                             child: Opacity(opacity: opacity, child: child),
