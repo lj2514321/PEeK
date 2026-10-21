@@ -90,12 +90,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
     _sidebarController = AnimationController(
       vsync: this,
       value: _sidebarCollapsed ? 0.0 : 1.0,
-      duration: AppMotion.slow,
+      duration: AppMotion.standard,
     );
     _sidebarAnimation = CurvedAnimation(
       parent: _sidebarController,
-      curve: Curves.easeOutExpo,
-      reverseCurve: Curves.easeInOutCubic,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeOutCubic,
     );
     _sessionExpirySubscription = ref
         .read(sessionExpiryProvider)
@@ -470,19 +470,22 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   void _toggleSidebar() {
     final nextCollapsed = !_sidebarCollapsed;
-    setState(() => _sidebarCollapsed = nextCollapsed);
+    _sidebarCollapsed = nextCollapsed;
     final target = nextCollapsed ? 0.0 : 1.0;
     final duration = AppMotion.responsive(
       context,
-      target == 1.0 ? AppMotion.slow : AppMotion.standard,
+      AppMotion.standard,
     );
     if (MediaQuery.disableAnimationsOf(context)) {
       _sidebarController.value = target;
+      setState(() {});
     } else {
       _sidebarController.animateTo(
         target,
         duration: duration,
-      );
+      ).then((_) {
+        if (mounted) setState(() {});
+      });
     }
   }
 
@@ -782,6 +785,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
                         final currentRailWidth = showRail
                             ? (80.0 + (144.0 * progress))
                             : 0.0;
+                        final isAnimating = _sidebarController.isAnimating;
                         return Stack(
                           fit: StackFit.expand,
                           children: [
@@ -790,7 +794,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
                               top: 0,
                               right: 0,
                               bottom: 0,
-                              child: RepaintBoundary(
+                              child: KeyedSubtree(
                                 key: const ValueKey('main-content-pane'),
                                 child: child!,
                               ),
@@ -800,11 +804,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
                                 left: 0,
                                 top: 0,
                                 bottom: 0,
-                                child: RepaintBoundary(
+                                child: KeyedSubtree(
                                   key: const ValueKey('app-rail-isolated-boundary'),
                                   child: _AppRail(
-                                    extended: extendedRail,
+                                    extended: canExtendRail && !_sidebarCollapsed,
                                     progress: progress,
+                                    isAnimating: isAnimating,
                                     destinations: _destinations,
                                     selectedIndex: _selectedIndex,
                                     onSelected: _selectDestination,
@@ -878,6 +883,7 @@ class _AppRail extends StatelessWidget {
   const _AppRail({
     required this.extended,
     required this.progress,
+    required this.isAnimating,
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
@@ -887,6 +893,7 @@ class _AppRail extends StatelessWidget {
 
   final bool extended;
   final double progress;
+  final bool isAnimating;
   final List<_AppDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
@@ -899,35 +906,35 @@ class _AppRail extends StatelessWidget {
     return SizedBox(
       key: const ValueKey('app-sidebar'),
       width: width,
-      child: RepaintBoundary(
-        child: Container(
-          margin: EdgeInsets.zero,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.18),
-                Colors.white.withValues(alpha: 0.06),
-              ],
-            ),
-            borderRadius: AppRadius.borderRadius,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.34),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.38),
-                blurRadius: 38,
-                offset: const Offset(0, 16),
-              ),
+      child: Container(
+        margin: EdgeInsets.zero,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.18),
+              Colors.white.withValues(alpha: 0.06),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: AppRadius.borderRadius,
-            child: Stack(
-              children: [
+          borderRadius: AppRadius.borderRadius,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.34),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.38),
+              blurRadius: 38,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: AppRadius.borderRadius,
+          child: Stack(
+            children: [
+              if (!isAnimating)
                 Positioned(
                   left: 0,
                   top: 0,
@@ -938,25 +945,24 @@ class _AppRail extends StatelessWidget {
                     child: const SizedBox.expand(),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: OverflowBox(
-                    alignment: Alignment.topLeft,
-                    minWidth: 208,
-                    maxWidth: 208,
-                    child: _AppRailContents(
-                      extended: extended,
-                      progress: progress,
-                      destinations: destinations,
-                      selectedIndex: selectedIndex,
-                      onSelected: onSelected,
-                      canToggle: canToggle,
-                      onToggle: onToggle,
-                    ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: OverflowBox(
+                  alignment: Alignment.topLeft,
+                  minWidth: 208,
+                  maxWidth: 208,
+                  child: _AppRailContents(
+                    extended: extended,
+                    progress: progress,
+                    destinations: destinations,
+                    selectedIndex: selectedIndex,
+                    onSelected: onSelected,
+                    canToggle: canToggle,
+                    onToggle: onToggle,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1141,13 +1147,11 @@ class _LiquidRailIndicatorState extends State<_LiquidRailIndicator>
           left: 0,
           width: widget.pillWidth,
           height: height,
-          child: RepaintBoundary(
-            child: Transform.scale(
-              scaleX: scaleX,
-              scaleY: 1.0,
-              alignment: Alignment.center,
-              child: child!,
-            ),
+          child: Transform.scale(
+            scaleX: scaleX,
+            scaleY: 1.0,
+            alignment: Alignment.center,
+            child: child!,
           ),
         );
       },

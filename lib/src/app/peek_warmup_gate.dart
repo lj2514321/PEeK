@@ -20,12 +20,14 @@ class PeekWarmupGate extends ConsumerStatefulWidget {
 
 class _PeekWarmupGateState extends ConsumerState<PeekWarmupGate> {
   bool _ready = false;
+  bool _dismantled = false;
 
   @override
   void initState() {
     super.initState();
     if (AppMotion.isTest) {
       _ready = true;
+      _dismantled = true;
       return;
     }
     _runStartupWarmup();
@@ -39,7 +41,7 @@ class _PeekWarmupGateState extends ConsumerState<PeekWarmupGate> {
       ref.read(playbackSettingsStoreProvider).read(),
     ]);
 
-    // 2. Guarantee a smooth, non-jarring lead-in window (520ms) for Skia/Direct3D
+    // 2. Guarantee a smooth, non-jarring lead-in window (520ms) for Direct3D 11/Skia
     // to compile all hardware shaders and layout the primary surface quietly.
     final timerFuture = Future<void>.delayed(const Duration(milliseconds: 520));
 
@@ -49,14 +51,19 @@ class _PeekWarmupGateState extends ConsumerState<PeekWarmupGate> {
       // Non-fatal if session or network error; proceed to UI cleanly
     }
 
+    if (!mounted) return;
+    setState(() => _ready = true);
+
+    // Wait for the 360ms cinemaFade exit transition to finish before dismantling overlay
+    await Future<void>.delayed(const Duration(milliseconds: 400));
     if (mounted) {
-      setState(() => _ready = true);
+      setState(() => _dismantled = true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (AppMotion.isTest || _ready) {
+    if (AppMotion.isTest || _dismantled) {
       return widget.child;
     }
 
@@ -67,12 +74,23 @@ class _PeekWarmupGateState extends ConsumerState<PeekWarmupGate> {
         // before the splash fades away.
         widget.child,
 
-        // Live hardware shader pipeline exerciser (renders in Direct3D context)
-        const Positioned(
-          left: -9999,
-          top: -9999,
-          child: _HardwarePipelineExerciser(),
-        ),
+        // Live hardware shader pipeline exerciser (renders inside the active Direct3D viewport).
+        // Positioned inside the window bounds (0, 0, 48, 48), safely hidden behind the opaque
+        // splash view, ensuring Flutter's PaintingContext traverser does not cull it.
+        if (!_ready)
+          const Positioned(
+            left: 0,
+            top: 0,
+            width: 48,
+            height: 48,
+            child: ExcludeSemantics(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: _HardwarePipelineExerciser(),
+                ),
+              ),
+            ),
+          ),
 
         // High-aesthetic VisionOS splash screen overlay
         AnimatedSwitcher(
@@ -89,96 +107,168 @@ class _PeekWarmupGateState extends ConsumerState<PeekWarmupGate> {
 
 /// Renders all blur sigmas, 3D matrices, gradients, and font glyphs into the
 /// live Direct3D viewport, forcing the GPU driver to compile all HLSL shaders.
-class _HardwarePipelineExerciser extends StatelessWidget {
+class _HardwarePipelineExerciser extends StatefulWidget {
   const _HardwarePipelineExerciser();
 
   @override
+  State<_HardwarePipelineExerciser> createState() =>
+      _HardwarePipelineExerciserState();
+}
+
+class _HardwarePipelineExerciserState extends State<_HardwarePipelineExerciser>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: 0.01,
-      child: RepaintBoundary(
-        child: SizedBox(
-          width: 80,
-          height: 80,
-          child: Stack(
-            children: [
-              // 1. All blur sigmas used in the application
-              for (final sigma in [5.0, 18.0, 28.0, 32.0, 34.0, 42.0])
-                BackdropFilter(
-                  filter: ui.ImageFilter.blur(
-                    sigmaX: sigma,
-                    sigmaY: sigma,
-                    tileMode: TileMode.decal,
-                  ),
-                  child: const SizedBox(width: 8, height: 8),
-                ),
-
-              // 2. 3D perspective tilt matrix
-              Transform(
-                transform: Matrix4.identity()
-                  ..setEntry(3, 2, 0.0012)
-                  ..rotateX(0.05)
-                  ..rotateY(0.05),
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black45,
-                        blurRadius: 42,
-                        offset: Offset(0, 18),
+    return AnimatedBuilder(
+      animation: _ticker,
+      builder: (context, _) {
+        return Opacity(
+          opacity: 0.005 + (_ticker.value * 0.005),
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Stack(
+              children: [
+                // Base colored canvas ensuring BackdropFilter has non-zero pixels to sample & blur
+                const Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFF38BDF8),
+                          Color(0xFF6366F1),
+                          Color(0xFFE11D48),
+                        ],
                       ),
-                      BoxShadow(color: Color(0x2238BDF8), blurRadius: 32),
-                    ],
+                    ),
                   ),
                 ),
-              ),
 
-              // 3. VisionOS ambient theme gradients
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF6B421B),
-                      Color(0xFF33213B),
-                      Color(0xFF101729),
-                    ],
+                // 1. All blur sigmas used in the application across decal & clamp modes
+                for (final sigma in [
+                  5.0,
+                  18.0,
+                  24.0,
+                  28.0,
+                  30.0,
+                  32.0,
+                  34.0,
+                  38.0,
+                  42.0,
+                ])
+                  BackdropFilter(
+                    filter: ui.ImageFilter.blur(
+                      sigmaX: sigma,
+                      sigmaY: sigma,
+                      tileMode: TileMode.decal,
+                    ),
+                    child: const SizedBox(width: 8, height: 8),
                   ),
-                ),
-                child: SizedBox(width: 10, height: 10),
-              ),
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(-0.38, -0.48),
-                    radius: 1.15,
-                    colors: [Color(0x886B421B), Colors.transparent],
-                  ),
-                ),
-                child: SizedBox(width: 10, height: 10),
-              ),
 
-              // 4. Core font and icon glyphs atlas pre-rasterization
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Text('PEeK 空间流体 正在就绪 媒体库 首页 收藏 设置 演员 0123456789'),
-                  Icon(Icons.movie_outlined),
-                  Icon(Icons.video_library_rounded),
-                  Icon(Icons.favorite_rounded),
-                  Icon(Icons.tune_rounded),
-                  Icon(Icons.people_rounded),
-                  Icon(Icons.play_arrow_rounded),
-                  Icon(Icons.star_rounded),
-                  Icon(Icons.search_rounded),
-                ],
-              ),
-            ],
+                // 2. 3D perspective tilt matrix & animated breathing scale
+                Transform(
+                  transform: Matrix4.identity()
+                    ..setEntry(3, 2, 0.0012)
+                    ..rotateX(0.05 * _ticker.value)
+                    ..rotateY(0.05 * _ticker.value)
+                    ..scaleByDouble(
+                      1.0 + (0.038 * _ticker.value),
+                      1.0 + (0.038 * _ticker.value),
+                      1.0,
+                      1.0,
+                    ),
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black45,
+                          blurRadius: 42,
+                          offset: Offset(0, 18),
+                        ),
+                        BoxShadow(color: Color(0x2238BDF8), blurRadius: 32),
+                        BoxShadow(color: Color(0x33FFFFFF), blurRadius: 14),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // 3. VisionOS ambient theme gradients & cinematic vignettes
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Color(0xF5080B12),
+                        Color(0xD8080B12),
+                        Color(0x75080B12),
+                        Colors.transparent,
+                      ],
+                      stops: [0.0, 0.38, 0.65, 1.0],
+                    ),
+                  ),
+                  child: SizedBox(width: 10, height: 10),
+                ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment(-0.38, -0.48),
+                      radius: 1.15,
+                      colors: [Color(0x886B421B), Colors.transparent],
+                    ),
+                  ),
+                  child: SizedBox(width: 10, height: 10),
+                ),
+
+                // 4. Core font and icon glyphs atlas pre-rasterization
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Text(
+                      'PEeK 空间流体 正在就绪 媒体库 首页 收藏 设置 演员 播放 暂停 继续观看 最新上线 推荐 全部 详情 电影 剧集 季 集 4K HDR Atmos 0123456789',
+                    ),
+                    Icon(Icons.movie_outlined),
+                    Icon(Icons.video_library_rounded),
+                    Icon(Icons.favorite_rounded),
+                    Icon(Icons.tune_rounded),
+                    Icon(Icons.people_rounded),
+                    Icon(Icons.play_arrow_rounded),
+                    Icon(Icons.star_rounded),
+                    Icon(Icons.search_rounded),
+                    Icon(Icons.chevron_left_rounded),
+                    Icon(Icons.chevron_right_rounded),
+                    Icon(Icons.info_outline_rounded),
+                    Icon(Icons.close_rounded),
+                    Icon(Icons.crop_square_rounded),
+                    Icon(Icons.remove_rounded),
+                    Icon(Icons.auto_awesome_rounded),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

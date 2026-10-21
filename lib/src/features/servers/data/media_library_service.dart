@@ -684,6 +684,7 @@ class MediaLibraryService {
         account,
         cacheAge: _recommendationCacheAge,
         forceRefresh: forceRefresh,
+        cacheForCurrentDay: true,
         refreshCachedInBackground: false,
       )).items;
     } on MediaLibraryException catch (error) {
@@ -717,6 +718,7 @@ class MediaLibraryService {
         account,
         cacheAge: _recommendationCacheAge,
         forceRefresh: forceRefresh,
+        cacheForCurrentDay: true,
         refreshCachedInBackground: false,
       )).items;
     }
@@ -1094,7 +1096,7 @@ class MediaLibraryService {
         options: Options(headers: _authHeaders(account.accessToken, account)),
       );
       try {
-        await _cache.clear();
+        await _cache.clear(preserveRecommendations: true);
       } on Object {
         // Cache cleanup must not block on error.
       }
@@ -1106,7 +1108,7 @@ class MediaLibraryService {
   /// Clears the internal HTTP cache so that subsequent requests fetch fresh data.
   Future<void> invalidateCache() async {
     try {
-      await _cache.clear();
+      await _cache.clear(preserveRecommendations: true);
     } on Object {
       // Cache cleanup must not block on error.
     }

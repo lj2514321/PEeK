@@ -110,6 +110,18 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           _feed = feed;
           _activeHeroIndex = 0;
         });
+
+        // Pre-cache first hero backdrop in image cache so initial entrance is stutter-free
+        if (feed.dailyRecommendations.items.isNotEmpty) {
+          final firstHero = feed.dailyRecommendations.items.first;
+          final heroUri = firstHero.backdropUri ?? firstHero.imageUri;
+          if (heroUri != null && mounted) {
+            unawaited(precacheImage(
+              NetworkImage(heroUri.toString(), headers: firstHero.imageHeaders),
+              context,
+            ));
+          }
+        }
       }
     } on MediaLibraryException catch (error) {
       if (error.authenticationExpired) {
@@ -194,6 +206,21 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   }
 
   Future<void> _openDetails(MediaItem item) async {
+    // 1. Pre-warm artwork before transition starts to prevent GPU/main-thread decode jank
+    final backdropUri = item.backdropUri ?? item.imageUri;
+    if (backdropUri != null && mounted) {
+      unawaited(precacheImage(
+        NetworkImage(backdropUri.toString(), headers: item.imageHeaders),
+        context,
+      ));
+    }
+    if (item.imageUri != null && mounted) {
+      unawaited(precacheImage(
+        NetworkImage(item.imageUri.toString(), headers: item.imageHeaders),
+        context,
+      ));
+    }
+
     final targetOffset = _scrollController.hasClients
         ? _scrollController.offset
         : null;
@@ -579,56 +606,58 @@ class _VisionSpatialAmbientBackdrop extends StatelessWidget {
         _ambientThemes.length;
     final colors = _ambientThemes[themeIndex];
 
-    return AnimatedSwitcher(
-      duration: AppMotion.responsive(
-        context,
-        const Duration(milliseconds: 650),
-      ),
-      child: Stack(
-        key: ValueKey('ambient-${item?.id ?? 'none'}-$paletteSeed'),
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: colors,
-                stops: const [0.0, 0.52, 1.0],
-              ),
-            ),
-          ),
-          if (uri != null)
-            Transform.scale(
-              scale: 1.14,
-              child: Opacity(
-                opacity: 0.58,
-                child: PeekMediaImage(
-                  uri: uri,
-                  headers: item?.imageHeaders ?? const {},
-                  kind: PeekMediaImageKind.backdrop,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 42, sigmaY: 42),
-            child: DecoratedBox(
+    return RepaintBoundary(
+      child: AnimatedSwitcher(
+        duration: AppMotion.responsive(
+          context,
+          const Duration(milliseconds: 650),
+        ),
+        child: Stack(
+          key: ValueKey('ambient-${item?.id ?? 'none'}-$paletteSeed'),
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
               decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(-0.35, -0.45),
-                  radius: 1.25,
-                  colors: [
-                    colors.first.withValues(alpha: 0.42),
-                    Colors.black.withValues(alpha: 0.35),
-                    Colors.black.withValues(alpha: 0.62),
-                  ],
-                  stops: const [0.0, 0.55, 1.0],
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: colors,
+                  stops: const [0.0, 0.52, 1.0],
                 ),
               ),
             ),
-          ),
-        ],
+            if (uri != null)
+              Transform.scale(
+                scale: 1.14,
+                child: Opacity(
+                  opacity: 0.58,
+                  child: PeekMediaImage(
+                    uri: uri,
+                    headers: item?.imageHeaders ?? const {},
+                    kind: PeekMediaImageKind.backdrop,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 42, sigmaY: 42),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(-0.35, -0.45),
+                    radius: 1.25,
+                    colors: [
+                      colors.first.withValues(alpha: 0.42),
+                      Colors.black.withValues(alpha: 0.35),
+                      Colors.black.withValues(alpha: 0.62),
+                    ],
+                    stops: const [0.0, 0.55, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -644,6 +673,7 @@ class _VisionLiquidGlassPanel extends StatelessWidget {
     this.topAlpha = 0.17,
     this.bottomAlpha = 0.06,
     this.borderAlpha = 0.34,
+    this.hasBackdropBlur = true,
   });
 
   final Widget child;
@@ -653,6 +683,7 @@ class _VisionLiquidGlassPanel extends StatelessWidget {
   final double topAlpha;
   final double bottomAlpha;
   final double borderAlpha;
+  final bool hasBackdropBlur;
 
   @override
   Widget build(BuildContext context) {
@@ -689,12 +720,13 @@ class _VisionLiquidGlassPanel extends StatelessWidget {
         borderRadius: borderRadius,
         child: Stack(
           children: [
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-                child: const SizedBox.expand(),
+            if (hasBackdropBlur && blur > 0)
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                  child: const SizedBox.expand(),
+                ),
               ),
-            ),
             Padding(padding: padding ?? EdgeInsets.zero, child: child),
           ],
         ),
@@ -868,6 +900,17 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
   late int _currentVirtualPage;
   bool _hovering = false;
   bool _disableAnimations = false;
+  Animation<double>? _secondaryAnimation;
+
+  void _onSecondaryAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed) {
+      _scheduleNext();
+    } else if (status == AnimationStatus.forward ||
+        status == AnimationStatus.completed) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
 
   int _toVirtualPage(int realIndex) {
     if (widget.items.length <= 1) return 0;
@@ -886,6 +929,13 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final modalRoute = ModalRoute.of(context);
+    final secAnim = modalRoute?.secondaryAnimation;
+    if (secAnim != _secondaryAnimation) {
+      _secondaryAnimation?.removeStatusListener(_onSecondaryAnimationStatus);
+      _secondaryAnimation = secAnim;
+      _secondaryAnimation?.addStatusListener(_onSecondaryAnimationStatus);
+    }
     final disabled = MediaQuery.disableAnimationsOf(context);
     if (_disableAnimations != disabled) {
       _disableAnimations = disabled;
@@ -912,6 +962,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
 
   @override
   void dispose() {
+    _secondaryAnimation?.removeStatusListener(_onSecondaryAnimationStatus);
     _timer?.cancel();
     _controller.dispose();
     super.dispose();
@@ -920,7 +971,9 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
   void _scheduleNext() {
     _timer?.cancel();
     _timer = null;
+    final isRouteCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     if (!widget.active ||
+        !isRouteCurrent ||
         _disableAnimations ||
         _hovering ||
         widget.items.length < 2) {
@@ -1008,6 +1061,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
             height: totalHeight,
             child: _VisionLiquidGlassPanel(
               radius: AppRadius.value,
+              hasBackdropBlur: false,
               blur: 32,
               topAlpha: 0.16,
               bottomAlpha: 0.05,
@@ -1149,48 +1203,50 @@ class _EdgeNavButtonState extends State<_EdgeNavButton> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
-          child: AnimatedOpacity(
-            opacity: isVisible ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 240),
-            curve: Curves.easeOutCubic,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+          child: RepaintBoundary(
+            child: AnimatedOpacity(
+              opacity: isVisible ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 240),
               curve: Curves.easeOutCubic,
-              width: _buttonHovered ? 44 : 38,
-              height: _buttonHovered ? 44 : 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _buttonHovered
-                    ? Colors.white.withValues(alpha: 0.32)
-                    : const Color(0x66080B12),
-                border: Border.all(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                width: _buttonHovered ? 44 : 38,
+                height: _buttonHovered ? 44 : 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   color: _buttonHovered
-                      ? Colors.white.withValues(alpha: 0.65)
-                      : Colors.white.withValues(alpha: 0.22),
-                  width: _buttonHovered ? 1.2 : 0.8,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: _buttonHovered ? 0.45 : 0.22,
-                    ),
-                    blurRadius: _buttonHovered ? 14 : 8,
-                    offset: const Offset(0, 2),
+                      ? Colors.white.withValues(alpha: 0.32)
+                      : const Color(0x66080B12),
+                  border: Border.all(
+                    color: _buttonHovered
+                        ? Colors.white.withValues(alpha: 0.65)
+                        : Colors.white.withValues(alpha: 0.22),
+                    width: _buttonHovered ? 1.2 : 0.8,
                   ),
-                  if (_buttonHovered)
+                  boxShadow: [
                     BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      blurRadius: 10,
-                      spreadRadius: 1,
+                      color: Colors.black.withValues(
+                        alpha: _buttonHovered ? 0.45 : 0.22,
+                      ),
+                      blurRadius: _buttonHovered ? 14 : 8,
+                      offset: const Offset(0, 2),
                     ),
-                ],
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                widget.icon,
-                size: _buttonHovered ? 24 : 22,
-                color: Colors.white.withValues(
-                  alpha: _buttonHovered ? 1.0 : 0.88,
+                    if (_buttonHovered)
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        blurRadius: 10,
+                        spreadRadius: 1,
+                      ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  widget.icon,
+                  size: _buttonHovered ? 24 : 22,
+                  color: Colors.white.withValues(
+                    alpha: _buttonHovered ? 1.0 : 0.88,
+                  ),
                 ),
               ),
             ),
@@ -1215,78 +1271,80 @@ class _HeroIndexDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (itemCount <= 1) return const SizedBox.shrink();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0x75080B12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.16),
-          width: 0.8,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+    return RepaintBoundary(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0x75080B12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.16),
+            width: 0.8,
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Semantics(
-            liveRegion: true,
-            label: '第 ${currentIndex + 1} 条，共 $itemCount 条每日推荐',
-            child: Text(
-              '${(currentIndex + 1).toString().padLeft(2, '0')} / '
-              '${itemCount.toString().padLeft(2, '0')}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            width: 1,
-            height: 9,
-            color: Colors.white.withValues(alpha: 0.22),
-          ),
-          const SizedBox(width: 8),
-          ...List.generate(itemCount, (i) {
-            final active = i == currentIndex;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2.5),
-              child: InkWell(
-                onTap: () => onTapIndex(i),
-                borderRadius: BorderRadius.circular(4),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutCubic,
-                  width: active ? 16 : 5,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: active
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.30),
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: active
-                        ? [
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.5),
-                              blurRadius: 4,
-                            ),
-                          ]
-                        : null,
-                  ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              liveRegion: true,
+              label: '第 ${currentIndex + 1} 条，共 $itemCount 条每日推荐',
+              child: Text(
+                '${(currentIndex + 1).toString().padLeft(2, '0')} / '
+                '${itemCount.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
                 ),
               ),
-            );
-          }),
-        ],
+            ),
+            const SizedBox(width: 8),
+            Container(
+              width: 1,
+              height: 9,
+              color: Colors.white.withValues(alpha: 0.22),
+            ),
+            const SizedBox(width: 8),
+            ...List.generate(itemCount, (i) {
+              final active = i == currentIndex;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2.5),
+                child: InkWell(
+                  onTap: () => onTapIndex(i),
+                  borderRadius: BorderRadius.circular(4),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    width: active ? 16 : 5,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: active
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.30),
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: active
+                          ? [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                blurRadius: 4,
+                              ),
+                            ]
+                          : null,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -1495,11 +1553,13 @@ class _HomeHero extends ConsumerWidget {
           children: [
             // 1. High-fidelity full-bleed backdrop artwork with hover breathing effect
             Positioned.fill(
-              child: AnimatedScale(
-                scale: hovering ? 1.038 : 1.0,
-                duration: const Duration(milliseconds: 750),
-                curve: Curves.easeOutCubic,
-                child: _HeroArtwork(item: item),
+              child: RepaintBoundary(
+                child: AnimatedScale(
+                  scale: hovering ? 1.038 : 1.0,
+                  duration: const Duration(milliseconds: 750),
+                  curve: Curves.easeOutCubic,
+                  child: _HeroArtwork(item: item),
+                ),
               ),
             ),
 

@@ -24,7 +24,17 @@ void _warmupGraphicsPipeline() {
     final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 160, 160));
 
     // 1. Skia blur shader warm-up across all sigmas used in the application
-    for (final sigma in [5.0, 18.0, 28.0, 32.0, 34.0, 42.0]) {
+    for (final sigma in [
+      5.0,
+      18.0,
+      24.0,
+      28.0,
+      30.0,
+      32.0,
+      34.0,
+      38.0,
+      42.0,
+    ]) {
       final paintBlurDecal = Paint()
         ..imageFilter = ui.ImageFilter.blur(
           sigmaX: sigma,
