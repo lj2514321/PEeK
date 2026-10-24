@@ -4,6 +4,9 @@ import 'dart:ui' as ui;
 import 'package:embyplayer/src/app/app_providers.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
+import 'package:embyplayer/src/features/scrobble/data/bangumi_store.dart';
+import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -39,6 +42,7 @@ class _PeekWarmupGateState extends ConsumerState<PeekWarmupGate> {
       ref.read(serverAuthenticationProvider).restoreSessionState(),
       ref.read(localMediaLibraryProvider).getLibraries(),
       ref.read(playbackSettingsStoreProvider).read(),
+      BangumiStore.prewarm(),
     ]);
 
     // 2. Guarantee a smooth, non-jarring lead-in window (520ms) for Direct3D 11/Skia
@@ -119,6 +123,25 @@ class _HardwarePipelineExerciserState extends State<_HardwarePipelineExerciser>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ticker;
 
+  static const _warmupDetailItem = MediaItem(
+    id: '__peek_warmup_detail_item__',
+    name: 'PEeK Spatial Warmup Title',
+    kind: MediaItemKind.movie,
+    overview: '预热详情页排版、阴影、渐变与空间缩放过渡渲染管线。',
+    productionYear: 2026,
+    communityRating: 8.8,
+    officialRating: 'PG-13',
+    runTime: Duration(hours: 2, minutes: 18),
+    genres: ['Sci-Fi', 'Drama', 'Adventure'],
+    people: [
+      MediaPerson(id: 'warmup-p1', name: 'Director One', role: 'Director', type: 'Director'),
+      MediaPerson(id: 'warmup-p2', name: 'Lead Actor', role: 'Protagonist', type: 'Actor'),
+    ],
+    chapters: [
+      MediaChapter(name: 'Chapter 1', startPosition: Duration.zero),
+    ],
+  );
+
   @override
   void initState() {
     super.initState();
@@ -161,7 +184,7 @@ class _HardwarePipelineExerciserState extends State<_HardwarePipelineExerciser>
                   ),
                 ),
 
-                // 1. All blur sigmas used in the application across decal & clamp modes
+                // 1. All blur sigmas used in the application across decal & mirror modes
                 for (final sigma in [
                   5.0,
                   18.0,
@@ -181,6 +204,36 @@ class _HardwarePipelineExerciserState extends State<_HardwarePipelineExerciser>
                     ),
                     child: const SizedBox(width: 8, height: 8),
                   ),
+                ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(
+                    sigmaX: 42,
+                    sigmaY: 42,
+                    tileMode: TileMode.mirror,
+                  ),
+                  child: const ColoredBox(
+                    color: Color(0xFF38BDF8),
+                    child: SizedBox(width: 12, height: 12),
+                  ),
+                ),
+                Positioned.fill(
+                  child: FittedBox(
+                    fit: BoxFit.fill,
+                    child: SizedBox(
+                      width: 1120,
+                      height: 720,
+                      child: PeekSpatialTransition(
+                        animation: _ticker,
+                        secondaryAnimation: kAlwaysDismissedAnimation,
+                        originAlignment: Alignment.center,
+                        child: const MediaDetailPage(
+                          account: null,
+                          initialItem: _warmupDetailItem,
+                          isWarmup: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
                 // 2. 3D perspective tilt matrix & animated breathing scale
                 Transform(

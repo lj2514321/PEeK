@@ -129,10 +129,12 @@ class _Peek3DCardState extends State<Peek3DCard> {
                   final tiltY = _hovering
                       ? pointer.dx * widget.maxTiltAngle
                       : 0.0;
-                  final matrix = Matrix4.identity()
-                    ..setEntry(3, 2, 0.001)
-                    ..rotateX(tiltX)
-                    ..rotateY(tiltY);
+                  final matrix = (tiltX == 0.0 && tiltY == 0.0)
+                      ? Matrix4.identity()
+                      : (Matrix4.identity()
+                          ..setEntry(3, 2, 0.001)
+                          ..rotateX(tiltX)
+                          ..rotateY(tiltY));
 
                   return Transform(
                     alignment: Alignment.center,
@@ -176,7 +178,7 @@ class _Peek3DCardState extends State<Peek3DCard> {
                     ),
                   );
                 },
-                child: ClipRRect(borderRadius: radius, child: widget.child),
+                child: RepaintBoundary(child: ClipRRect(borderRadius: radius, child: widget.child)),
               ),
             ),
           ),

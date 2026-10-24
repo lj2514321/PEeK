@@ -30,10 +30,12 @@ class MediaDetailPage extends ConsumerStatefulWidget {
     super.key,
     required this.account,
     required this.initialItem,
+    this.isWarmup = false,
   });
 
   final AuthenticatedServer? account;
   final MediaItem initialItem;
+  final bool isWarmup;
 
   @override
   ConsumerState<MediaDetailPage> createState() => _MediaDetailPageState();
@@ -57,7 +59,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   String? _playbackError;
   String? _selectedMediaSourceId;
   final _scrollController = SmoothScrollController();
-  double _scrollOffset = 0;
+  final ValueNotifier<bool> _showScrolledTitleNotifier = ValueNotifier<bool>(
+    false,
+  );
   bool _hydrated = false;
   Animation<double>? _routeAnimation;
   AnimationStatusListener? _routeStatusListener;
@@ -109,7 +113,8 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   }
 
   void _subscribeRouteAnimation() {
-    if (_hydrated ||
+    if (widget.isWarmup ||
+        _hydrated ||
         (widget.initialItem.kind == MediaItemKind.person &&
             widget.account != null)) {
       return;
@@ -177,9 +182,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
 
   void _onScroll() {
     if (_scrollController.hasClients) {
-      final offset = _scrollController.offset;
-      if ((offset > 160) != (_scrollOffset > 160)) {
-        setState(() => _scrollOffset = offset);
+      final show = _scrollController.offset > 160;
+      if (_showScrolledTitleNotifier.value != show) {
+        _showScrolledTitleNotifier.value = show;
       }
     }
   }
@@ -187,6 +192,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   @override
   void dispose() {
     _cleanRouteListener();
+    _showScrolledTitleNotifier.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -619,7 +625,6 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     final currentSeasonEpisodes =
         _seasonEpisodeMap[_selectedSeasonNumber] ??
         (_episodes.isNotEmpty ? _episodes : const <MediaItem>[]);
-    final showScrolledTitle = _scrollOffset > 160;
 
     return PopScope<MediaItem>(
       canPop: false,
@@ -774,10 +779,14 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                 top: 0,
                 left: 0,
                 right: 0,
-                child: _DetailFloatingNavBar(
-                  item: _item,
-                  showTitle: showScrolledTitle,
-                  onBack: () => Navigator.of(context).pop(_item),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _showScrolledTitleNotifier,
+                  builder: (context, showScrolledTitle, _) =>
+                      _DetailFloatingNavBar(
+                        item: _item,
+                        showTitle: showScrolledTitle,
+                        onBack: () => Navigator.of(context).pop(_item),
+                      ),
                 ),
               ),
             ],
@@ -839,14 +848,9 @@ class _DetailFloatingNavBar extends StatelessWidget {
                       ]
                     : const [],
               ),
-              child: ClipRRect(
-                borderRadius: AppRadius.borderRadius,
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(
-                    sigmaX: t > 0.01 ? 28 : 0,
-                    sigmaY: t > 0.01 ? 28 : 0,
-                  ),
-                  child: Padding(
+              child: Builder(
+                builder: (context) {
+                  final barContent = Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Row(
                       children: [
@@ -908,8 +912,18 @@ class _DetailFloatingNavBar extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
-                ),
+                  );
+                  if (t <= 0.01) {
+                    return barContent;
+                  }
+                  return ClipRRect(
+                    borderRadius: AppRadius.borderRadius,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                      child: barContent,
+                    ),
+                  );
+                },
               ),
             );
           },
@@ -964,22 +978,27 @@ class _DetailHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Fluid Background Backdrop Layer with Seamless Alpha Dissolve into AmbientBackdrop
+        // Fluid Background Backdrop Layer with Seamless Hardware-Accelerated Alpha Dissolve
         Positioned.fill(
-          child: ShaderMask(
-            shaderCallback: (rect) => const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFFFFFFFF),
-                Color(0xD9FFFFFF),
-                Color(0x59FFFFFF),
-                Colors.transparent,
-              ],
-              stops: [0.0, 0.45, 0.78, 1.0],
-            ).createShader(rect),
-            blendMode: BlendMode.dstIn,
+          child: RepaintBoundary(
             child: _Backdrop(item: item),
+          ),
+        ),
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  AppColors.canvas.withValues(alpha: 0.55),
+                  AppColors.canvas.withValues(alpha: 0.55),
+                  AppColors.canvas.withValues(alpha: 0.8425),
+                  AppColors.canvas,
+                ],
+                stops: const [0.0, 0.45, 0.78, 1.0],
+              ),
+            ),
           ),
         ),
         Positioned.fill(
@@ -1083,14 +1102,11 @@ class _Backdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uri = item.backdropUri ?? item.imageUri;
-    return Opacity(
-      opacity: 0.45,
-      child: PeekMediaImage(
-        uri: uri,
-        headers: item.imageHeaders,
-        kind: PeekMediaImageKind.backdrop,
-        fit: BoxFit.cover,
-      ),
+    return PeekMediaImage(
+      uri: uri,
+      headers: item.imageHeaders,
+      kind: PeekMediaImageKind.backdrop,
+      fit: BoxFit.cover,
     );
   }
 }

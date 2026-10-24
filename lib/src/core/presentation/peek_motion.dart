@@ -191,11 +191,13 @@ class _PeekStaggeredGridItemState extends State<PeekStaggeredGridItem>
 
   @override
   Widget build(BuildContext context) {
-    if (_settled ||
-        AppMotion.isTest ||
+    if (AppMotion.isTest ||
         _controller == null ||
         MediaQuery.disableAnimationsOf(context)) {
       return widget.child;
+    }
+    if (_settled) {
+      return RepaintBoundary(child: widget.child);
     }
 
     return AnimatedBuilder(
@@ -219,8 +221,11 @@ class _PeekStaggeredGridItemState extends State<PeekStaggeredGridItem>
             ? 0.0
             : (1.0 - raw) * (1.0 - raw) * 0.14;
 
-        final matrix = Matrix4.identity()
-          ..setEntry(3, 2, 0.0012)
+        final matrix = Matrix4.identity();
+        if (tiltX > 0.001) {
+          matrix.setEntry(3, 2, 0.0012);
+        }
+        matrix
           ..translateByDouble(dx, dy, 0.0, 1.0)
           ..scaleByDouble(scale, scale, 1.0, 1.0);
         if (tiltX > 0.001) {
@@ -230,7 +235,9 @@ class _PeekStaggeredGridItemState extends State<PeekStaggeredGridItem>
         return Transform(
           transform: matrix,
           alignment: Alignment.bottomCenter,
-          child: Opacity(opacity: opacity, child: child),
+          child: opacity >= 0.999
+              ? child!
+              : Opacity(opacity: opacity, child: child),
         );
       },
       child: RepaintBoundary(child: widget.child),
@@ -502,10 +509,23 @@ class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
   late final Animation<double> _scaleAnimation;
   late final Animation<double> _secScaleAnimation;
   late final Animation<double> _secScrimAnimation;
+  late final ValueNotifier<bool> _clipActiveNotifier;
+
+  void _onPrimaryStatusChanged(AnimationStatus status) {
+    final shouldClip = status != AnimationStatus.completed;
+    if (_clipActiveNotifier.value != shouldClip) {
+      _clipActiveNotifier.value = shouldClip;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _clipActiveNotifier = ValueNotifier<bool>(
+      widget.animation.status != AnimationStatus.completed,
+    );
+    widget.animation.addStatusListener(_onPrimaryStatusChanged);
+
     _enterCurved = CurvedAnimation(
       parent: widget.animation,
       curve: const Cubic(0.25, 1.05, 0.35, 1.0),
@@ -533,7 +553,20 @@ class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
   }
 
   @override
+  void didUpdateWidget(covariant PeekSpatialTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animation != widget.animation) {
+      oldWidget.animation.removeStatusListener(_onPrimaryStatusChanged);
+      widget.animation.addStatusListener(_onPrimaryStatusChanged);
+      _clipActiveNotifier.value =
+          widget.animation.status != AnimationStatus.completed;
+    }
+  }
+
+  @override
   void dispose() {
+    widget.animation.removeStatusListener(_onPrimaryStatusChanged);
+    _clipActiveNotifier.dispose();
     _enterCurved.dispose();
     _fadeCurved.dispose();
     _secCurved.dispose();
@@ -542,56 +575,53 @@ class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
 
   @override
   Widget build(BuildContext context) {
-    final boundedChild = RepaintBoundary(child: widget.child);
-
-    final morphedChild = AnimatedBuilder(
-      animation: widget.animation,
-      builder: (context, child) {
-        if (widget.animation.value >= 0.999) {
-          return child!;
-        }
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16.0),
-          clipBehavior: Clip.antiAlias,
-          child: child!,
-        );
-      },
-      child: boundedChild,
-    );
-
     final primary = ScaleTransition(
       scale: _scaleAnimation,
       alignment: widget.originAlignment,
       child: FadeTransition(
         opacity: _fadeCurved,
-        child: morphedChild,
+        child: RepaintBoundary(
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _clipActiveNotifier,
+            builder: (context, isAnimating, child) {
+              return ClipRRect(
+                borderRadius: isAnimating
+                    ? const BorderRadius.all(Radius.circular(16.0))
+                    : BorderRadius.zero,
+                clipBehavior: isAnimating ? Clip.antiAlias : Clip.none,
+                child: child!,
+              );
+            },
+            child: widget.child,
+          ),
+        ),
       ),
     );
 
-    return AnimatedBuilder(
-      animation: _secCurved,
-      builder: (context, currentChild) {
-        if (widget.secondaryAnimation.value <= 0.001) {
-          return currentChild!;
-        }
-        return ScaleTransition(
-          scale: _secScaleAnimation,
-          alignment: Alignment.center,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              currentChild!,
-              FadeTransition(
-                opacity: _secScrimAnimation,
-                child: const IgnorePointer(
-                  child: ColoredBox(color: Colors.black),
-                ),
+    return ScaleTransition(
+      scale: _secScaleAnimation,
+      alignment: Alignment.center,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          primary,
+          AnimatedBuilder(
+            animation: _secCurved,
+            builder: (context, scrim) {
+              if (widget.secondaryAnimation.value <= 0.001) {
+                return const SizedBox.shrink();
+              }
+              return scrim!;
+            },
+            child: FadeTransition(
+              opacity: _secScrimAnimation,
+              child: const IgnorePointer(
+                child: ColoredBox(color: Colors.black),
               ),
-            ],
+            ),
           ),
-        );
-      },
-      child: primary,
+        ],
+      ),
     );
   }
 }

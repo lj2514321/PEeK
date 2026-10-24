@@ -60,6 +60,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
   String? _busyLocalLibraryId;
   bool _addingLocalLibrary = false;
   bool _clearingExpiredSession = false;
+  bool _routeTransitioning = false;
+  Animation<double>? _routeSecondaryAnimation;
   late final StreamSubscription<SessionExpiryEvent> _sessionExpirySubscription;
 
   static const _destinations = [
@@ -107,7 +109,35 @@ class _HomeShellState extends ConsumerState<HomeShell>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final secAnim = ModalRoute.of(context)?.secondaryAnimation;
+    if (_routeSecondaryAnimation != secAnim) {
+      _routeSecondaryAnimation?.removeStatusListener(_onRouteSecondaryStatus);
+      _routeSecondaryAnimation = secAnim;
+      _routeSecondaryAnimation?.addStatusListener(_onRouteSecondaryStatus);
+      if (secAnim != null) {
+        _routeTransitioning =
+            secAnim.status == AnimationStatus.forward ||
+            secAnim.status == AnimationStatus.reverse;
+      } else {
+        _routeTransitioning = false;
+      }
+    }
+  }
+
+  void _onRouteSecondaryStatus(AnimationStatus status) {
+    if (!mounted) return;
+    final transitioning =
+        status == AnimationStatus.forward || status == AnimationStatus.reverse;
+    if (_routeTransitioning != transitioning) {
+      setState(() => _routeTransitioning = transitioning);
+    }
+  }
+
+  @override
   void dispose() {
+    _routeSecondaryAnimation?.removeStatusListener(_onRouteSecondaryStatus);
     _sidebarController.dispose();
     _sessionExpirySubscription.cancel();
     super.dispose();
@@ -606,6 +636,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
                     account: _authenticatedServer,
                     searchBarKey: _topSearchBarKey,
                     onAccount: () => _selectDestination(3),
+                    isRouteTransitioning: _routeTransitioning,
                   ),
                   Expanded(
                     child: PeekIndexedTransitionStack(
@@ -809,7 +840,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
                                   child: _AppRail(
                                     extended: canExtendRail && !_sidebarCollapsed,
                                     progress: progress,
-                                    isAnimating: isAnimating,
+                                    isAnimating: isAnimating || _routeTransitioning,
                                     destinations: _destinations,
                                     selectedIndex: _selectedIndex,
                                     onSelected: _selectDestination,
@@ -1458,6 +1489,7 @@ class _TopCommandBar extends StatelessWidget {
     required this.account,
     required this.searchBarKey,
     required this.onAccount,
+    this.isRouteTransitioning = false,
   });
 
   final bool compact;
@@ -1466,6 +1498,7 @@ class _TopCommandBar extends StatelessWidget {
   final AuthenticatedServer? account;
   final GlobalKey<TopSearchBarState> searchBarKey;
   final VoidCallback onAccount;
+  final bool isRouteTransitioning;
 
   @override
   Widget build(BuildContext context) {
@@ -1502,12 +1535,13 @@ class _TopCommandBar extends StatelessWidget {
         borderRadius: AppRadius.borderRadius,
         child: Stack(
           children: [
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
-                child: const SizedBox.expand(),
+            if (!isRouteTransitioning)
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+                  child: const SizedBox.expand(),
+                ),
               ),
-            ),
             SizedBox(
               height: 54,
               child: Padding(

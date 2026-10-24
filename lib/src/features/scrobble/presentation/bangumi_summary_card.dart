@@ -31,11 +31,61 @@ class _BangumiSummaryCardState extends State<BangumiSummaryCard> {
   BangumiSubject? _subject;
   bool _loading = true;
   bool _updating = false;
+  bool _loadScheduled = false;
+  Animation<double>? _routeAnimation;
+  AnimationStatusListener? _routeStatusListener;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    if (_store.hasMemoryCachedProfile && _store.memoryCachedProfile == null) {
+      _loading = false;
+      _loadScheduled = true;
+      return;
+    }
+    if (AppMotion.isTest) {
+      _loadScheduled = true;
+      _loadData();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loadScheduled) return;
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || animation.isCompleted) {
+      _loadScheduled = true;
+      _loadData();
+      return;
+    }
+    if (_routeAnimation == null) {
+      _routeAnimation = animation;
+      _routeStatusListener = (status) {
+        if (status == AnimationStatus.completed) {
+          _cleanRouteListener();
+          if (mounted && !_loadScheduled) {
+            _loadScheduled = true;
+            _loadData();
+          }
+        }
+      };
+      animation.addStatusListener(_routeStatusListener!);
+    }
+  }
+
+  void _cleanRouteListener() {
+    if (_routeAnimation != null && _routeStatusListener != null) {
+      _routeAnimation!.removeStatusListener(_routeStatusListener!);
+      _routeStatusListener = null;
+      _routeAnimation = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _cleanRouteListener();
+    super.dispose();
   }
 
   Future<void> _loadData() async {

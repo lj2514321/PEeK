@@ -52,6 +52,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   bool _refreshingRecommendations = false;
   int _activeHeroIndex = 0;
   MediaItem? _hoveredAmbientItem;
+  Timer? _ambientHoverDebounce;
 
   @override
   void initState() {
@@ -75,6 +76,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
 
   @override
   void dispose() {
+    _ambientHoverDebounce?.cancel();
     _dailyRecommendationTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
@@ -111,15 +113,21 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           _activeHeroIndex = 0;
         });
 
-        // Pre-cache first hero backdrop in image cache so initial entrance is stutter-free
-        if (feed.dailyRecommendations.items.isNotEmpty) {
-          final firstHero = feed.dailyRecommendations.items.first;
-          final heroUri = firstHero.backdropUri ?? firstHero.imageUri;
-          if (heroUri != null && mounted) {
-            unawaited(precacheImage(
-              NetworkImage(heroUri.toString(), headers: firstHero.imageHeaders),
-              context,
-            ));
+        // Pre-cache hero backdrops & posters plus initial track items so first click is instant
+        if (mounted) {
+          for (final hero in feed.heroItems) {
+            _precacheItemForDetail(hero);
+          }
+          for (final item in feed.continueWatching.items.take(6)) {
+            _precacheItemForDetail(item);
+          }
+          for (final group in feed.latestMovies.groups) {
+            for (final item in group.section.items.take(6)) {
+              _precacheItemForDetail(item);
+            }
+          }
+          for (final item in feed.latestEpisodes.items.take(6)) {
+            _precacheItemForDetail(item);
           }
         }
       }
@@ -205,20 +213,42 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     }
   }
 
+  List<Future<void>> _precacheItemForDetail(MediaItem item) {
+    if (!mounted) return const [];
+    final futures = <Future<void>>[];
+    final backdropUri = item.backdropUri ?? item.imageUri;
+    if (backdropUri != null) {
+      futures.add(
+        PeekMediaImage.precache(
+          context,
+          backdropUri,
+          headers: item.imageHeaders,
+          kind: PeekMediaImageKind.backdrop,
+        ),
+      );
+    }
+    if (item.imageUri != null) {
+      futures.add(
+        PeekMediaImage.precache(
+          context,
+          item.imageUri!,
+          headers: item.imageHeaders,
+          kind: PeekMediaImageKind.poster,
+        ),
+      );
+    }
+    return futures;
+  }
+
   Future<void> _openDetails(MediaItem item) async {
     // 1. Pre-warm artwork before transition starts to prevent GPU/main-thread decode jank
-    final backdropUri = item.backdropUri ?? item.imageUri;
-    if (backdropUri != null && mounted) {
-      unawaited(precacheImage(
-        NetworkImage(backdropUri.toString(), headers: item.imageHeaders),
-        context,
-      ));
-    }
-    if (item.imageUri != null && mounted) {
-      unawaited(precacheImage(
-        NetworkImage(item.imageUri.toString(), headers: item.imageHeaders),
-        context,
-      ));
+    final precacheFutures = _precacheItemForDetail(item);
+    if (!AppMotion.isTest && precacheFutures.isNotEmpty) {
+      await Future.wait(precacheFutures).timeout(
+        const Duration(milliseconds: 24),
+        onTimeout: () => const [],
+      );
+      if (!mounted) return;
     }
 
     final targetOffset = _scrollController.hasClients
@@ -412,10 +442,20 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                                 planningItemId: _planningItemId,
                                 onActiveIndexChanged: (index) {
                                   if (_activeHeroIndex != index) {
-                                    setState(() {
-                                      _activeHeroIndex = index;
-                                      _hoveredAmbientItem = null;
-                                    });
+                                    _activeHeroIndex = index;
+                                    _hoveredAmbientItem = null;
+                                    final currentFeed = _feed;
+                                    if (currentFeed != null &&
+                                        currentFeed.heroItems.isNotEmpty) {
+                                      final safeIndex = index.clamp(
+                                        0,
+                                        currentFeed.heroItems.length - 1,
+                                      );
+                                      _syncGlobalAmbient(
+                                        currentFeed.heroItems[safeIndex],
+                                        index,
+                                      );
+                                    }
                                   }
                                 },
                                 onPlay: (item) =>
@@ -565,7 +605,17 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                 onOpen: (item) => unawaited(_openDetails(item)),
                 onHover: (item) {
                   if (_hoveredAmbientItem?.id != item.id) {
-                    setState(() => _hoveredAmbientItem = item);
+                    _hoveredAmbientItem = item;
+                    _precacheItemForDetail(item);
+                    _ambientHoverDebounce?.cancel();
+                    _ambientHoverDebounce = Timer(
+                      const Duration(milliseconds: 85),
+                      () {
+                        if (mounted && _hoveredAmbientItem?.id == item.id) {
+                          _syncGlobalAmbient(item, 0);
+                        }
+                      },
+                    );
                   }
                 },
                 onOpenLibrary: widget.onOpenLibrary,
@@ -612,36 +662,42 @@ class _VisionSpatialAmbientBackdrop extends StatelessWidget {
           context,
           const Duration(milliseconds: 650),
         ),
-        child: Stack(
+        child: RepaintBoundary(
           key: ValueKey('ambient-${item?.id ?? 'none'}-$paletteSeed'),
-          fit: StackFit.expand,
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: colors,
-                  stops: const [0.0, 0.52, 1.0],
-                ),
-              ),
-            ),
-            if (uri != null)
-              Transform.scale(
-                scale: 1.14,
-                child: Opacity(
-                  opacity: 0.58,
-                  child: PeekMediaImage(
-                    uri: uri,
-                    headers: item?.imageHeaders ?? const {},
-                    kind: PeekMediaImageKind.backdrop,
-                    fit: BoxFit.cover,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: colors,
+                    stops: const [0.0, 0.52, 1.0],
                   ),
                 ),
               ),
-            BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 42, sigmaY: 42),
-              child: DecoratedBox(
+              if (uri != null)
+                Transform.scale(
+                  scale: 1.14,
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(
+                      sigmaX: 42,
+                      sigmaY: 42,
+                      tileMode: TileMode.mirror,
+                    ),
+                    child: Opacity(
+                      opacity: 0.58,
+                      child: PeekMediaImage(
+                        uri: uri,
+                        headers: item?.imageHeaders ?? const {},
+                        kind: PeekMediaImageKind.backdrop,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                ),
+              DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: RadialGradient(
                     center: const Alignment(-0.35, -0.45),
@@ -655,8 +711,8 @@ class _VisionSpatialAmbientBackdrop extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -897,6 +953,8 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
   late PageController _controller;
   Timer? _timer;
   int _currentIndex = 0;
+  late final ValueNotifier<int> _currentIndexNotifier;
+  late final ValueNotifier<bool> _hoveringNotifier = ValueNotifier<bool>(false);
   late int _currentVirtualPage;
   bool _hovering = false;
   bool _disableAnimations = false;
@@ -924,6 +982,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
     super.initState();
     _currentVirtualPage = _toVirtualPage(0);
     _controller = PageController(initialPage: _currentVirtualPage);
+    _currentIndexNotifier = ValueNotifier<int>(0);
   }
 
   @override
@@ -952,6 +1011,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
     final nextIds = widget.items.map((item) => item.id).join('|');
     if (oldIds != nextIds) {
       _currentIndex = 0;
+      _currentIndexNotifier.value = 0;
       _currentVirtualPage = _toVirtualPage(0);
       if (_controller.hasClients) {
         _controller.jumpToPage(_currentVirtualPage);
@@ -964,6 +1024,8 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
   void dispose() {
     _secondaryAnimation?.removeStatusListener(_onSecondaryAnimationStatus);
     _timer?.cancel();
+    _currentIndexNotifier.dispose();
+    _hoveringNotifier.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -1026,7 +1088,8 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
     final realIndex =
         widget.items.isEmpty ? 0 : virtualIndex % widget.items.length;
     if (_currentIndex != realIndex) {
-      setState(() => _currentIndex = realIndex);
+      _currentIndex = realIndex;
+      _currentIndexNotifier.value = realIndex;
       widget.onActiveIndexChanged(realIndex);
     }
     _scheduleNext();
@@ -1049,11 +1112,17 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
 
         return MouseRegion(
           onEnter: (_) {
-            if (!_hovering) setState(() => _hovering = true);
+            if (!_hovering) {
+              _hovering = true;
+              _hoveringNotifier.value = true;
+            }
             _timer?.cancel();
           },
           onExit: (_) {
-            if (_hovering) setState(() => _hovering = false);
+            if (_hovering) {
+              _hovering = false;
+              _hoveringNotifier.value = false;
+            }
             _scheduleNext();
           },
           child: SizedBox(
@@ -1094,22 +1163,29 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                                 _currentVirtualPage.toDouble();
                             delta = (page - virtualIndex).clamp(-1.0, 1.0);
                           }
-                          final scale = 1.0 - (delta.abs() * 0.032);
+                          final deltaAbs = delta.abs();
+                          if (deltaAbs < 0.0005) {
+                            return child!;
+                          }
+                          final scale = 1.0 - (deltaAbs * 0.032);
                           final opacity =
-                              (1.0 - (delta.abs() * 0.40)).clamp(0.0, 1.0);
+                              (1.0 - (deltaAbs * 0.40)).clamp(0.0, 1.0);
                           return Transform.scale(
                             scale: scale,
                             child: Opacity(opacity: opacity, child: child),
                           );
                         },
-                        child: _HomeHero(
-                          key: ValueKey('hero-slide-${item.id}'),
-                          item: item,
-                          dailyRecommendation: widget.dailyRecommendations,
-                          planning: widget.planningItemId == item.id,
-                          hovering: _hovering,
-                          onPlay: () => widget.onPlay(item),
-                          onDetails: () => widget.onDetails(item),
+                        child: RepaintBoundary(
+                          child: _HomeHero(
+                            key: ValueKey('hero-slide-${item.id}'),
+                            item: item,
+                            dailyRecommendation: widget.dailyRecommendations,
+                            planning: widget.planningItemId == item.id,
+                            hovering: _hovering,
+                            hoveringListenable: _hoveringNotifier,
+                            onPlay: () => widget.onPlay(item),
+                            onDetails: () => widget.onDetails(item),
+                          ),
                         ),
                       );
                     },
@@ -1122,12 +1198,15 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                       top: 0,
                       bottom: 0,
                       child: Center(
-                        child: _EdgeNavButton(
-                          key: const ValueKey('hero-previous'),
-                          icon: Icons.chevron_left_rounded,
-                          tooltip: '上一条',
-                          visible: _hovering,
-                          onTap: () => unawaited(_move(-1)),
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: _hoveringNotifier,
+                          builder: (context, isHovering, _) => _EdgeNavButton(
+                            key: const ValueKey('hero-previous'),
+                            icon: Icons.chevron_left_rounded,
+                            tooltip: '上一条',
+                            visible: isHovering,
+                            onTap: () => unawaited(_move(-1)),
+                          ),
                         ),
                       ),
                     ),
@@ -1136,12 +1215,15 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                       top: 0,
                       bottom: 0,
                       child: Center(
-                        child: _EdgeNavButton(
-                          key: const ValueKey('hero-next'),
-                          icon: Icons.chevron_right_rounded,
-                          tooltip: '下一条',
-                          visible: _hovering,
-                          onTap: () => unawaited(_move(1)),
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: _hoveringNotifier,
+                          builder: (context, isHovering, _) => _EdgeNavButton(
+                            key: const ValueKey('hero-next'),
+                            icon: Icons.chevron_right_rounded,
+                            tooltip: '下一条',
+                            visible: isHovering,
+                            onTap: () => unawaited(_move(1)),
+                          ),
                         ),
                       ),
                     ),
@@ -1152,10 +1234,13 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                     Positioned(
                       bottom: compact ? 16 : 22,
                       right: compact ? 18 : 28,
-                      child: _HeroIndexDock(
-                        currentIndex: _currentIndex,
-                        itemCount: widget.items.length,
-                        onTapIndex: (i) => unawaited(_jumpToIndex(i)),
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: _currentIndexNotifier,
+                        builder: (context, currentIndex, _) => _HeroIndexDock(
+                          currentIndex: currentIndex,
+                          itemCount: widget.items.length,
+                          onTapIndex: (i) => unawaited(_jumpToIndex(i)),
+                        ),
                       ),
                     ),
                 ],
@@ -1516,6 +1601,7 @@ class _HomeHero extends ConsumerWidget {
     required this.dailyRecommendation,
     required this.planning,
     this.hovering = false,
+    this.hoveringListenable,
     required this.onPlay,
     required this.onDetails,
   });
@@ -1524,6 +1610,7 @@ class _HomeHero extends ConsumerWidget {
   final bool dailyRecommendation;
   final bool planning;
   final bool hovering;
+  final ValueNotifier<bool>? hoveringListenable;
   final VoidCallback onPlay;
   final VoidCallback onDetails;
 
@@ -1553,14 +1640,28 @@ class _HomeHero extends ConsumerWidget {
           children: [
             // 1. High-fidelity full-bleed backdrop artwork with hover breathing effect
             Positioned.fill(
-              child: RepaintBoundary(
-                child: AnimatedScale(
-                  scale: hovering ? 1.038 : 1.0,
-                  duration: const Duration(milliseconds: 750),
-                  curve: Curves.easeOutCubic,
-                  child: _HeroArtwork(item: item),
-                ),
-              ),
+              child: hoveringListenable != null
+                  ? ValueListenableBuilder<bool>(
+                      valueListenable: hoveringListenable!,
+                      builder: (context, isHovering, artworkChild) =>
+                          AnimatedScale(
+                            scale: isHovering ? 1.038 : 1.0,
+                            duration: const Duration(milliseconds: 750),
+                            curve: Curves.easeOutCubic,
+                            child: artworkChild,
+                          ),
+                      child: RepaintBoundary(
+                        child: _HeroArtwork(item: item),
+                      ),
+                    )
+                  : AnimatedScale(
+                      scale: hovering ? 1.038 : 1.0,
+                      duration: const Duration(milliseconds: 750),
+                      curve: Curves.easeOutCubic,
+                      child: RepaintBoundary(
+                        child: _HeroArtwork(item: item),
+                      ),
+                    ),
             ),
 
             // 2. Dual-axis cinematic lighting gradient
@@ -1884,6 +1985,7 @@ class _MediaTrack extends StatelessWidget {
         : (compact ? 196.0 : 224.0);
     return _VisionLiquidGlassPanel(
       radius: AppRadius.value,
+      hasBackdropBlur: false,
       blur: 30,
       topAlpha: 0.13,
       bottomAlpha: 0.05,

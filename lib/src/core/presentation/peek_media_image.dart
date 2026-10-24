@@ -76,6 +76,60 @@ class PeekMediaImage extends StatelessWidget {
   final int? memCacheWidth;
   final int? memCacheHeight;
 
+  static ImageProvider provider(
+    Uri uri, {
+    Map<String, String> headers = const {},
+    PeekMediaImageKind kind = PeekMediaImageKind.poster,
+    double? width,
+    int? memCacheWidth,
+    int? memCacheHeight,
+    BaseCacheManager? cacheManager,
+  }) {
+    final targetMemWidth = memCacheWidth ?? _defaultMemCacheWidth(kind, width);
+    final targetMemHeight = memCacheHeight;
+    if (uri.scheme == 'file') {
+      return ResizeImage(
+        FileImage(File.fromUri(uri)),
+        width: targetMemWidth,
+        height: targetMemHeight,
+      );
+    }
+    return ResizeImage.resizeIfNeeded(
+      targetMemWidth,
+      targetMemHeight,
+      CachedNetworkImageProvider(
+        uri.toString(),
+        headers: headers,
+        cacheManager: cacheManager ?? PeekMediaImageCache.instance,
+        cacheKey: PeekMediaImageCache.keyFor(uri),
+      ),
+    );
+  }
+
+  static Future<void> precache(
+    BuildContext context,
+    Uri uri, {
+    Map<String, String> headers = const {},
+    PeekMediaImageKind kind = PeekMediaImageKind.poster,
+    double? width,
+    int? memCacheWidth,
+    int? memCacheHeight,
+    BaseCacheManager? cacheManager,
+  }) {
+    return precacheImage(
+      provider(
+        uri,
+        headers: headers,
+        kind: kind,
+        width: width,
+        memCacheWidth: memCacheWidth,
+        memCacheHeight: memCacheHeight,
+        cacheManager: cacheManager,
+      ),
+      context,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final imageUri = uri;

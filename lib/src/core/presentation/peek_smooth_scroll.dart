@@ -33,8 +33,13 @@ class SmoothScrollPosition extends ScrollPositionWithSingleContext {
       }
     }
 
-    // Momentum Acceleration Multiplier
-    if (_lastScrollTime != null) {
+    final isAlreadyGliding =
+        _targetOffset != null && (_targetOffset! - pixels).abs() > 1.5;
+
+    // Momentum Acceleration Multiplier (skip aggressive stacking for fine trackpad packets)
+    if (delta.abs() < 12.0) {
+      _velocityMultiplier = 1.0;
+    } else if (_lastScrollTime != null) {
       final interval = now.difference(_lastScrollTime!).inMilliseconds;
       if (interval < 140) {
         _velocityMultiplier = (_velocityMultiplier + 0.55).clamp(1.0, 4.5);
@@ -64,7 +69,9 @@ class SmoothScrollPosition extends ScrollPositionWithSingleContext {
     animateTo(
       newTarget,
       duration: Duration(milliseconds: durationMs),
-      curve: const Cubic(0.12, 0.88, 0.22, 1.0),
+      curve: isAlreadyGliding
+          ? Curves.decelerate
+          : const Cubic(0.16, 1.0, 0.3, 1.0),
     ).whenComplete(() {
       if (_targetOffset == newTarget) {
         _targetOffset = null;

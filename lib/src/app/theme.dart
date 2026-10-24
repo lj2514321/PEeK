@@ -101,7 +101,7 @@ class PeekPageTransitionsBuilder extends PageTransitionsBuilder {
           opacity: fadeCurved,
           child: ScaleTransition(
             scale: Tween<double>(begin: 0.925, end: 1.0).animate(enterCurved),
-            child: child,
+            child: RepaintBoundary(child: child),
           ),
         ),
       ),

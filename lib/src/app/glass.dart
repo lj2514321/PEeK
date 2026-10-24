@@ -387,75 +387,80 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
                           ),
                           switchInCurve: const Cubic(0.16, 1.0, 0.3, 1.0),
                           switchOutCurve: Curves.easeInCubic,
-                          child: Stack(
+                          child: RepaintBoundary(
                             key: ValueKey(
                               'global-ambient-${ambient.itemId ?? 'default'}-${ambient.paletteSeed}',
                             ),
-                            fit: StackFit.expand,
-                            children: [
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: colors,
-                                    stops: const [0.0, 0.52, 1.0],
-                                  ),
-                                ),
-                              ),
-                              if (ambient.imageUri != null)
-                                Transform.scale(
-                                  scale: 1.14,
-                                  child: Opacity(
-                                    opacity: 0.52,
-                                    child: PeekMediaImage(
-                                      uri: ambient.imageUri,
-                                      headers: ambient.imageHeaders,
-                                      kind: PeekMediaImageKind.backdrop,
-                                      memCacheWidth: 320,
-                                      fit: BoxFit.cover,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: colors,
+                                      stops: const [0.0, 0.52, 1.0],
                                     ),
                                   ),
                                 ),
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: RadialGradient(
-                                    center: const Alignment(-0.38, -0.48),
-                                    radius: 1.15,
-                                    colors: [
-                                      colors.first.withValues(alpha: 0.55),
-                                      Colors.transparent,
-                                    ],
+                                if (ambient.imageUri != null)
+                                  Transform.scale(
+                                    scale: 1.14,
+                                    child: ImageFiltered(
+                                      imageFilter: ImageFilter.blur(
+                                        sigmaX: 42,
+                                        sigmaY: 42,
+                                        tileMode: TileMode.mirror,
+                                      ),
+                                      child: Opacity(
+                                        opacity: 0.52,
+                                        child: PeekMediaImage(
+                                          uri: ambient.imageUri,
+                                          headers: ambient.imageHeaders,
+                                          kind: PeekMediaImageKind.backdrop,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: RadialGradient(
+                                      center: const Alignment(-0.38, -0.48),
+                                      radius: 1.15,
+                                      colors: [
+                                        colors.first.withValues(alpha: 0.55),
+                                        Colors.transparent,
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: RadialGradient(
-                                    center: Alignment(0.58, 0.44),
-                                    radius: 1.05,
-                                    colors: [
-                                      Color(0x4438BDF8),
-                                      Colors.transparent,
-                                    ],
+                                const DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: RadialGradient(
+                                      center: Alignment(0.58, 0.44),
+                                      radius: 1.05,
+                                      colors: [
+                                        Color(0x4438BDF8),
+                                        Colors.transparent,
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                        BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 42, sigmaY: 42),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.black.withValues(alpha: 0.18),
-                                  Colors.black.withValues(alpha: 0.38),
-                                ],
-                              ),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.18),
+                                Colors.black.withValues(alpha: 0.38),
+                              ],
                             ),
                           ),
                         ),

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
@@ -219,6 +218,36 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       await _loadNode(item, path: [..._path, item]);
       return;
     }
+    if (!mounted) return;
+    final precacheFutures = <Future<void>>[];
+    final backdropUri = item.backdropUri ?? item.imageUri;
+    if (backdropUri != null) {
+      precacheFutures.add(
+        PeekMediaImage.precache(
+          context,
+          backdropUri,
+          headers: item.imageHeaders,
+          kind: PeekMediaImageKind.backdrop,
+        ),
+      );
+    }
+    if (item.imageUri != null) {
+      precacheFutures.add(
+        PeekMediaImage.precache(
+          context,
+          item.imageUri!,
+          headers: item.imageHeaders,
+          kind: PeekMediaImageKind.poster,
+        ),
+      );
+    }
+    if (!AppMotion.isTest && precacheFutures.isNotEmpty) {
+      await Future.wait(precacheFutures).timeout(
+        const Duration(milliseconds: 24),
+        onTimeout: () => const [],
+      );
+      if (!mounted) return;
+    }
     final currentScrollOffset = _scrollController.hasClients
         ? _scrollController.offset
         : null;
@@ -342,15 +371,21 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     if (!mounted) return;
     for (final item in items.take(24)) {
       final uri = item.imageUri;
-      if (uri != null && uri.scheme != 'file') {
-        precacheImage(
-          CachedNetworkImageProvider(
-            uri.toString(),
-            headers: item.imageHeaders,
-            cacheManager: PeekMediaImageCache.instance,
-            cacheKey: PeekMediaImageCache.keyFor(uri),
-          ),
+      if (uri != null) {
+        PeekMediaImage.precache(
           context,
+          uri,
+          headers: item.imageHeaders,
+          kind: PeekMediaImageKind.poster,
+        ).catchError((_) {});
+      }
+      final backdropUri = item.backdropUri ?? item.imageUri;
+      if (backdropUri != null) {
+        PeekMediaImage.precache(
+          context,
+          backdropUri,
+          headers: item.imageHeaders,
+          kind: PeekMediaImageKind.backdrop,
         ).catchError((_) {});
       }
     }
@@ -533,7 +568,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 1280),
-                      child: Column(
+                      child: RepaintBoundary(
+                        child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _LibraryHeader(
@@ -654,6 +690,7 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                             ],
                           ],
                         ],
+                        ),
                       ),
                     ),
                   ),
