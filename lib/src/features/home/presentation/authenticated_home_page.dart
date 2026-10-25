@@ -244,10 +244,9 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     // 1. Pre-warm artwork before transition starts to prevent GPU/main-thread decode jank
     final precacheFutures = _precacheItemForDetail(item);
     if (!AppMotion.isTest && precacheFutures.isNotEmpty) {
-      await Future.wait(precacheFutures).timeout(
-        const Duration(milliseconds: 24),
-        onTimeout: () => const [],
-      );
+      await Future.wait(
+        precacheFutures,
+      ).timeout(const Duration(milliseconds: 24), onTimeout: () => const []);
       if (!mounted) return;
     }
 
@@ -1085,8 +1084,9 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
 
   void _onVirtualPageChanged(int virtualIndex) {
     _currentVirtualPage = virtualIndex;
-    final realIndex =
-        widget.items.isEmpty ? 0 : virtualIndex % widget.items.length;
+    final realIndex = widget.items.isEmpty
+        ? 0
+        : virtualIndex % widget.items.length;
     if (_currentIndex != realIndex) {
       _currentIndex = realIndex;
       _currentIndexNotifier.value = realIndex;
@@ -1105,10 +1105,10 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
         final totalHeight = compact
             ? 420.0
             : ultraWide
-                ? 580.0
-                : wideScreen
-                    ? 540.0
-                    : 480.0;
+            ? 580.0
+            : wideScreen
+            ? 540.0
+            : 480.0;
 
         return MouseRegion(
           onEnter: (_) {
@@ -1159,7 +1159,8 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                           double delta = 0.0;
                           if (_controller.hasClients &&
                               _controller.position.haveDimensions) {
-                            final page = _controller.page ??
+                            final page =
+                                _controller.page ??
                                 _currentVirtualPage.toDouble();
                             delta = (page - virtualIndex).clamp(-1.0, 1.0);
                           }
@@ -1168,8 +1169,10 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
                             return child!;
                           }
                           final scale = 1.0 - (deltaAbs * 0.032);
-                          final opacity =
-                              (1.0 - (deltaAbs * 0.40)).clamp(0.0, 1.0);
+                          final opacity = (1.0 - (deltaAbs * 0.40)).clamp(
+                            0.0,
+                            1.0,
+                          );
                           return Transform.scale(
                             scale: scale,
                             child: Opacity(opacity: opacity, child: child),
@@ -1508,11 +1511,7 @@ class _EditorialMetadataRow extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.star_rounded,
-              size: 15,
-              color: Color(0xFFFBBF24),
-            ),
+            const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFBBF24)),
             const SizedBox(width: 3),
             Text(
               item.communityRating!.toStringAsFixed(1),
@@ -1650,17 +1649,13 @@ class _HomeHero extends ConsumerWidget {
                             curve: Curves.easeOutCubic,
                             child: artworkChild,
                           ),
-                      child: RepaintBoundary(
-                        child: _HeroArtwork(item: item),
-                      ),
+                      child: RepaintBoundary(child: _HeroArtwork(item: item)),
                     )
                   : AnimatedScale(
                       scale: hovering ? 1.038 : 1.0,
                       duration: const Duration(milliseconds: 750),
                       curve: Curves.easeOutCubic,
-                      child: RepaintBoundary(
-                        child: _HeroArtwork(item: item),
-                      ),
+                      child: RepaintBoundary(child: _HeroArtwork(item: item)),
                     ),
             ),
 
@@ -1690,10 +1685,7 @@ class _HomeHero extends ConsumerWidget {
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.center,
-                    colors: [
-                      const Color(0xD0080B12),
-                      Colors.transparent,
-                    ],
+                    colors: [const Color(0xD0080B12), Colors.transparent],
                   ),
                 ),
               ),
@@ -1709,10 +1701,7 @@ class _HomeHero extends ConsumerWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0x75080B12),
-                      Colors.transparent,
-                    ],
+                    colors: [const Color(0x75080B12), Colors.transparent],
                   ),
                 ),
               ),

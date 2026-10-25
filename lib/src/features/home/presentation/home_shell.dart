@@ -502,18 +502,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
     final nextCollapsed = !_sidebarCollapsed;
     _sidebarCollapsed = nextCollapsed;
     final target = nextCollapsed ? 0.0 : 1.0;
-    final duration = AppMotion.responsive(
-      context,
-      AppMotion.standard,
-    );
+    final duration = AppMotion.responsive(context, AppMotion.standard);
     if (MediaQuery.disableAnimationsOf(context)) {
       _sidebarController.value = target;
       setState(() {});
     } else {
-      _sidebarController.animateTo(
-        target,
-        duration: duration,
-      ).then((_) {
+      _sidebarController.animateTo(target, duration: duration).then((_) {
         if (mounted) setState(() {});
       });
     }
@@ -647,13 +641,10 @@ class _HomeShellState extends ConsumerState<HomeShell>
                           active: _selectedIndex == 0,
                           child: _authenticatedServer == null
                               ? _HomePage(
-                                  key: const ValueKey(
-                                    'connection-home',
-                                  ),
+                                  key: const ValueKey('connection-home'),
                                   server: _discoveredServer,
                                   account: null,
-                                  onAddServer:
-                                      _showAddServerDialog,
+                                  onAddServer: _showAddServerDialog,
                                   onLogin: _showLoginDialog,
                                   onOpenLibrary: () {
                                     _selectDestination(1);
@@ -666,8 +657,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
                                   onOpenLibrary: () {
                                     _selectDestination(1);
                                   },
-                                  onSessionExpired:
-                                      _handleSessionExpired,
+                                  onSessionExpired: _handleSessionExpired,
                                 ),
                         ),
                         _KeepAliveDestination(
@@ -677,12 +667,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
                                   key: _libraryPageKey,
                                   account: _authenticatedServer,
                                   localLibraries: _localLibraries,
-                                  onAddLocalLibrary:
-                                      _addLocalLibrary,
-                                  onGoHome: () =>
-                                      _selectDestination(0),
-                                  onSessionExpired:
-                                      _handleSessionExpired,
+                                  onAddLocalLibrary: _addLocalLibrary,
+                                  onGoHome: () => _selectDestination(0),
+                                  onSessionExpired: _handleSessionExpired,
                                 )
                               : const SizedBox.shrink(),
                         ),
@@ -692,12 +679,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
                               ? FavoritesPage(
                                   key: _favoritesPageKey,
                                   account: _authenticatedServer,
-                                  onGoHome: () =>
-                                      _selectDestination(0),
-                                  onOpenLibrary: () =>
-                                      _selectDestination(1),
-                                  onSessionExpired:
-                                      _handleSessionExpired,
+                                  onGoHome: () => _selectDestination(0),
+                                  onOpenLibrary: () => _selectDestination(1),
+                                  onSessionExpired: _handleSessionExpired,
                                 )
                               : const SizedBox.shrink(),
                         ),
@@ -705,72 +689,48 @@ class _HomeShellState extends ConsumerState<HomeShell>
                           active: _selectedIndex == 3,
                           child: _visitedDestinations.contains(3)
                               ? ServerAccountsPage(
-                                  key: const ValueKey(
-                                    'server-accounts',
-                                  ),
+                                  key: const ValueKey('server-accounts'),
                                   state: _accountState,
                                   busyProfileId: _busyProfileId,
-                                  onAddServer:
-                                      _showAddServerDialog,
+                                  onAddServer: _showAddServerDialog,
                                   localLibraries: _localLibraries,
-                                  addingLocalLibrary:
-                                      _addingLocalLibrary,
-                                  busyLocalLibraryId:
-                                      _busyLocalLibraryId,
-                                  onAddLocalLibrary:
-                                      _addLocalLibrary,
-                                  onRemoveLocalLibrary:
-                                      _removeLocalLibrary,
+                                  addingLocalLibrary: _addingLocalLibrary,
+                                  busyLocalLibraryId: _busyLocalLibraryId,
+                                  onAddLocalLibrary: _addLocalLibrary,
+                                  onRemoveLocalLibrary: _removeLocalLibrary,
                                   onSwitch: _switchAccount,
                                   onLogin: _loginAccount,
                                   onLogout: _logoutAccount,
                                   onRemove: _removeAccount,
-                                  onGoHome: () =>
-                                      _selectDestination(0),
-                                  playbackSettings:
-                                      _playbackSettings,
+                                  onGoHome: () => _selectDestination(0),
+                                  playbackSettings: _playbackSettings,
                                   playbackSettingsLoading:
                                       _playbackSettingsLoading,
                                   playbackSettingsSaving:
                                       _playbackSettingsSaving,
-                                  playbackSettingsError:
-                                      _playbackSettingsError,
-                                  onPlaybackBitrateChanged:
-                                      (bitrate) => unawaited(
-                                        _changePlaybackBitrate(
-                                          bitrate,
-                                        ),
+                                  playbackSettingsError: _playbackSettingsError,
+                                  onPlaybackBitrateChanged: (bitrate) =>
+                                      unawaited(
+                                        _changePlaybackBitrate(bitrate),
                                       ),
-                                  onEnableMiniPlayerChanged:
-                                      (enabled) => unawaited(
-                                        _changeEnableMiniPlayer(
-                                          enabled,
-                                        ),
+                                  onEnableMiniPlayerChanged: (enabled) =>
+                                      unawaited(
+                                        _changeEnableMiniPlayer(enabled),
                                       ),
-                                  onUseExternalPlayerChanged:
-                                      (enabled) => unawaited(
-                                        _changeUseExternalPlayer(
-                                          enabled,
-                                        ),
+                                  onUseExternalPlayerChanged: (enabled) =>
+                                      unawaited(
+                                        _changeUseExternalPlayer(enabled),
                                       ),
-                                  onExternalPlayerPathChanged:
-                                      (path) => unawaited(
-                                        _changeExternalPlayerPath(
-                                          path,
-                                        ),
+                                  onExternalPlayerPathChanged: (path) =>
+                                      unawaited(
+                                        _changeExternalPlayerPath(path),
                                       ),
-                                  onHardwareDecodingModeChanged:
-                                      (mode) => unawaited(
-                                        _changeHardwareDecodingMode(
-                                          mode,
-                                        ),
+                                  onHardwareDecodingModeChanged: (mode) =>
+                                      unawaited(
+                                        _changeHardwareDecodingMode(mode),
                                       ),
-                                  onLongPressSpeedChanged:
-                                      (speed) => unawaited(
-                                        _changeLongPressSpeed(
-                                          speed,
-                                        ),
-                                      ),
+                                  onLongPressSpeedChanged: (speed) =>
+                                      unawaited(_changeLongPressSpeed(speed)),
                                 )
                               : const SizedBox.shrink(),
                         ),
@@ -780,10 +740,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
                               ? ActorsPage(
                                   key: _actorsPageKey,
                                   account: _authenticatedServer,
-                                  onOpenLibrary: () =>
-                                      _selectDestination(1),
-                                  onSessionExpired:
-                                      _handleSessionExpired,
+                                  onOpenLibrary: () => _selectDestination(1),
+                                  onSessionExpired: _handleSessionExpired,
                                 )
                               : const SizedBox.shrink(),
                         ),
@@ -836,11 +794,15 @@ class _HomeShellState extends ConsumerState<HomeShell>
                                 top: 0,
                                 bottom: 0,
                                 child: KeyedSubtree(
-                                  key: const ValueKey('app-rail-isolated-boundary'),
+                                  key: const ValueKey(
+                                    'app-rail-isolated-boundary',
+                                  ),
                                   child: _AppRail(
-                                    extended: canExtendRail && !_sidebarCollapsed,
+                                    extended:
+                                        canExtendRail && !_sidebarCollapsed,
                                     progress: progress,
-                                    isAnimating: isAnimating || _routeTransitioning,
+                                    isAnimating:
+                                        isAnimating || _routeTransitioning,
                                     destinations: _destinations,
                                     selectedIndex: _selectedIndex,
                                     onSelected: _selectDestination,

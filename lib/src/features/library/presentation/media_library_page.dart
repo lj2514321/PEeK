@@ -242,10 +242,9 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       );
     }
     if (!AppMotion.isTest && precacheFutures.isNotEmpty) {
-      await Future.wait(precacheFutures).timeout(
-        const Duration(milliseconds: 24),
-        onTimeout: () => const [],
-      );
+      await Future.wait(
+        precacheFutures,
+      ).timeout(const Duration(milliseconds: 24), onTimeout: () => const []);
       if (!mounted) return;
     }
     final currentScrollOffset = _scrollController.hasClients
@@ -536,211 +535,209 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       );
     }
 
-    final horizontalPadding =
-        MediaQuery.sizeOf(context).width < 720 ? 20.0 : 32.0;
-        final selectedItems = _items
-            .where((item) => _selectedIds.contains(item.id))
-            .toList(growable: false);
-        final favoriteTarget =
-            selectedItems.isEmpty ||
-            !selectedItems.every((item) => item.favorite);
-        final playedTarget =
-            selectedItems.isEmpty ||
-            !selectedItems.every((item) => item.played);
-        return RefreshIndicator(
-          onRefresh: () => _loadCatalog(forceRefresh: true),
-          child: Stack(
-            children: [
-              PeekSmoothScroll(
-                controller: _scrollController,
-                child: SingleChildScrollView(
-                  key: PageStorageKey(
-                    'media-library-scroll-${_selectedLibrary?.id ?? 'root'}-${_path.map((e) => e.id).join('/')}',
-                  ),
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    28,
-                    horizontalPadding,
-                    _selectionMode ? 120 : 48,
-                  ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1280),
-                      child: RepaintBoundary(
-                        child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _LibraryHeader(
-                            account: account,
-                            localLibraryCount: widget.localLibraries.length,
-                            onRefresh: () => _loadCatalog(forceRefresh: true),
+    final horizontalPadding = MediaQuery.sizeOf(context).width < 720
+        ? 20.0
+        : 32.0;
+    final selectedItems = _items
+        .where((item) => _selectedIds.contains(item.id))
+        .toList(growable: false);
+    final favoriteTarget =
+        selectedItems.isEmpty || !selectedItems.every((item) => item.favorite);
+    final playedTarget =
+        selectedItems.isEmpty || !selectedItems.every((item) => item.played);
+    return RefreshIndicator(
+      onRefresh: () => _loadCatalog(forceRefresh: true),
+      child: Stack(
+        children: [
+          PeekSmoothScroll(
+            controller: _scrollController,
+            child: SingleChildScrollView(
+              key: PageStorageKey(
+                'media-library-scroll-${_selectedLibrary?.id ?? 'root'}-${_path.map((e) => e.id).join('/')}',
+              ),
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                28,
+                horizontalPadding,
+                _selectionMode ? 120 : 48,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1280),
+                  child: RepaintBoundary(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _LibraryHeader(
+                          account: account,
+                          localLibraryCount: widget.localLibraries.length,
+                          onRefresh: () => _loadCatalog(forceRefresh: true),
+                        ),
+                        const SizedBox(height: 28),
+                        if (_catalogNotice != null) ...[
+                          _InlineLibraryError(
+                            message: _catalogNotice!,
+                            onRetry: () => _loadCatalog(forceRefresh: true),
                           ),
-                          const SizedBox(height: 28),
-                          if (_catalogNotice != null) ...[
-                            _InlineLibraryError(
-                              message: _catalogNotice!,
-                              onRetry: () => _loadCatalog(forceRefresh: true),
+                          const SizedBox(height: 18),
+                        ],
+                        if (_libraries.isEmpty)
+                          _LibraryMessage(
+                            icon: Icons.create_new_folder_outlined,
+                            title: account == null ? '还没有媒体库' : '没有可见媒体库',
+                            message: account == null
+                                ? '添加电脑或局域网共享文件夹，也可以返回首页连接 Jellyfin / Emby。'
+                                : '添加本地文件夹，或检查当前用户的服务器媒体库权限。',
+                            actionLabel: '添加本地媒体库',
+                            onAction: widget.onAddLocalLibrary,
+                            embedded: true,
+                          )
+                        else ...[
+                          _SectionLabel(
+                            eyebrow: 'COLLECTIONS',
+                            title: '我的媒体库',
+                            detail: '${_libraries.length} 个可访问媒体库',
+                          ),
+                          const SizedBox(height: 14),
+                          _LibrarySelector(
+                            libraries: _libraries,
+                            selectedId: _selectedLibrary?.id,
+                            onSelected: _selectLibrary,
+                          ),
+                          const SizedBox(height: 32),
+                          if (_path.isNotEmpty) ...[
+                            _LibraryBreadcrumb(
+                              path: _path,
+                              onSelected: _navigateTo,
                             ),
-                            const SizedBox(height: 18),
+                            const SizedBox(height: 16),
                           ],
-                          if (_libraries.isEmpty)
-                            _LibraryMessage(
-                              icon: Icons.create_new_folder_outlined,
-                              title: account == null ? '还没有媒体库' : '没有可见媒体库',
-                              message: account == null
-                                  ? '添加电脑或局域网共享文件夹，也可以返回首页连接 Jellyfin / Emby。'
-                                  : '添加本地文件夹，或检查当前用户的服务器媒体库权限。',
-                              actionLabel: '添加本地媒体库',
-                              onAction: widget.onAddLocalLibrary,
-                              embedded: true,
+                          _SectionLabel(
+                            eyebrow: 'BROWSE',
+                            title: _path.isEmpty ? '媒体内容' : _path.last.name,
+                            detail: _loadingItems
+                                ? '正在同步'
+                                : '已加载 ${_items.length} / $_totalItemCount 项',
+                          ),
+                          const SizedBox(height: 12),
+                          _LibraryToolbar(
+                            key: const ValueKey('library-toolbar'),
+                            sort: _sort,
+                            density: _density,
+                            activeFilterCount: _activeFilterCount,
+                            onSortChanged: _changeSort,
+                            onFilterPressed: _showFilters,
+                            onDensityChanged: _setDensity,
+                            onDedupePressed: _openDedupePage,
+                            onSelectPressed: _enterSelectionMode,
+                          ),
+                          const SizedBox(height: 18),
+                          if (_error != null)
+                            _InlineLibraryError(
+                              message: _error!,
+                              onRetry: _path.isEmpty
+                                  ? _loadCatalog
+                                  : () => _reloadCurrentNode(),
+                            )
+                          else if (_loadingItems || _loadingCatalog)
+                            const _ItemsLoadingGrid()
+                          else if (_items.isEmpty)
+                            _EmptyLibrary(
+                              filtered: _activeFilterCount > 0,
+                              onClearFilters: _activeFilterCount > 0
+                                  ? () async {
+                                      setState(() {
+                                        _kindFilter =
+                                            MediaLibraryKindFilter.all;
+                                        _statusFilter =
+                                            MediaLibraryStatusFilter.all;
+                                        _resolutionFilter =
+                                            MediaResolutionFilter.all;
+                                        _minCommunityRating = null;
+                                        _productionYear = null;
+                                        _selectedTag = null;
+                                        _collapseBoxSets = false;
+                                      });
+                                      await _reloadCurrentNode();
+                                    }
+                                  : null,
                             )
                           else ...[
-                            _SectionLabel(
-                              eyebrow: 'COLLECTIONS',
-                              title: '我的媒体库',
-                              detail: '${_libraries.length} 个可访问媒体库',
-                            ),
-                            const SizedBox(height: 14),
-                            _LibrarySelector(
-                              libraries: _libraries,
-                              selectedId: _selectedLibrary?.id,
-                              onSelected: _selectLibrary,
-                            ),
-                            const SizedBox(height: 32),
-                            if (_path.isNotEmpty) ...[
-                              _LibraryBreadcrumb(
-                                path: _path,
-                                onSelected: _navigateTo,
-                              ),
-                              const SizedBox(height: 16),
-                            ],
-                            _SectionLabel(
-                              eyebrow: 'BROWSE',
-                              title: _path.isEmpty ? '媒体内容' : _path.last.name,
-                              detail: _loadingItems
-                                  ? '正在同步'
-                                  : '已加载 ${_items.length} / $_totalItemCount 项',
-                            ),
-                            const SizedBox(height: 12),
-                            _LibraryToolbar(
-                              key: const ValueKey('library-toolbar'),
-                              sort: _sort,
+                            _MediaGrid(
+                              generation: _requestGeneration,
+                              items: _items,
                               density: _density,
-                              activeFilterCount: _activeFilterCount,
-                              onSortChanged: _changeSort,
-                              onFilterPressed: _showFilters,
-                              onDensityChanged: _setDensity,
-                              onDedupePressed: _openDedupePage,
-                              onSelectPressed: _enterSelectionMode,
+                              selectionMode: _selectionMode,
+                              selectedIds: _selectedIds,
+                              onOpen: _openItem,
+                              onToggleSelection: _toggleSelection,
+                              onEnterSelection: _enterSelectionMode,
+                              onDelete: _deleteItemDirect,
+                              selectionAvailable: true,
                             ),
-                            const SizedBox(height: 18),
-                            if (_error != null)
-                              _InlineLibraryError(
-                                message: _error!,
-                                onRetry: _path.isEmpty
-                                    ? _loadCatalog
-                                    : () => _reloadCurrentNode(),
-                              )
-                            else if (_loadingItems || _loadingCatalog)
-                              const _ItemsLoadingGrid()
-                            else if (_items.isEmpty)
-                              _EmptyLibrary(
-                                filtered: _activeFilterCount > 0,
-                                onClearFilters: _activeFilterCount > 0
-                                    ? () async {
-                                        setState(() {
-                                          _kindFilter =
-                                              MediaLibraryKindFilter.all;
-                                          _statusFilter =
-                                              MediaLibraryStatusFilter.all;
-                                          _resolutionFilter =
-                                              MediaResolutionFilter.all;
-                                          _minCommunityRating = null;
-                                          _productionYear = null;
-                                          _selectedTag = null;
-                                          _collapseBoxSets = false;
-                                        });
-                                        await _reloadCurrentNode();
-                                      }
-                                    : null,
-                              )
-                            else ...[
-                              _MediaGrid(
-                                generation: _requestGeneration,
-                                items: _items,
-                                density: _density,
-                                selectionMode: _selectionMode,
-                                selectedIds: _selectedIds,
-                                onOpen: _openItem,
-                                onToggleSelection: _toggleSelection,
-                                onEnterSelection: _enterSelectionMode,
-                                onDelete: _deleteItemDirect,
-                                selectionAvailable: true,
-                              ),
-                              _PaginationFooter(
-                                loadedCount: _items.length,
-                                totalCount: _totalItemCount,
-                                hasMore: _nextStartIndex < _totalItemCount,
-                                loading: _loadingMore,
-                                error: _paginationError,
-                                onLoadMore: _loadMore,
-                              ),
-                            ],
+                            _PaginationFooter(
+                              loadedCount: _items.length,
+                              totalCount: _totalItemCount,
+                              hasMore: _nextStartIndex < _totalItemCount,
+                              loading: _loadingMore,
+                              error: _paginationError,
+                              onLoadMore: _loadMore,
+                            ),
                           ],
                         ],
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ),
               ),
-              // Floating sticky action bar at the bottom of the screen
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 24,
-                child: Center(
-                  child: AnimatedSlide(
-                    offset: _selectionMode ? Offset.zero : const Offset(0, 1.5),
-                    duration: AppMotion.standard,
-                    curve: AppMotion.enterCurve,
-                    child: AnimatedOpacity(
-                      opacity: _selectionMode ? 1.0 : 0.0,
-                      duration: AppMotion.fast,
-                      child: IgnorePointer(
-                        ignoring: !_selectionMode,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 860),
-                          child: _BulkActionBar(
-                            key: const ValueKey('bulk-action-bar'),
-                            selectedCount: selectedItems.length,
-                            allLoadedSelected:
-                                _items.isNotEmpty &&
-                                selectedItems.length == _items.length,
-                            busyLabel: _bulkActionLabel,
-                            favoriteTarget: favoriteTarget,
-                            playedTarget: playedTarget,
-                            showUserStates: _selectedLibrary?.isLocal != true,
-                            onSelectAll: _selectAllLoaded,
-                            onFavorite: () =>
-                                _applyBulkState(favorite: favoriteTarget),
-                            onPlayed: () =>
-                                _applyBulkState(played: playedTarget),
-                            onDelete: _deleteSelectedItems,
-                            onPlayQueue: _playSelectedItems,
-                            onClose: _exitSelectionMode,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        );
+          // Floating sticky action bar at the bottom of the screen
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: Center(
+              child: AnimatedSlide(
+                offset: _selectionMode ? Offset.zero : const Offset(0, 1.5),
+                duration: AppMotion.standard,
+                curve: AppMotion.enterCurve,
+                child: AnimatedOpacity(
+                  opacity: _selectionMode ? 1.0 : 0.0,
+                  duration: AppMotion.fast,
+                  child: IgnorePointer(
+                    ignoring: !_selectionMode,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 860),
+                      child: _BulkActionBar(
+                        key: const ValueKey('bulk-action-bar'),
+                        selectedCount: selectedItems.length,
+                        allLoadedSelected:
+                            _items.isNotEmpty &&
+                            selectedItems.length == _items.length,
+                        busyLabel: _bulkActionLabel,
+                        favoriteTarget: favoriteTarget,
+                        playedTarget: playedTarget,
+                        showUserStates: _selectedLibrary?.isLocal != true,
+                        onSelectAll: _selectAllLoaded,
+                        onFavorite: () =>
+                            _applyBulkState(favorite: favoriteTarget),
+                        onPlayed: () => _applyBulkState(played: playedTarget),
+                        onDelete: _deleteSelectedItems,
+                        onPlayQueue: _playSelectedItems,
+                        onClose: _exitSelectionMode,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _reloadCurrentNode() async {

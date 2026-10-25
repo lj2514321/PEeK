@@ -89,9 +89,7 @@ class _PeekWarmupGateState extends ConsumerState<PeekWarmupGate> {
             height: 48,
             child: ExcludeSemantics(
               child: IgnorePointer(
-                child: RepaintBoundary(
-                  child: _HardwarePipelineExerciser(),
-                ),
+                child: RepaintBoundary(child: _HardwarePipelineExerciser()),
               ),
             ),
           ),
@@ -134,12 +132,20 @@ class _HardwarePipelineExerciserState extends State<_HardwarePipelineExerciser>
     runTime: Duration(hours: 2, minutes: 18),
     genres: ['Sci-Fi', 'Drama', 'Adventure'],
     people: [
-      MediaPerson(id: 'warmup-p1', name: 'Director One', role: 'Director', type: 'Director'),
-      MediaPerson(id: 'warmup-p2', name: 'Lead Actor', role: 'Protagonist', type: 'Actor'),
+      MediaPerson(
+        id: 'warmup-p1',
+        name: 'Director One',
+        role: 'Director',
+        type: 'Director',
+      ),
+      MediaPerson(
+        id: 'warmup-p2',
+        name: 'Lead Actor',
+        role: 'Protagonist',
+        type: 'Actor',
+      ),
     ],
-    chapters: [
-      MediaChapter(name: 'Chapter 1', startPosition: Duration.zero),
-    ],
+    chapters: [MediaChapter(name: 'Chapter 1', startPosition: Duration.zero)],
   );
 
   @override

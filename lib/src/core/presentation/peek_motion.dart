@@ -544,12 +544,18 @@ class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
       reverseCurve: PeekCurves.spatialEnter,
     );
 
-    _scaleAnimation =
-        Tween<double>(begin: 0.44, end: 1.0).animate(_enterCurved);
-    _secScaleAnimation =
-        Tween<double>(begin: 1.0, end: 0.925).animate(_secCurved);
-    _secScrimAnimation =
-        Tween<double>(begin: 0.0, end: 0.48).animate(_secCurved);
+    _scaleAnimation = Tween<double>(
+      begin: 0.44,
+      end: 1.0,
+    ).animate(_enterCurved);
+    _secScaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.925,
+    ).animate(_secCurved);
+    _secScrimAnimation = Tween<double>(
+      begin: 0.0,
+      end: 0.48,
+    ).animate(_secCurved);
   }
 
   @override

@@ -84,8 +84,9 @@ void main() {
     );
 
     final provider = (builtImage as Image).image;
-    final resolvedProvider =
-        provider is ResizeImage ? provider.imageProvider : provider;
+    final resolvedProvider = provider is ResizeImage
+        ? provider.imageProvider
+        : provider;
     expect(resolvedProvider, isA<FileImage>());
   });
 

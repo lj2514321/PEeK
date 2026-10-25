@@ -980,9 +980,7 @@ class _DetailHero extends StatelessWidget {
       children: [
         // Fluid Background Backdrop Layer with Seamless Hardware-Accelerated Alpha Dissolve
         Positioned.fill(
-          child: RepaintBoundary(
-            child: _Backdrop(item: item),
-          ),
+          child: RepaintBoundary(child: _Backdrop(item: item)),
         ),
         Positioned.fill(
           child: DecoratedBox(

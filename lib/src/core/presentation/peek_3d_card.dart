@@ -178,7 +178,9 @@ class _Peek3DCardState extends State<Peek3DCard> {
                     ),
                   );
                 },
-                child: RepaintBoundary(child: ClipRRect(borderRadius: radius, child: widget.child)),
+                child: RepaintBoundary(
+                  child: ClipRRect(borderRadius: radius, child: widget.child),
+                ),
               ),
             ),
           ),
