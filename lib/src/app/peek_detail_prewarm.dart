@@ -91,17 +91,19 @@ abstract final class PeekDetailPrewarm {
     entry = OverlayEntry(
       builder: (_) => Positioned.fill(
         child: IgnorePointer(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Runs the real transition wrapper: the scaled, anti-aliased
-              // rounded-clip composite compiles a different pipeline than a
-              // settled page, and it is worth ~174 ms of the first-entry spike.
-              _PrewarmStage(item: item, onSettled: onSettled),
-              // Painted after the page, so the whole thing stays invisible
-              // while still being rasterized.
-              const ColoredBox(color: AppColors.canvas),
-            ],
+          // 1% opacity: imperceptible over the running UI, but still painted,
+          // so the pipelines still compile.
+          //
+          // Do NOT put an opaque cover on top of this entry: the overlay is
+          // the topmost layer of the app, so a cover would blank the whole
+          // window for the duration of every warm-up. (A first revision did
+          // exactly that and produced a full-window flash on each new hover.)
+          child: Opacity(
+            opacity: 0.01,
+            // Runs the real transition wrapper: the scaled, anti-aliased
+            // rounded-clip composite compiles a different pipeline than a
+            // settled page, and it was worth ~174 ms of the first-entry spike.
+            child: _PrewarmStage(item: item, onSettled: onSettled),
           ),
         ),
       ),
