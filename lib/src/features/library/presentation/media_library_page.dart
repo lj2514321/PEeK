@@ -11,6 +11,7 @@ import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/app/app_routes.dart';
+import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
@@ -2251,6 +2252,8 @@ class _MediaCard extends ConsumerWidget {
               Expanded(
                 child: Peek3DCard(
                   onTap: selectionMode ? onToggleSelection : onOpen,
+                  onHoverIntent: () =>
+                      PeekDetailPrewarm.schedule(context, item: item),
                   borderRadius: AppRadius.value,
                   child: Material(
                     key: ValueKey('media-card-artwork-${item.id}'),

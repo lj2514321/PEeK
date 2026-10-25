@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:embyplayer/src/app/app_routes.dart';
+import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
@@ -2116,6 +2117,8 @@ class _HomeMediaCard extends ConsumerWidget {
                 Expanded(
                   child: Peek3DCard(
                     onTap: onOpen,
+                    onHoverIntent: () =>
+                        PeekDetailPrewarm.schedule(context, item: item),
                     borderRadius: AppRadius.value,
                     child: Stack(
                       fit: StackFit.expand,

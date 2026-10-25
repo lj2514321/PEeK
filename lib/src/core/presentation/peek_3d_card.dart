@@ -14,6 +14,7 @@ class Peek3DCard extends StatefulWidget {
     this.hoverScale = 1.032,
     this.borderRadius = AppRadius.value,
     this.onTap,
+    this.onHoverIntent,
   });
 
   final Widget child;
@@ -21,6 +22,10 @@ class Peek3DCard extends StatefulWidget {
   final double hoverScale;
   final double borderRadius;
   final VoidCallback? onTap;
+
+  /// Fired the first time the pointer enters the card. Call sites use it to
+  /// warm up the destination page while the user is still deciding to click.
+  final VoidCallback? onHoverIntent;
 
   @override
   State<Peek3DCard> createState() => _Peek3DCardState();
@@ -42,6 +47,7 @@ class _Peek3DCardState extends State<Peek3DCard> {
   void _onEnter(PointerEnterEvent event) {
     if (!_hovering) setState(() => _hovering = true);
     _updatePointer(event.localPosition);
+    widget.onHoverIntent?.call();
   }
 
   void _onHover(PointerHoverEvent event) {

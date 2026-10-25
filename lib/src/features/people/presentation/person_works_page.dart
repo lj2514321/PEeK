@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
+import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
 import 'package:embyplayer/src/core/domain/server.dart';
@@ -447,6 +448,8 @@ class _PersonWorkCard extends StatelessWidget {
           Expanded(
             child: Peek3DCard(
               onTap: onOpen,
+              onHoverIntent: () =>
+                  PeekDetailPrewarm.schedule(context, item: item),
               borderRadius: kAppCornerRadius,
               child: Material(
                 color: AppColors.surfaceLow,

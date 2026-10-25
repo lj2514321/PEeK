@@ -6,6 +6,7 @@ import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/app/app_routes.dart';
+import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/features/people/domain/actor_favorite.dart';
 import 'package:embyplayer/src/features/people/presentation/actor_favorites_provider.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -609,6 +610,8 @@ class _FavoriteMediaCard extends StatelessWidget {
             Expanded(
               child: Peek3DCard(
                 onTap: onOpen,
+                onHoverIntent: () =>
+                    PeekDetailPrewarm.schedule(context, item: item),
                 borderRadius: AppRadius.value,
                 child: Material(
                   key: ValueKey('favorite-card-${item.id}'),
