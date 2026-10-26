@@ -299,6 +299,11 @@ const int _gridCount = int.fromEnvironment(
   defaultValue: 24,
 );
 
+/// Overlays the app's glass panels (top bar + sidebar) on top of whatever the
+/// mode renders. The real pages always have them, and a `BackdropFilter` has to
+/// re-sample the backdrop every frame the content underneath moves.
+const bool _glass = bool.fromEnvironment('BENCH_GLASS');
+
 class _BenchAppState extends State<_BenchApp> {
   final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
   final GlobalKey _homeKey = GlobalKey();
@@ -586,15 +591,50 @@ class _BenchAppState extends State<_BenchApp> {
               ),
             ),
     );
-    if (!_showExerciser) return app;
+    if (!_showExerciser && !_glass) return app;
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Stack(
         fit: StackFit.expand,
         children: [
           app,
-          const Positioned.fill(child: PeekPipelineExerciser()),
+          if (_glass) ...const [
+            // Same shape as the app's chrome: a 66px command bar and a 224px
+            // sidebar rail, both blurring whatever is underneath.
+            Positioned(
+              left: 0,
+              top: 0,
+              right: 0,
+              height: 66,
+              child: _BenchGlass(sigma: 34),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 224,
+              child: _BenchGlass(sigma: 38),
+            ),
+          ],
+          if (_showExerciser)
+            const Positioned.fill(child: PeekPipelineExerciser()),
         ],
+      ),
+    );
+  }
+}
+
+class _BenchGlass extends StatelessWidget {
+  const _BenchGlass({required this.sigma});
+
+  final double sigma;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+        child: const ColoredBox(color: Color(0x1AFFFFFF)),
       ),
     );
   }
