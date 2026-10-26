@@ -978,27 +978,32 @@ class _DetailHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Fluid Background Backdrop Layer with Seamless Hardware-Accelerated Alpha Dissolve
+        // The hero is the poster, so the page borrows its palette instead of
+        // showing a second, unrelated still: the artwork itself, blurred past
+        // recognition. `RepaintBoundary` keeps the blur to one rasterisation
+        // per page (route transitions only transform the finished layer).
         Positioned.fill(
-          child: RepaintBoundary(child: _Backdrop(item: item)),
+          child: RepaintBoundary(child: _AmbientBloom(item: item)),
         ),
+        // Horizontal veil: solid under the copy column, open towards the poster.
         Positioned.fill(
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
                 colors: [
-                  AppColors.canvas.withValues(alpha: 0.55),
-                  AppColors.canvas.withValues(alpha: 0.55),
-                  AppColors.canvas.withValues(alpha: 0.8425),
-                  AppColors.canvas,
+                  AppColors.canvas.withValues(alpha: 0.92),
+                  AppColors.canvas.withValues(alpha: 0.72),
+                  AppColors.canvas.withValues(alpha: 0.38),
                 ],
-                stops: const [0.0, 0.45, 0.78, 1.0],
+                stops: const [0.0, 0.46, 1.0],
               ),
             ),
           ),
         ),
+        // Vertical veil: keeps the floating nav bar readable, then dissolves
+        // the hero into the canvas so the sections below start on solid ground.
         Positioned.fill(
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -1006,11 +1011,11 @@ class _DetailHero extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.42),
-                  Colors.black.withValues(alpha: 0.16),
-                  Colors.transparent,
+                  AppColors.canvas.withValues(alpha: 0.35),
+                  AppColors.canvas.withValues(alpha: 0.86),
+                  AppColors.canvas,
                 ],
-                stops: const [0.0, 0.55, 1.0],
+                stops: const [0.0, 0.78, 1.0],
               ),
             ),
           ),
@@ -1022,7 +1027,17 @@ class _DetailHero extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 1240),
             child: LayoutBuilder(
               builder: (context, constraints) {
+                // Two independent breakpoints: `stacked` turns the two-column
+                // hero into one column, `compact` only shrinks the controls.
+                // Below 900px the poster, the gap and a readable copy column
+                // stop fitting side by side.
+                final stacked = constraints.maxWidth < 900;
                 final compact = constraints.maxWidth < 768;
+                final double posterWidth = stacked
+                    ? 160
+                    : (constraints.maxWidth * 0.32)
+                          .clamp(240.0, 360.0)
+                          .toDouble();
                 final poster = _DetailPoster(item: item);
                 final copy = _DetailCopy(
                   item: item,
@@ -1047,29 +1062,42 @@ class _DetailHero extends StatelessWidget {
 
                 return Padding(
                   padding: EdgeInsets.fromLTRB(
-                    compact ? 20 : 36,
-                    compact ? 56 : 88,
-                    compact ? 20 : 36,
-                    compact ? 24 : 48,
+                    stacked ? 20 : 48,
+                    stacked ? 56 : 76,
+                    stacked ? 20 : 48,
+                    stacked ? 24 : 44,
                   ),
-                  child: compact
+                  child: stacked
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Align(
                               alignment: Alignment.centerLeft,
-                              child: SizedBox(width: 140, child: poster),
+                              child: SizedBox(
+                                width: posterWidth,
+                                child: poster,
+                              ),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 18),
                             copy,
                           ],
                         )
                       : Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            SizedBox(width: 220, child: poster),
-                            const SizedBox(width: 36),
-                            Expanded(child: copy),
+                            SizedBox(width: posterWidth, child: poster),
+                            const SizedBox(width: 40),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 560,
+                                  ),
+                                  child: copy,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                 );
@@ -1092,19 +1120,43 @@ class _DetailHero extends StatelessWidget {
   }
 }
 
-class _Backdrop extends StatelessWidget {
-  const _Backdrop({required this.item});
+/// Full-bleed colour wash behind the hero.
+///
+/// The hero used to paint the 16:9 backdrop; with a poster-led layout the page
+/// owns the poster instead, so the wash is that same artwork blown up and
+/// blurred past recognition. Two consequences worth the trade:
+/// the palette always matches the artwork, and the first frame no longer
+/// decodes a second, differently-shaped image.
+class _AmbientBloom extends StatelessWidget {
+  const _AmbientBloom({required this.item});
 
   final MediaItem item;
 
+  /// The blurred layer is scaled up before it is clipped. A 3-sigma blur fades
+  /// to nothing at the edges, and this overscan pushes that fringe well outside
+  /// the viewport; it also lands the on-screen radius near 64px.
+  static const double _overscan = 1.32;
+  static const double _sigma = 48;
+
   @override
   Widget build(BuildContext context) {
-    final uri = item.backdropUri ?? item.imageUri;
-    return PeekMediaImage(
-      uri: uri,
-      headers: item.imageHeaders,
-      kind: PeekMediaImageKind.backdrop,
-      fit: BoxFit.cover,
+    return ClipRect(
+      child: Transform.scale(
+        scale: _overscan,
+        child: ImageFiltered(
+          imageFilter: ImageFilter.blur(
+            sigmaX: _sigma,
+            sigmaY: _sigma,
+            tileMode: TileMode.decal,
+          ),
+          child: PeekMediaImage(
+            uri: item.imageUri,
+            headers: item.imageHeaders,
+            kind: PeekMediaImageKind.poster,
+            fit: BoxFit.cover,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1291,10 +1343,10 @@ class _DetailCopy extends ConsumerWidget {
         Text(
           item.name,
           style: Theme.of(context).textTheme.displayLarge?.copyWith(
-            fontSize: compact ? 30 : 42,
+            fontSize: compact ? 26 : 34,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.5,
-            height: 1.15,
+            height: 1.12,
             shadows: [
               Shadow(
                 color: Colors.black.withValues(alpha: 0.6),
