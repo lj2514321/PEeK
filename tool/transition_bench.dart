@@ -26,9 +26,11 @@ import 'package:embyplayer/src/app/peek_pipeline_exerciser.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
 import 'package:embyplayer/src/core/domain/server.dart';
+import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,6 +64,10 @@ final AuthenticatedServer _account = AuthenticatedServer(
   deviceId: 'bench-device',
   accessToken: 'bench-token',
 );
+
+/// Disables the hover pre-warm, to compare a card's hover animation with and
+/// without the background warm-up competing for the frame.
+const bool _noPrewarm = bool.fromEnvironment('BENCH_NO_PREWARM');
 
 Route<void> _routeFor(MediaItem detail) {
   Widget page() {
@@ -297,6 +303,13 @@ class _BenchAppState extends State<_BenchApp> {
     debugPrint('BENCH pushing the detail page 3x');
     await Future<void>.delayed(const Duration(milliseconds: 900));
 
+    if (_mode == 'hover') {
+      await _runHoverSweep();
+      debugPrint('BENCH done');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      exit(0);
+    }
+
     if (_warmupMode == 'push') {
       _timings.clear();
       _navigator.currentState!.push<void>(_routeFor(widget.detail));
@@ -351,6 +364,75 @@ class _BenchAppState extends State<_BenchApp> {
     exit(0);
   }
 
+  /// Sweeps the pointer across a grid of real cards, measuring each hover.
+  Future<void> _runHoverSweep() async {
+    const centers = <Offset>[
+      Offset(180, 220),
+      Offset(540, 220),
+      Offset(900, 220),
+      Offset(180, 560),
+      Offset(540, 560),
+      Offset(900, 560),
+    ];
+    for (var i = 0; i < centers.length; i++) {
+      _timings.clear();
+      final c = centers[i];
+      GestureBinding.instance.handlePointerEvent(
+        PointerHoverEvent(position: c, kind: PointerDeviceKind.mouse),
+      );
+      GestureBinding.instance.handlePointerEvent(
+        PointerHoverEvent(
+          position: c + const Offset(3, 3),
+          kind: PointerDeviceKind.mouse,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      _report(
+        'hover card $i${_noPrewarm ? ' (no prewarm)' : ''}',
+        List<FrameTiming>.of(_timings),
+      );
+    }
+  }
+
+  Widget _hoverHome() {
+    return GridView.count(
+      crossAxisCount: 3,
+      padding: const EdgeInsets.all(24),
+      mainAxisSpacing: 24,
+      crossAxisSpacing: 24,
+      childAspectRatio: 0.72,
+      children: [
+        for (var i = 0; i < 6; i++)
+          Builder(
+            builder: (ctx) => Peek3DCard(
+              onTap: () {},
+              onHoverIntent: _noPrewarm
+                  ? null
+                  : () => PeekDetailPrewarm.schedule(ctx, item: widget.detail),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.fromARGB(255, 40 + i * 30, 60, 140),
+                      Color.fromARGB(255, 90, 30 + i * 25, 80),
+                    ],
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    'card $i',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   void _report(String label, List<FrameTiming> sample) {
     if (sample.isEmpty) {
       debugPrint('BENCH ${label.padRight(22)} no frames');
@@ -395,16 +477,18 @@ class _BenchAppState extends State<_BenchApp> {
       navigatorKey: _navigator,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
-      home: ColoredBox(
-        key: _homeKey,
-        color: const Color(0xFF0B0E16),
-        child: const Center(
-          child: Text(
-            'transition bench',
-            style: TextStyle(color: Colors.white70, fontSize: 18),
-          ),
-        ),
-      ),
+      home: _mode == 'hover'
+          ? _hoverHome()
+          : ColoredBox(
+              key: _homeKey,
+              color: const Color(0xFF0B0E16),
+              child: const Center(
+                child: Text(
+                  'transition bench',
+                  style: TextStyle(color: Colors.white70, fontSize: 18),
+                ),
+              ),
+            ),
     );
     if (!_showExerciser) return app;
     return Directionality(
