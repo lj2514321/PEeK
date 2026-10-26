@@ -21,6 +21,7 @@ import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/app/app_providers.dart';
+import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/app/peek_pipeline_exerciser.dart';
 import 'package:embyplayer/src/app/theme.dart';
@@ -114,6 +115,10 @@ String get _shotSize =>
     Platform.environment['BENCH_SHOT_SIZE'] ??
     const String.fromEnvironment('BENCH_SHOT_SIZE', defaultValue: '1280x800');
 
+/// How long after the tap the PNG is taken, in milliseconds. 0 is the settled
+/// end state; anything under the 460 ms flight is mid-air.
+int get _shotDelay =>
+    int.tryParse(Platform.environment['BENCH_SHOT_DELAY'] ?? '') ?? 2000;
 Route<void> _routeFor(MediaItem detail) {
   Widget page() {
     if (_mode == 'blank') {
@@ -376,6 +381,7 @@ class _BenchAppState extends State<_BenchApp> {
   final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
   final GlobalKey _homeKey = GlobalKey();
   final GlobalKey _shotKey = GlobalKey();
+  final GlobalKey _firstCardKey = GlobalKey();
   bool _showExerciser = false;
   bool _showGrid = false;
 
@@ -479,9 +485,27 @@ class _BenchAppState extends State<_BenchApp> {
   /// Pushes the detail page once, lets it settle, and writes a PNG of the whole
   /// window. Nothing here measures anything; it exists so a layout can be
   /// looked at the way the user will see it.
+  ///
+  /// In `morph` mode it taps a real card instead, so the shot catches the
+  /// shared-element flight and BENCH_SHOT_DELAY decides where in it to look.
   Future<void> _runShot() async {
-    _navigator.currentState!.push<void>(_routeFor(widget.detail));
-    await Future<void>.delayed(const Duration(milliseconds: 2000));
+    if (_mode == 'morph') {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final box =
+          _firstCardKey.currentContext!.findRenderObject()! as RenderBox;
+      final at = box.localToGlobal(box.size.center(Offset.zero));
+      GestureBinding.instance.handlePointerEvent(
+        PointerDownEvent(position: at, kind: PointerDeviceKind.mouse),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+      GestureBinding.instance.handlePointerEvent(
+        PointerUpEvent(position: at, kind: PointerDeviceKind.mouse),
+      );
+      await Future<void>.delayed(Duration(milliseconds: _shotDelay));
+    } else {
+      _navigator.currentState!.push<void>(_routeFor(widget.detail));
+      await Future<void>.delayed(Duration(milliseconds: _shotDelay));
+    }
     final boundary =
         _shotKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
     final image = await boundary.toImage(pixelRatio: 1);
@@ -491,6 +515,46 @@ class _BenchAppState extends State<_BenchApp> {
     image.dispose();
     await Future<void>.delayed(const Duration(milliseconds: 200));
     exit(0);
+  }
+
+  /// A grid of real poster cards that open the real detail route on tap, so the
+  /// whole path — tap rect, route, shared element, hand-off — is the shipped one.
+  Widget _morphHome() {
+    final assets = _benchAssets;
+    final items = <MediaItem>[
+      // The same fixture six times: this mode is about the flight, not the grid.
+      for (var i = 0; i < 6; i++) widget.detail,
+    ];
+    return GridView.count(
+      crossAxisCount: 3,
+      padding: const EdgeInsets.all(24),
+      mainAxisSpacing: 24,
+      crossAxisSpacing: 24,
+      childAspectRatio: 0.72,
+      children: [
+        for (var i = 0; i < items.length; i++)
+          Builder(
+            key: i == 0 ? _firstCardKey : null,
+            builder: (context) => Peek3DCard(
+              onTap: () => AppRoutes.openMediaDetail(
+                context,
+                item: items[i],
+                account: _account,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: assets == null
+                    ? const ColoredBox(color: Color(0xFF224466))
+                    : PeekMediaImage(
+                        uri: assets.poster,
+                        kind: PeekMediaImageKind.poster,
+                        fit: BoxFit.cover,
+                      ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   /// Sweeps the pointer across a grid of real cards, measuring each hover.
@@ -671,6 +735,8 @@ class _BenchAppState extends State<_BenchApp> {
           ? _gridHome()
           : _mode == 'hover'
           ? _hoverHome()
+          : _mode == 'morph'
+          ? _morphHome()
           : ColoredBox(
               key: _homeKey,
               color: const Color(0xFF0B0E16),

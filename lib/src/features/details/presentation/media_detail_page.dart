@@ -6,10 +6,12 @@ import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/core/presentation/peek_anchor_transition.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
+import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
 import 'package:embyplayer/src/features/details/presentation/identify_dialog.dart';
 import 'package:embyplayer/src/features/details/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
@@ -1025,26 +1027,19 @@ class _DetailHero extends StatelessWidget {
         Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1240),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // Two independent breakpoints: `stacked` turns the two-column
-                // hero into one column, `compact` only shrinks the controls.
-                // Below 900px the poster, the gap and a readable copy column
-                // stop fitting side by side.
-                final stacked = constraints.maxWidth < 900;
-                final compact = constraints.maxWidth < 768;
-                final double posterWidth = stacked
-                    ? 160
-                    : (constraints.maxWidth * 0.32)
-                          .clamp(240.0, 360.0)
-                          .toDouble();
-                final poster = _DetailPoster(item: item);
+            child: Builder(
+              builder: (context) {
+                final layout = DetailHeroLayout.of(MediaQuery.sizeOf(context));
+                final poster = _DetailHeroPoster(
+                  item: item,
+                  width: layout.posterWidth,
+                );
                 final copy = _DetailCopy(
                   item: item,
                   collectionName: collectionName,
                   onTapCollection: onTapCollection,
                   onTapTag: onTapTag,
-                  compact: compact,
+                  compact: layout.compact,
                   playable: playable,
                   planningPlayback: planningPlayback,
                   updatingFavorite: updatingFavorite,
@@ -1061,22 +1056,14 @@ class _DetailHero extends StatelessWidget {
                 );
 
                 return Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    stacked ? 20 : 48,
-                    stacked ? 56 : 76,
-                    stacked ? 20 : 48,
-                    stacked ? 24 : 44,
-                  ),
-                  child: stacked
+                  padding: layout.padding,
+                  child: layout.stacked
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Align(
                               alignment: Alignment.centerLeft,
-                              child: SizedBox(
-                                width: posterWidth,
-                                child: poster,
-                              ),
+                              child: poster,
                             ),
                             const SizedBox(height: 18),
                             copy,
@@ -1085,7 +1072,7 @@ class _DetailHero extends StatelessWidget {
                       : Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            SizedBox(width: posterWidth, child: poster),
+                            poster,
                             const SizedBox(width: 40),
                             Expanded(
                               child: Align(
@@ -1161,42 +1148,34 @@ class _AmbientBloom extends StatelessWidget {
   }
 }
 
-class _DetailPoster extends StatelessWidget {
-  const _DetailPoster({required this.item});
+/// The poster's place in the hero.
+///
+/// While a shared-element flight is in the air the route paints this same
+/// artwork at this same rectangle, so this copy is kept for layout but not for
+/// pixels — otherwise the finished poster would already be sitting in its slot
+/// from the first frame and the transition would read as a page appearing.
+class _DetailHeroPoster extends StatelessWidget {
+  const _DetailHeroPoster({required this.item, required this.width});
 
   final MediaItem item;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 2 / 3,
-      child: PosterAmbientGlow(
-        glowColor: const Color(0x454A90E2),
-        borderRadius: AppRadius.value,
-        child: Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: AppRadius.borderRadius,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.28),
-              width: 1.2,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x73000000),
-                blurRadius: 32,
-                offset: Offset(0, 16),
-              ),
-            ],
-          ),
-          child: PeekMediaImage(
-            uri: item.imageUri,
-            headers: item.imageHeaders,
-            kind: PeekMediaImageKind.poster,
-            placeholderIconSize: 58,
-          ),
-        ),
+    final poster = SizedBox(
+      width: width,
+      child: AspectRatio(
+        aspectRatio: DetailHeroLayout.posterAspectRatio,
+        child: DetailPosterArt(item: item),
       ),
+    );
+    final flying = PeekSharedFlight.flyingOf(context);
+    if (flying == null) return poster;
+    return ValueListenableBuilder<bool>(
+      valueListenable: flying,
+      builder: (context, flying, child) =>
+          flying ? Opacity(opacity: 0, child: child) : child!,
+      child: poster,
     );
   }
 }

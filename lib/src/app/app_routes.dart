@@ -11,6 +11,7 @@ import 'package:embyplayer/src/core/domain/playback_settings.dart';
 import 'package:embyplayer/src/core/domain/server.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/dedupe/presentation/media_dedupe_page.dart';
+import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/people/presentation/person_works_page.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
@@ -47,6 +48,15 @@ abstract final class AppRoutes {
     }
     return Navigator.of(context).push<MediaItem>(
       Peek3DPageRoute(
+        // The anchor transformation starts on this rectangle (recorded on
+        // pointer down by Peek3DCard) and lands on the rectangle the detail hero
+        // reserved for its own poster, so the card's artwork becomes the page's
+        // poster instead of being thrown away.
+        originRect: PeekMotionOrigin.lastTapRect,
+        destination: (screen) => DetailHeroLayout.of(screen).posterRect,
+        sharedPoster: item.imageUri == null
+            ? null
+            : DetailPosterArt(item: item),
         builder: (_) => MediaDetailPage(initialItem: item, account: account),
       ),
     );

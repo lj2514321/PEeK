@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
+import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
@@ -59,6 +60,49 @@ void main() {
       expect(find.text('相似推荐'), findsOneWidget);
       expect(find.text('推荐电影'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+  }
+
+  // The card-to-poster flight computes its destination from the window size
+  // before the page is laid out. If the hero ever reserves a different
+  // rectangle, the poster jumps at hand-off — so measure the real one.
+  for (final size in const [
+    Size(1280, 800),
+    Size(1024, 700),
+    Size(900, 760),
+    Size(720, 900),
+  ]) {
+    testWidgets('reserves the flight destination at ${size.width.toInt()}', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mediaLibraryProvider.overrideWithValue(_FakeDetailService()),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: MediaDetailPage(account: account, initialItem: item),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final actual = tester.getRect(find.byType(DetailPosterArt));
+      final expected = DetailHeroLayout.of(size).posterRect;
+      expect(actual.left, closeTo(expected.left, 0.5));
+      expect(actual.top, closeTo(expected.top, 0.5));
+      expect(actual.width, closeTo(expected.width, 0.5));
+      expect(actual.height, closeTo(expected.height, 0.5));
+      expect(
+        actual.width / actual.height,
+        closeTo(DetailHeroLayout.posterAspectRatio, 0.001),
+      );
     });
   }
 

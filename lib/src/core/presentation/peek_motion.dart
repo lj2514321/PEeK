@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:embyplayer/src/app/theme.dart';
+import 'package:embyplayer/src/core/presentation/peek_anchor_transition.dart';
 import 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
 import 'package:embyplayer/src/core/presentation/peek_spring.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +16,29 @@ export 'package:embyplayer/src/core/presentation/peek_spring.dart';
 abstract final class PeekMotionOrigin {
   static Alignment _lastTapAlignment = Alignment.center;
 
+  /// Global rect of the widget that recorded the tap, when it was known.
+  ///
+  /// The anchor-morph transition starts as this rectangle, so it must come from
+  /// the actual card that was pressed rather than a ratio of the screen.
+  static Rect? _lastTapRect;
+
+  /// How long a recorded rect stays usable. A route opened from somewhere that
+  /// is not a recorded card (an episode row, a programmatic push) must not
+  /// inherit a stale rect and morph out of an unrelated card.
+  static const Duration _rectLifetime = Duration(milliseconds: 900);
+  static final Stopwatch _sinceTap = Stopwatch();
+
   static Alignment get lastTapAlignment => _lastTapAlignment;
+
+  /// The pressed widget's rect, or null when the last tap is not recent enough.
+  static Rect? get lastTapRect {
+    if (!_sinceTap.isRunning ||
+        _sinceTap.elapsed > _rectLifetime ||
+        _lastTapRect == null) {
+      return null;
+    }
+    return _lastTapRect;
+  }
 
   static void recordTap(BuildContext context, Offset globalPosition) {
     final size = MediaQuery.maybeSizeOf(context);
@@ -29,6 +52,14 @@ abstract final class PeekMotionOrigin {
       0.84,
     );
     _lastTapAlignment = Alignment(ax, ay);
+
+    final box = context.findRenderObject();
+    if (box is RenderBox && box.hasSize) {
+      _lastTapRect = box.localToGlobal(Offset.zero) & box.size;
+      _sinceTap
+        ..reset()
+        ..start();
+    }
   }
 }
 
@@ -463,13 +494,35 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
     required WidgetBuilder builder,
     super.settings,
     Alignment? originAlignment,
-    super.transitionDuration = const Duration(milliseconds: 420),
-    super.reverseTransitionDuration = const Duration(milliseconds: 300),
+    Rect? originRect,
+    Rect Function(Size screen)? destination,
+    Widget? sharedPoster,
+    super.transitionDuration = const Duration(milliseconds: 360),
+    super.reverseTransitionDuration = const Duration(milliseconds: 260),
   }) : super(
          pageBuilder: (context, animation, secondaryAnimation) =>
              builder(context),
          transitionsBuilder: (context, animation, secondaryAnimation, child) {
            if (AppMotion.isTest) return child;
+
+           // Anchor morph needs the pressed widget's rectangle *and* the
+           // destination the page reserved for the same artwork. Routes that
+           // cannot supply both (dedupe, person works, programmatic pushes) and
+           // cards whose shape differs from the poster keep the zoom transition
+           // below: a stretch would read as the artwork being re-cropped.
+           if (_transitionStyle == 'anchor' &&
+               originRect != null &&
+               destination != null &&
+               _isPosterShaped(originRect)) {
+             return PeekAnchorMorphTransition(
+               animation: animation,
+               secondaryAnimation: secondaryAnimation,
+               originRect: originRect,
+               destination: destination,
+               poster: sharedPoster,
+               child: child,
+             );
+           }
 
            final anchor = originAlignment ?? PeekMotionOrigin.lastTapAlignment;
 
@@ -482,6 +535,22 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
          },
        );
 }
+
+/// Whether a card is the same shape as the poster it would fly into.
+///
+/// 2:3 cards (library grids, poster rails) fly; 16:9 ones (hero carousels,
+/// episode stills) do not, because the flight would have to stretch them.
+bool _isPosterShaped(Rect rect) {
+  if (rect.height <= 0 || rect.width <= 0) return false;
+  return ((rect.width / rect.height) - (2 / 3)).abs() < 0.06;
+}
+
+/// `--dart-define=PEEK_ROUTE=zoom` restores the previous scale-based transition,
+/// so both can be profiled and compared on the same machine.
+const String _transitionStyle = String.fromEnvironment(
+  'PEEK_ROUTE',
+  defaultValue: 'anchor',
+);
 
 /// Hardware-composited container morph transition for [PeekSpatialPageRoute].
 class PeekSpatialTransition extends StatefulWidget {
@@ -509,32 +578,29 @@ class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
   late final Animation<double> _scaleAnimation;
   late final Animation<double> _secScaleAnimation;
   late final Animation<double> _secScrimAnimation;
-  late final ValueNotifier<bool> _clipActiveNotifier;
 
-  void _onPrimaryStatusChanged(AnimationStatus status) {
-    final shouldClip = status != AnimationStatus.completed;
-    if (_clipActiveNotifier.value != shouldClip) {
-      _clipActiveNotifier.value = shouldClip;
-    }
-  }
+  /// Corner radius of the incoming page while it is still smaller than the
+  /// window; it reaches zero at [clipSettle] of the transition.
+  static const double startRadius = 16;
+  static const double clipSettle = 0.45;
 
   @override
   void initState() {
     super.initState();
-    _clipActiveNotifier = ValueNotifier<bool>(
-      widget.animation.status != AnimationStatus.completed,
-    );
-    widget.animation.addStatusListener(_onPrimaryStatusChanged);
 
     _enterCurved = CurvedAnimation(
       parent: widget.animation,
-      curve: const Cubic(0.25, 1.05, 0.35, 1.0),
+      // No overshoot and a much shorter travel: 0.86 reads as "this container
+      // opened", where 0.44 read as "a thumbnail flew in" (2.3x growth).
+      curve: const Cubic(0.2, 0.9, 0.2, 1.0),
       reverseCurve: const Cubic(0.32, 0.0, 0.22, 1.0),
     );
 
     _fadeCurved = CurvedAnimation(
       parent: widget.animation,
-      curve: const Interval(0.0, 0.68, curve: Curves.easeOutCubic),
+      // Opacity finishes with the scale instead of lagging behind it: a page
+      // that is already opaque but still moving reads as unaligned.
+      curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic),
       reverseCurve: const Interval(0.15, 1.0, curve: Curves.easeInCubic),
     );
 
@@ -545,34 +611,22 @@ class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
     );
 
     _scaleAnimation = Tween<double>(
-      begin: 0.44,
+      begin: 0.86,
       end: 1.0,
     ).animate(_enterCurved);
     _secScaleAnimation = Tween<double>(
       begin: 1.0,
-      end: 0.925,
+      end: 0.96,
     ).animate(_secCurved);
+    // 0.48 nearly blacks the source page out; 0.30 reads as "one layer back".
     _secScrimAnimation = Tween<double>(
       begin: 0.0,
-      end: 0.48,
+      end: 0.30,
     ).animate(_secCurved);
-  }
-
-  @override
-  void didUpdateWidget(covariant PeekSpatialTransition oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.animation != widget.animation) {
-      oldWidget.animation.removeStatusListener(_onPrimaryStatusChanged);
-      widget.animation.addStatusListener(_onPrimaryStatusChanged);
-      _clipActiveNotifier.value =
-          widget.animation.status != AnimationStatus.completed;
-    }
   }
 
   @override
   void dispose() {
-    widget.animation.removeStatusListener(_onPrimaryStatusChanged);
-    _clipActiveNotifier.dispose();
     _enterCurved.dispose();
     _fadeCurved.dispose();
     _secCurved.dispose();
@@ -587,15 +641,19 @@ class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
       child: FadeTransition(
         opacity: _fadeCurved,
         child: RepaintBoundary(
-          child: ValueListenableBuilder<bool>(
-            valueListenable: _clipActiveNotifier,
-            builder: (context, isAnimating, child) {
+          // The corner radius animates to zero instead of swapping the clip
+          // widget out at the end: dropping `ClipRRect` for `Clip.none` forces
+          // a full-page re-raster on completion, measured at 142 ms.
+          child: AnimatedBuilder(
+            animation: widget.animation,
+            builder: (context, child) {
+              final radius =
+                  startRadius *
+                  (1 - (widget.animation.value / clipSettle).clamp(0.0, 1.0));
               return ClipRRect(
-                borderRadius: isAnimating
-                    ? const BorderRadius.all(Radius.circular(16.0))
-                    : BorderRadius.zero,
-                clipBehavior: isAnimating ? Clip.antiAlias : Clip.none,
-                child: child!,
+                borderRadius: BorderRadius.circular(radius),
+                clipBehavior: Clip.antiAlias,
+                child: child,
               );
             },
             child: widget.child,

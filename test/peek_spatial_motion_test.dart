@@ -48,13 +48,16 @@ void main() {
           builder: (_) => const Scaffold(body: Text('CinemaPage')),
         );
 
+        // The spatial route travels 0.86 -> 1.0 instead of 0.44 -> 1.0, which
+        // needs less time; the reverse is faster so back navigation feels
+        // immediate.
         expect(
           spatialRoute.transitionDuration,
-          const Duration(milliseconds: 420),
+          const Duration(milliseconds: 360),
         );
         expect(
           spatialRoute.reverseTransitionDuration,
-          const Duration(milliseconds: 300),
+          const Duration(milliseconds: 260),
         );
         expect(irisRoute.transitionDuration, const Duration(milliseconds: 380));
         expect(
