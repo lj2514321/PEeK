@@ -32,9 +32,16 @@ abstract final class PeekDetailPrewarm {
 
   static const int _maxRemembered = 96;
 
-  /// How long the pointer must rest on a card before a render is worth it, so
-  /// sweeping the pointer across a grid does not trigger anything.
-  static const Duration _dwellDuration = Duration(milliseconds: 80);
+  /// How long the pointer must rest on a card before a render is worth it.
+  ///
+  /// The card's hover animation lasts ~220 ms and the warm-up costs one heavy
+  /// raster frame (~36 ms once the startup exerciser has run, ~337 ms on a
+  /// cold process). Landing that frame inside the hover animation is visible
+  /// as a stutter, so the dwell deliberately outlasts it: pausing on a card
+  /// for 400 ms is the signal that the user is reading it rather than passing
+  /// through. An idle gate was tried first and does not work —
+  /// `transientCallbackCount` is already 0 inside a post-frame callback.
+  static const Duration _dwellDuration = Duration(milliseconds: 400);
 
   static bool get isWarming => _inFlight != null;
 
@@ -49,6 +56,8 @@ abstract final class PeekDetailPrewarm {
     if (overlay == null) return;
 
     _inFlight = item.id;
+    // Resting on another card first cancels this one: the guard below sees a
+    // different in-flight id.
     _dwell?.cancel();
     _dwell = Timer(_dwellDuration, () {
       if (_inFlight != item.id) return;
