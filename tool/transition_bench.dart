@@ -40,19 +40,42 @@ import 'package:window_manager/window_manager.dart';
 
 final List<FrameTiming> _timings = <FrameTiming>[];
 
-const String _mode = String.fromEnvironment(
+/// Every switch reads the environment first and only then the compile-time
+/// define, so one profile build can run the whole experiment matrix instead of
+/// costing a rebuild per data point.
+String _env(String key, String fallback) {
+  final value = Platform.environment[key]?.trim();
+  return (value == null || value.isEmpty) ? fallback : value;
+}
+
+bool _envFlag(String key, bool fallback) {
+  final value = Platform.environment[key]?.trim().toLowerCase();
+  if (value == null || value.isEmpty) return fallback;
+  return value == '1' || value == 'true' || value == 'yes';
+}
+
+final String _mode = _env(
   'BENCH_MODE',
-  defaultValue: 'spatial',
+  const String.fromEnvironment('BENCH_MODE', defaultValue: 'spatial'),
 );
 
-const bool _noImages = bool.fromEnvironment('BENCH_NO_IMAGE');
+final bool _noImages = _envFlag(
+  'BENCH_NO_IMAGE',
+  const bool.fromEnvironment('BENCH_NO_IMAGE'),
+);
 
 /// Prints every frame of the first push, to see *where* the spike sits.
-const bool _trace = bool.fromEnvironment('BENCH_TRACE');
+final bool _trace = _envFlag(
+  'BENCH_TRACE',
+  const bool.fromEnvironment('BENCH_TRACE'),
+);
 
 /// Pushes and pops the page once before measuring, to prove how much of the
 /// first-entry spike a prewarm can remove.
-const String _warmupMode = String.fromEnvironment('BENCH_WARMUP');
+final String _warmupMode = _env(
+  'BENCH_WARMUP',
+  const String.fromEnvironment('BENCH_WARMUP'),
+);
 
 final AuthenticatedServer _account = AuthenticatedServer(
   server: DiscoveredServer(
@@ -70,7 +93,10 @@ final AuthenticatedServer _account = AuthenticatedServer(
 
 /// Disables the hover pre-warm, to compare a card's hover animation with and
 /// without the background warm-up competing for the frame.
-const bool _noPrewarm = bool.fromEnvironment('BENCH_NO_PREWARM');
+final bool _noPrewarm = _envFlag(
+  'BENCH_NO_PREWARM',
+  const bool.fromEnvironment('BENCH_NO_PREWARM'),
+);
 
 /// Writes a PNG of the settled detail page to this path and exits. Layout work
 /// is reviewed this way so a screenshot comes from the real renderer and the
@@ -329,15 +355,22 @@ class _BenchApp extends StatefulWidget {
 _Assets? _benchAssets;
 
 /// How many cards the grid mode mounts.
-const int _gridCount = int.fromEnvironment(
-  'BENCH_GRID_COUNT',
-  defaultValue: 24,
-);
+final int _gridCount =
+    int.tryParse(
+      _env(
+        'BENCH_GRID_COUNT',
+        const String.fromEnvironment('BENCH_GRID_COUNT', defaultValue: '24'),
+      ),
+    ) ??
+    24;
 
 /// Overlays the app's glass panels (top bar + sidebar) on top of whatever the
 /// mode renders. The real pages always have them, and a `BackdropFilter` has to
 /// re-sample the backdrop every frame the content underneath moves.
-const bool _glass = bool.fromEnvironment('BENCH_GLASS');
+final bool _glass = _envFlag(
+  'BENCH_GLASS',
+  const bool.fromEnvironment('BENCH_GLASS'),
+);
 
 class _BenchAppState extends State<_BenchApp> {
   final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
