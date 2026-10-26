@@ -33,8 +33,10 @@ import 'package:embyplayer/src/features/details/presentation/media_detail_page.d
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:window_manager/window_manager.dart';
 
 final List<FrameTiming> _timings = <FrameTiming>[];
 
@@ -70,6 +72,22 @@ final AuthenticatedServer _account = AuthenticatedServer(
 /// without the background warm-up competing for the frame.
 const bool _noPrewarm = bool.fromEnvironment('BENCH_NO_PREWARM');
 
+/// Writes a PNG of the settled detail page to this path and exits. Layout work
+/// is reviewed this way so a screenshot comes from the real renderer and the
+/// real fonts, not from a browser approximation of them.
+///
+/// Read from the environment first, so one build can shoot several window
+/// sizes: `$env:BENCH_SHOT='x.png'; $env:BENCH_SHOT_SIZE='860x700'; .\PEeK.exe`
+const String _shotDefine = String.fromEnvironment('BENCH_SHOT');
+
+final String _shot = Platform.environment['BENCH_SHOT'] ?? _shotDefine;
+
+/// Window size for shot mode; matched to the shipped window so the layout that
+/// gets reviewed is the layout that ships.
+String get _shotSize =>
+    Platform.environment['BENCH_SHOT_SIZE'] ??
+    const String.fromEnvironment('BENCH_SHOT_SIZE', defaultValue: '1280x800');
+
 Route<void> _routeFor(MediaItem detail) {
   Widget page() {
     if (_mode == 'blank') {
@@ -93,6 +111,21 @@ Route<void> _routeFor(MediaItem detail) {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SchedulerBinding.instance.addTimingsCallback(_timings.addAll);
+
+  if (_shot.isNotEmpty) {
+    try {
+      await windowManager.ensureInitialized();
+      // The shipped window is frameless, so the client area is exactly the
+      // requested size; shooting a framed one would under-report it.
+      await windowManager.setAsFrameless();
+      final parts = _shotSize.split('x');
+      await windowManager.setSize(
+        Size(double.parse(parts[0]), double.parse(parts[1])),
+      );
+    } catch (error) {
+      debugPrint('BENCH window resize failed, shooting anyway: $error');
+    }
+  }
 
   final assets = await _makeAssets();
   _benchAssets = assets;
@@ -157,7 +190,9 @@ Future<Uri> _writePng(
   image.dispose();
   picture.dispose();
   file.writeAsBytesSync(data!.buffer.asUint8List());
-  return file.uri;
+  // Absolute: a relative file URI has no `file` scheme, which silently sent
+  // every fixture through the network loader instead of the local decoder.
+  return file.absolute.uri;
 }
 
 MediaItem _detailItem(_Assets assets) {
@@ -307,6 +342,7 @@ const bool _glass = bool.fromEnvironment('BENCH_GLASS');
 class _BenchAppState extends State<_BenchApp> {
   final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
   final GlobalKey _homeKey = GlobalKey();
+  final GlobalKey _shotKey = GlobalKey();
   bool _showExerciser = false;
   bool _showGrid = false;
 
@@ -319,6 +355,11 @@ class _BenchAppState extends State<_BenchApp> {
   Future<void> _run() async {
     debugPrint('BENCH pushing the detail page 3x');
     await Future<void>.delayed(const Duration(milliseconds: 900));
+
+    if (_shot.isNotEmpty) {
+      await _runShot();
+      return;
+    }
 
     if (_mode == 'grid') {
       await Future<void>.delayed(const Duration(milliseconds: 900));
@@ -399,6 +440,23 @@ class _BenchAppState extends State<_BenchApp> {
 
     debugPrint('BENCH done');
     await Future<void>.delayed(const Duration(milliseconds: 300));
+    exit(0);
+  }
+
+  /// Pushes the detail page once, lets it settle, and writes a PNG of the whole
+  /// window. Nothing here measures anything; it exists so a layout can be
+  /// looked at the way the user will see it.
+  Future<void> _runShot() async {
+    _navigator.currentState!.push<void>(_routeFor(widget.detail));
+    await Future<void>.delayed(const Duration(milliseconds: 2000));
+    final boundary =
+        _shotKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: 1);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    File(_shot).writeAsBytesSync(data!.buffer.asUint8List());
+    debugPrint('BENCH shot ${image.width}x${image.height} -> $_shot');
+    image.dispose();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
     exit(0);
   }
 
@@ -591,13 +649,16 @@ class _BenchAppState extends State<_BenchApp> {
               ),
             ),
     );
-    if (!_showExerciser && !_glass) return app;
+    final root = _shot.isEmpty
+        ? app
+        : RepaintBoundary(key: _shotKey, child: app);
+    if (!_showExerciser && !_glass) return root;
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          app,
+          root,
           if (_glass) ...const [
             // Same shape as the app's chrome: a 66px command bar and a 224px
             // sidebar rail, both blurring whatever is underneath.
