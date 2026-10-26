@@ -27,6 +27,7 @@ import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
 import 'package:embyplayer/src/core/domain/server.dart';
 import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
+import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -94,6 +95,7 @@ Future<void> main() async {
   SchedulerBinding.instance.addTimingsCallback(_timings.addAll);
 
   final assets = await _makeAssets();
+  _benchAssets = assets;
   final detail = _detailItem(assets);
   debugPrint('BENCH mode=$_mode noImages=$_noImages');
   runApp(
@@ -288,10 +290,20 @@ class _BenchApp extends StatefulWidget {
   State<_BenchApp> createState() => _BenchAppState();
 }
 
+/// Assets for the grid mode, created once in `main`.
+_Assets? _benchAssets;
+
+/// How many cards the grid mode mounts.
+const int _gridCount = int.fromEnvironment(
+  'BENCH_GRID_COUNT',
+  defaultValue: 24,
+);
+
 class _BenchAppState extends State<_BenchApp> {
   final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
   final GlobalKey _homeKey = GlobalKey();
   bool _showExerciser = false;
+  bool _showGrid = false;
 
   @override
   void initState() {
@@ -302,6 +314,27 @@ class _BenchAppState extends State<_BenchApp> {
   Future<void> _run() async {
     debugPrint('BENCH pushing the detail page 3x');
     await Future<void>.delayed(const Duration(milliseconds: 900));
+
+    if (_mode == 'grid') {
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      if (_warmupMode.contains('exerciser')) {
+        setState(() => _showExerciser = true);
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+        setState(() => _showExerciser = false);
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+      _timings.clear();
+      setState(() => _showGrid = true);
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      _report(
+        'grid entrance ($_gridCount cards${_noImages ? ', no images' : ''}'
+        '${_warmupMode.isEmpty ? '' : ', $_warmupMode'})',
+        List<FrameTiming>.of(_timings),
+      );
+      debugPrint('BENCH done');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      exit(0);
+    }
 
     if (_mode == 'hover') {
       await _runHoverSweep();
@@ -394,6 +427,67 @@ class _BenchAppState extends State<_BenchApp> {
     }
   }
 
+  /// A grid of real cards that mounts on demand, reproducing the staggered
+  /// entrance wave the user sees when a library finishes loading.
+  Widget _gridHome() {
+    final assets = _benchAssets;
+    if (!_showGrid || assets == null) {
+      return const ColoredBox(color: Color(0xFF0B0E16));
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(24),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+        childAspectRatio: 0.68,
+      ),
+      itemCount: _gridCount,
+      itemBuilder: (context, i) => PeekStaggeredGridItem(
+        index: i,
+        columns: 4,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (_noImages)
+                ColoredBox(
+                  color: Color.fromARGB(255, 40 + (i * 17) % 150, 60, 120),
+                )
+              else
+                PeekMediaImage(
+                  uri: assets.poster,
+                  kind: PeekMediaImageKind.poster,
+                  fit: BoxFit.cover,
+                  width: 220,
+                  height: 320,
+                ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: ColoredBox(
+                  color: const Color(0xCC000000),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text(
+                      'Card $i',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _hoverHome() {
     return GridView.count(
       crossAxisCount: 3,
@@ -477,7 +571,9 @@ class _BenchAppState extends State<_BenchApp> {
       navigatorKey: _navigator,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
-      home: _mode == 'hover'
+      home: _mode == 'grid'
+          ? _gridHome()
+          : _mode == 'hover'
           ? _hoverHome()
           : ColoredBox(
               key: _homeKey,
