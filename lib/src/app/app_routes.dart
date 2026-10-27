@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
 import 'package:embyplayer/src/core/domain/playback_plan.dart';
@@ -30,6 +31,7 @@ abstract final class AppRoutes {
     required MediaItem item,
     AuthenticatedServer? account,
   }) {
+    PeekDetailPrewarm.cancelAll();
     if (item.kind == MediaItemKind.person && account != null) {
       openPersonWorks(
         context,
@@ -55,7 +57,7 @@ abstract final class AppRoutes {
         originRect: PeekMotionOrigin.lastTapRect,
         originCardToken: PeekMotionOrigin.lastTapCardToken,
         destination: (screen) => DetailHeroLayout.of(screen).posterRect,
-        sharedPoster: item.imageUri == null
+        sharedPoster: item.imageUri == null && item.backdropUri == null
             ? null
             : DetailPosterArt(item: item),
         transitionDuration: const Duration(milliseconds: 440),

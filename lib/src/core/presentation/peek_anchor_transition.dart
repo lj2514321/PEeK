@@ -1,5 +1,6 @@
-import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/peek_spring.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -123,7 +124,7 @@ class PeekAnchorMorphTransition extends StatefulWidget {
   static const double containerExpandEnd = 0.72;
 
   /// Starting corner radius of the expanding container clip.
-  static const double containerStartRadius = 20.0;
+  static const double containerStartRadius = AppRadius.value;
 
   /// The page fades in behind the flight. It starts almost immediately (the
   /// artwork leaves a hole in the grid that has to be covered) and is complete
@@ -233,13 +234,12 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                         1.0 - raw,
                       )
                 : PeekAnchorMorphTransition.morphCurve.transform(raw);
+            final startRadius = widget.originRect.width < 100
+                ? 12.0
+                : AppRadius.value;
             final radius =
-                PeekAnchorMorphTransition.containerStartRadius *
-                (1.0 -
-                    (raw / PeekAnchorMorphTransition.containerExpandEnd).clamp(
-                      0.0,
-                      1.0,
-                    ));
+                ui.lerpDouble(startRadius, AppRadius.value, e) ??
+                AppRadius.value;
             final fullRect = Offset.zero & screen;
             final currentRect =
                 Rect.lerp(widget.originRect, fullRect, e) ?? fullRect;
@@ -266,7 +266,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                         color: Colors.black.withValues(alpha: 0.44 * e),
                       ),
                     ),
-                  if (e < 0.999)
+                  if (e < 0.85)
                     Positioned.fromRect(
                       rect: currentRect,
                       child: IgnorePointer(
@@ -276,11 +276,11 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(
-                                  alpha: 0.68 * (1.0 - e),
+                                  alpha: 0.55 * (1.0 - e),
                                 ),
-                                blurRadius: 38,
-                                spreadRadius: 2,
-                                offset: const Offset(0, 14),
+                                blurRadius: 20,
+                                spreadRadius: 1,
+                                offset: const Offset(0, 10),
                               ),
                             ],
                           ),
@@ -288,7 +288,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                       ),
                     ),
                   page,
-                  if (e < 0.999)
+                  if (e < 0.85)
                     Positioned.fromRect(
                       rect: currentRect,
                       child: IgnorePointer(
@@ -297,7 +297,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                             borderRadius: BorderRadius.circular(radius),
                             border: Border.all(
                               color: Colors.white.withValues(
-                                alpha: 0.40 * (1.0 - e),
+                                alpha: 0.35 * (1.0 - e),
                               ),
                               width: 1.2,
                             ),
@@ -371,103 +371,29 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   }
 
   Widget _buildFlyingPoster({required Rect destination, required double e}) {
-    final origin = widget.originRect;
-    final originRatio = origin.height > 0 ? origin.width / origin.height : 1.0;
-    final destRatio = destination.height > 0
-        ? destination.width / destination.height
-        : 2 / 3;
-    final needsAspectCrop = (originRatio - destRatio).abs() > 0.18;
-
-    Widget posterChild = widget.poster!;
-    Matrix4 matrix;
-    if (needsAspectCrop && destination.width > 0 && destination.height > 0) {
-      final box = Rect.lerp(origin, destination, e) ?? destination;
-      final scale = math.max(
-        box.width / destination.width,
-        box.height / destination.height,
-      );
-      final dx = box.center.dx - destination.center.dx;
-      final dy = box.center.dy - destination.center.dy;
-      matrix = Matrix4.identity()
-        ..translateByDouble(dx, dy, 0, 1)
-        ..scaleByDouble(scale, scale, 1, 1);
-      final cropW = (box.width / scale).clamp(0.0, destination.width);
-      final cropH = (box.height / scale).clamp(0.0, destination.height);
-      final cropRadius = (16.0 / scale).clamp(4.0, 24.0);
-      posterChild = ClipRRect(
-        clipper: _PosterAspectClipper(
-          width: cropW,
-          height: cropH,
-          radius: cropRadius,
-        ),
-        child: posterChild,
-      );
-    } else {
-      matrix = _flight(origin: origin, destination: destination, t: e);
-    }
+    final box = Rect.lerp(widget.originRect, destination, e) ?? destination;
 
     return Positioned.fromRect(
-      rect: destination,
+      key: const Key('flying-poster-box'),
+      rect: box,
       child: IgnorePointer(
-        child: RepaintBoundary(
-          child: Transform(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.value),
+          child: FittedBox(
+            fit: BoxFit.cover,
             alignment: Alignment.center,
-            transform: matrix,
-            child: posterChild,
+            child: RepaintBoundary(
+              child: SizedBox(
+                width: destination.width,
+                height: destination.height,
+                child: widget.poster!,
+              ),
+            ),
           ),
         ),
       ),
     );
   }
-
-  /// Transform that maps the destination-sized artwork back onto the card.
-  ///
-  /// The artwork is laid out once at [destination] and only moved afterwards:
-  /// the scale is uniform whenever the two rectangles share an aspect ratio.
-  Matrix4 _flight({
-    required Rect origin,
-    required Rect destination,
-    required double t,
-  }) {
-    final scaleX = _lerp(origin.width / destination.width, 1.0, t);
-    final scaleY = _lerp(origin.height / destination.height, 1.0, t);
-    final dx = _lerp(origin.center.dx - destination.center.dx, 0.0, t);
-    final dy = _lerp(origin.center.dy - destination.center.dy, 0.0, t);
-    return Matrix4.identity()
-      ..translateByDouble(dx, dy, 0, 1)
-      ..scaleByDouble(scaleX, scaleY, 1, 1);
-  }
-
-  static double _lerp(double from, double to, double t) =>
-      from + (to - from) * t;
-}
-
-class _PosterAspectClipper extends CustomClipper<RRect> {
-  const _PosterAspectClipper({
-    required this.width,
-    required this.height,
-    required this.radius,
-  });
-
-  final double width;
-  final double height;
-  final double radius;
-
-  @override
-  RRect getClip(Size size) {
-    final rect = Rect.fromCenter(
-      center: Offset(size.width / 2, size.height / 2),
-      width: width,
-      height: height,
-    );
-    return RRect.fromRectAndRadius(rect, Radius.circular(radius));
-  }
-
-  @override
-  bool shouldReclip(_PosterAspectClipper oldClipper) =>
-      oldClipper.width != width ||
-      oldClipper.height != height ||
-      oldClipper.radius != radius;
 }
 
 class _AnchorContainerClipper extends CustomClipper<RRect> {
@@ -485,7 +411,7 @@ class _AnchorContainerClipper extends CustomClipper<RRect> {
   RRect getClip(Size size) {
     final full = Offset.zero & size;
     if (progress >= 0.999) {
-      return RRect.fromRectAndRadius(full, Radius.zero);
+      return RRect.fromRectAndRadius(full, Radius.circular(radius));
     }
     final rect = Rect.lerp(origin, full, progress) ?? full;
     return RRect.fromRectAndRadius(rect, Radius.circular(radius));

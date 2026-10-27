@@ -153,14 +153,19 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     }
   }
 
-  Future<void> _refreshContinueWatching({bool force = false}) async {
+  Future<void> _refreshContinueWatching({
+    bool force = false,
+    bool silent = false,
+  }) async {
     final currentFeed = _feed;
     if (currentFeed == null) {
       await _load();
       return;
     }
     if (_refreshing && !force) return;
-    setState(() => _refreshing = true);
+    if (!silent) {
+      setState(() => _refreshing = true);
+    }
     try {
       final feed = await ref
           .read(homeFeedProvider)
@@ -171,7 +176,9 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
         await widget.onSessionExpired();
       }
     } finally {
-      if (mounted) setState(() => _refreshing = false);
+      if (mounted && !silent) {
+        setState(() => _refreshing = false);
+      }
     }
   }
 
@@ -232,28 +239,21 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   }
 
   Future<void> _openDetails(MediaItem item) async {
+    _ambientHoverDebounce?.cancel();
     _precacheItemForDetail(item);
 
-    final targetOffset = _scrollController.hasClients
-        ? _scrollController.offset
-        : null;
     await AppRoutes.openMediaDetail(
       context,
       account: widget.account,
       item: item,
     );
     if (!mounted) return;
-    await _refreshContinueWatching();
-    if (targetOffset != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_scrollController.hasClients) return;
-        final maxScroll = _scrollController.position.maxScrollExtent;
-        final clamped = targetOffset.clamp(0.0, maxScroll);
-        if ((_scrollController.offset - clamped).abs() > 0.5) {
-          _scrollController.jumpTo(clamped);
-        }
-      });
-    }
+
+    // Allow reverse pop transition to finish cleanly before updating continue watching.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+
+    await _refreshContinueWatching(silent: true);
   }
 
   Future<void> _continuePlayback(MediaItem item) async {
@@ -282,7 +282,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text('已在外部播放器中启动《${item.name}》')));
-          await _refreshContinueWatching();
+          await _refreshContinueWatching(silent: true);
           return;
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -303,7 +303,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
         enableMiniPlayer: prepared.settings.enableMiniPlayer,
         longPressSpeed: prepared.settings.longPressSpeed,
       );
-      if (mounted) await _refreshContinueWatching();
+      if (mounted) await _refreshContinueWatching(silent: true);
     } on PlaybackServiceException catch (error) {
       if (mounted) _showPlaybackError(error.message);
     } on Object catch (error) {
@@ -347,10 +347,10 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
           prev?.mode == PlaybackPresentationMode.window ||
           prev?.mode == PlaybackPresentationMode.full;
       if (wasActive && next.mode == PlaybackPresentationMode.hidden) {
-        unawaited(_refreshContinueWatching());
+        unawaited(_refreshContinueWatching(silent: true));
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
-            unawaited(_refreshContinueWatching(force: true));
+            unawaited(_refreshContinueWatching(force: true, silent: true));
           }
         });
       }
@@ -592,7 +592,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                     _precacheItemForDetail(item);
                     _ambientHoverDebounce?.cancel();
                     _ambientHoverDebounce = Timer(
-                      const Duration(milliseconds: 85),
+                      const Duration(milliseconds: 260),
                       () {
                         if (mounted && _hoveredAmbientItem?.id == item.id) {
                           _syncGlobalAmbient(item, 0);
@@ -1109,128 +1109,143 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
             }
             _scheduleNext();
           },
-          child: SizedBox(
-            key: const ValueKey('home-hero'),
-            height: totalHeight,
-            child: _VisionLiquidGlassPanel(
-              radius: AppRadius.value,
-              hasBackdropBlur: false,
-              blur: 32,
-              topAlpha: 0.16,
-              bottomAlpha: 0.05,
-              borderAlpha: 0.28,
-              padding: EdgeInsets.zero,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Full-Bleed Panoramic Billboard PageView
-                  PageView.builder(
-                    key: const ValueKey('daily-recommendation-carousel'),
-                    controller: _controller,
-                    allowImplicitScrolling: false,
-                    itemCount: widget.items.length > 1
-                        ? _virtualItemCount
-                        : widget.items.length,
-                    onPageChanged: _onVirtualPageChanged,
-                    itemBuilder: (context, virtualIndex) {
-                      final realIndex = widget.items.isEmpty
-                          ? 0
-                          : virtualIndex % widget.items.length;
-                      final item = widget.items[realIndex];
-                      return AnimatedBuilder(
-                        animation: _controller,
-                        builder: (context, child) {
-                          double delta = 0.0;
-                          if (_controller.hasClients &&
-                              _controller.position.haveDimensions) {
-                            final page =
-                                _controller.page ??
-                                _currentVirtualPage.toDouble();
-                            delta = (page - virtualIndex).clamp(-1.0, 1.0);
-                          }
-                          final deltaAbs = delta.abs();
-                          if (deltaAbs < 0.0005) {
-                            return child!;
-                          }
-                          final scale = 1.0 - (deltaAbs * 0.032);
-                          final opacity = (1.0 - (deltaAbs * 0.40)).clamp(
-                            0.0,
-                            1.0,
-                          );
-                          return Transform.scale(
-                            scale: scale,
-                            child: Opacity(opacity: opacity, child: child),
+          child: Builder(
+            builder: (carouselContext) => Listener(
+              onPointerDown: (event) {
+                PeekMotionOrigin.recordTap(
+                  carouselContext,
+                  event.position,
+                  pointer: event.pointer,
+                );
+              },
+              child: SizedBox(
+                key: const ValueKey('home-hero'),
+                height: totalHeight,
+                child: _VisionLiquidGlassPanel(
+                  radius: AppRadius.value,
+                  hasBackdropBlur: false,
+                  blur: 32,
+                  topAlpha: 0.16,
+                  bottomAlpha: 0.05,
+                  borderAlpha: 0.28,
+                  padding: EdgeInsets.zero,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Full-Bleed Panoramic Billboard PageView
+                      PageView.builder(
+                        key: const ValueKey('daily-recommendation-carousel'),
+                        controller: _controller,
+                        allowImplicitScrolling: false,
+                        itemCount: widget.items.length > 1
+                            ? _virtualItemCount
+                            : widget.items.length,
+                        onPageChanged: _onVirtualPageChanged,
+                        itemBuilder: (context, virtualIndex) {
+                          final realIndex = widget.items.isEmpty
+                              ? 0
+                              : virtualIndex % widget.items.length;
+                          final item = widget.items[realIndex];
+                          return AnimatedBuilder(
+                            animation: _controller,
+                            builder: (context, child) {
+                              double delta = 0.0;
+                              if (_controller.hasClients &&
+                                  _controller.position.haveDimensions) {
+                                final page =
+                                    _controller.page ??
+                                    _currentVirtualPage.toDouble();
+                                delta = (page - virtualIndex).clamp(-1.0, 1.0);
+                              }
+                              final deltaAbs = delta.abs();
+                              if (deltaAbs < 0.0005) {
+                                return child!;
+                              }
+                              final scale = 1.0 - (deltaAbs * 0.032);
+                              final opacity = (1.0 - (deltaAbs * 0.40)).clamp(
+                                0.0,
+                                1.0,
+                              );
+                              return Transform.scale(
+                                scale: scale,
+                                child: Opacity(opacity: opacity, child: child),
+                              );
+                            },
+                            child: RepaintBoundary(
+                              child: _HomeHero(
+                                key: ValueKey('hero-slide-${item.id}'),
+                                item: item,
+                                dailyRecommendation:
+                                    widget.dailyRecommendations,
+                                planning: widget.planningItemId == item.id,
+                                hovering: _hovering,
+                                hoveringListenable: _hoveringNotifier,
+                                onPlay: () => widget.onPlay(item),
+                                onDetails: () => widget.onDetails(item),
+                              ),
+                            ),
                           );
                         },
-                        child: RepaintBoundary(
-                          child: _HomeHero(
-                            key: ValueKey('hero-slide-${item.id}'),
-                            item: item,
-                            dailyRecommendation: widget.dailyRecommendations,
-                            planning: widget.planningItemId == item.id,
-                            hovering: _hovering,
-                            hoveringListenable: _hoveringNotifier,
-                            onPlay: () => widget.onPlay(item),
-                            onDetails: () => widget.onDetails(item),
+                      ),
+
+                      // Edge Navigation Controls - seamlessly integrated into canvas edges (边缘隐形)
+                      if (widget.items.length > 1) ...[
+                        Positioned(
+                          left: compact ? 10 : 18,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: ValueListenableBuilder<bool>(
+                              valueListenable: _hoveringNotifier,
+                              builder: (context, isHovering, _) =>
+                                  _EdgeNavButton(
+                                    key: const ValueKey('hero-previous'),
+                                    icon: Icons.chevron_left_rounded,
+                                    tooltip: '上一条',
+                                    visible: isHovering,
+                                    onTap: () => unawaited(_move(-1)),
+                                  ),
+                            ),
                           ),
                         ),
-                      );
-                    },
+                        Positioned(
+                          right: compact ? 10 : 18,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: ValueListenableBuilder<bool>(
+                              valueListenable: _hoveringNotifier,
+                              builder: (context, isHovering, _) =>
+                                  _EdgeNavButton(
+                                    key: const ValueKey('hero-next'),
+                                    icon: Icons.chevron_right_rounded,
+                                    tooltip: '下一条',
+                                    visible: isHovering,
+                                    onTap: () => unawaited(_move(1)),
+                                  ),
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      // Bottom-Right Integrated Index Dock
+                      if (widget.items.length > 1)
+                        Positioned(
+                          bottom: compact ? 16 : 22,
+                          right: compact ? 18 : 28,
+                          child: ValueListenableBuilder<int>(
+                            valueListenable: _currentIndexNotifier,
+                            builder: (context, currentIndex, _) =>
+                                _HeroIndexDock(
+                                  currentIndex: currentIndex,
+                                  itemCount: widget.items.length,
+                                  onTapIndex: (i) => unawaited(_jumpToIndex(i)),
+                                ),
+                          ),
+                        ),
+                    ],
                   ),
-
-                  // Edge Navigation Controls - seamlessly integrated into canvas edges (边缘隐形)
-                  if (widget.items.length > 1) ...[
-                    Positioned(
-                      left: compact ? 10 : 18,
-                      top: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: _hoveringNotifier,
-                          builder: (context, isHovering, _) => _EdgeNavButton(
-                            key: const ValueKey('hero-previous'),
-                            icon: Icons.chevron_left_rounded,
-                            tooltip: '上一条',
-                            visible: isHovering,
-                            onTap: () => unawaited(_move(-1)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: compact ? 10 : 18,
-                      top: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: _hoveringNotifier,
-                          builder: (context, isHovering, _) => _EdgeNavButton(
-                            key: const ValueKey('hero-next'),
-                            icon: Icons.chevron_right_rounded,
-                            tooltip: '下一条',
-                            visible: isHovering,
-                            onTap: () => unawaited(_move(1)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-
-                  // Bottom-Right Integrated Index Dock
-                  if (widget.items.length > 1)
-                    Positioned(
-                      bottom: compact ? 16 : 22,
-                      right: compact ? 18 : 28,
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: _currentIndexNotifier,
-                        builder: (context, currentIndex, _) => _HeroIndexDock(
-                          currentIndex: currentIndex,
-                          itemCount: widget.items.length,
-                          onTapIndex: (i) => unawaited(_jumpToIndex(i)),
-                        ),
-                      ),
-                    ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1731,23 +1746,29 @@ class _HomeHero extends ConsumerWidget {
                   const SizedBox(height: 8),
 
                   // Large Cinematic Title
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: compact ? 24 : (wideScreen ? 36 : 30),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                      height: 1.18,
-                      shadows: const [
-                        Shadow(
-                          color: Colors.black87,
-                          blurRadius: 18,
-                          offset: Offset(0, 3),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: planning ? null : onDetails,
+                      child: Text(
+                        item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: compact ? 24 : (wideScreen ? 36 : 30),
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          height: 1.18,
+                          shadows: const [
+                            Shadow(
+                              color: Colors.black87,
+                              blurRadius: 18,
+                              offset: Offset(0, 3),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1825,40 +1846,27 @@ class _HomeHero extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      Builder(
-                        builder: (btnContext) => Listener(
-                          onPointerDown: (event) => PeekMotionOrigin.recordTap(
-                            btnContext,
-                            event.position,
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.white.withValues(alpha: 0.14),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.32),
+                            width: 1.1,
                           ),
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.14,
-                              ),
-                              side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.32),
-                                width: 1.1,
-                              ),
-                              shape: AppRadius.shape,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: compact ? 18 : 22,
-                                vertical: compact ? 12 : 14,
-                              ),
-                            ),
-                            onPressed: planning ? null : onDetails,
-                            icon: const Icon(
-                              Icons.info_outline_rounded,
-                              size: 19,
-                            ),
-                            label: Text(
-                              '查看详情',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: compact ? 13 : 14,
-                              ),
-                            ),
+                          shape: AppRadius.shape,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: compact ? 18 : 22,
+                            vertical: compact ? 12 : 14,
+                          ),
+                        ),
+                        onPressed: planning ? null : onDetails,
+                        icon: const Icon(Icons.info_outline_rounded, size: 19),
+                        label: Text(
+                          '查看详情',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: compact ? 13 : 14,
                           ),
                         ),
                       ),

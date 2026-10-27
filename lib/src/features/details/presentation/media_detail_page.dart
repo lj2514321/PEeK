@@ -1186,8 +1186,13 @@ class _DetailHeroPoster extends StatelessWidget {
     if (flying == null) return poster;
     return ValueListenableBuilder<bool>(
       valueListenable: flying,
-      builder: (context, flying, child) =>
-          flying ? Opacity(opacity: 0, child: child) : child!,
+      builder: (context, flying, child) => Visibility(
+        visible: !flying,
+        maintainSize: true,
+        maintainAnimation: false,
+        maintainState: true,
+        child: child!,
+      ),
       child: poster,
     );
   }
@@ -1223,7 +1228,13 @@ class _FlightChoreographedEntrance extends StatelessWidget {
         final progress = ((raw - start) / (end - start)).clamp(0.0, 1.0);
         final t = const Cubic(0.22, 1.0, 0.36, 1.0).transform(progress);
         if (t <= 0.001) {
-          return Opacity(opacity: 0.0, child: content);
+          return Visibility(
+            visible: false,
+            maintainSize: true,
+            maintainAnimation: false,
+            maintainState: true,
+            child: content!,
+          );
         }
         return Transform.translate(
           offset: Offset(0.0, slideY * (1.0 - t)),

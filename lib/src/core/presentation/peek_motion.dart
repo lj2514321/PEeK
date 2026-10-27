@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/peek_anchor_transition.dart';
 import 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
@@ -26,6 +27,9 @@ abstract final class PeekMotionOrigin {
   /// Identity token of the card that recorded the tap, so the source card can
   /// hide its stationary copy while the shared poster is in flight.
   static Object? _lastTapCardToken;
+
+  /// Pointer event id that claimed the last card tap.
+  static int? _activeCardPointer;
 
   /// How long a recorded rect stays usable. Kept long enough so opening a
   /// right-click context menu on a card and choosing "查看详情" still morphs
@@ -55,7 +59,11 @@ abstract final class PeekMotionOrigin {
     return _lastTapCardToken;
   }
 
-  static void recordTapAlignment(BuildContext context, Offset globalPosition) {
+  static void recordTapAlignment(
+    BuildContext context,
+    Offset globalPosition, {
+    int? pointer,
+  }) {
     final size = MediaQuery.maybeSizeOf(context);
     if (size == null || size.width <= 0 || size.height <= 0) return;
     final ax = ((globalPosition.dx / size.width) * 2.0 - 1.0).clamp(
@@ -67,23 +75,38 @@ abstract final class PeekMotionOrigin {
       0.84,
     );
     _lastTapAlignment = Alignment(ax, ay);
+
+    // If a card was tapped during this gesture bubble, keep the card's rect.
+    // Otherwise, this tap is on a non-card surface (e.g. hero carousel, button, background),
+    // so any previously recorded card rect is now stale and must be cleared.
+    final recentCardTap =
+        _sinceTap.isRunning && _sinceTap.elapsedMilliseconds < 32;
+    final isSamePointer = pointer != null && pointer == _activeCardPointer;
+    if (!recentCardTap && !isSamePointer) {
+      _lastTapRect = null;
+      _lastTapCardToken = null;
+      _sinceTap.stop();
+      _sinceTap.reset();
+    }
   }
 
   static void recordTap(
     BuildContext context,
     Offset globalPosition, {
     Object? cardToken,
+    int? pointer,
   }) {
-    recordTapAlignment(context, globalPosition);
+    PeekDetailPrewarm.cancelAll();
+    _activeCardPointer = pointer;
+    recordTapAlignment(context, globalPosition, pointer: pointer);
     final size = MediaQuery.maybeSizeOf(context);
 
     final box = context.findRenderObject();
     if (box is RenderBox && box.hasSize) {
-      // Never treat a full-window/page shell RenderBox as a card origin rect.
-      if ((size != null &&
-              box.size.width >= size.width * 0.60 &&
-              box.size.height >= size.height * 0.60) ||
-          (box.size.width >= 560 && box.size.height >= 420)) {
+      // Never treat a full-window/page shell RenderBox as an origin rect.
+      if (size != null &&
+          box.size.width >= size.width - 4 &&
+          box.size.height >= size.height - 4) {
         return;
       }
       final candidate = box.localToGlobal(Offset.zero) & box.size;
@@ -540,29 +563,27 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
     Object? originCardToken,
     Rect Function(Size screen)? destination,
     Widget? sharedPoster,
+    bool forceTransitionInTest = false,
     super.transitionDuration = const Duration(milliseconds: 360),
     super.reverseTransitionDuration = const Duration(milliseconds: 260),
   }) : super(
          pageBuilder: (context, animation, secondaryAnimation) =>
              builder(context),
          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-           if (AppMotion.isTest) return child;
+           if (AppMotion.isTest && !forceTransitionInTest) return child;
 
            final anchor = originAlignment ?? PeekMotionOrigin.lastTapAlignment;
            final resolvedOriginRect =
                originRect ?? PeekMotionOrigin.lastTapRect;
 
-           if (_transitionStyle == 'anchor' &&
-               (resolvedOriginRect != null || destination != null)) {
-             final screen =
-                 MediaQuery.maybeSizeOf(context) ?? const Size(1280, 800);
-             final effectiveOrigin =
-                 resolvedOriginRect ??
-                 _fallbackRectFromAlignment(anchor, screen);
+           final canAnchorMorph =
+               _transitionStyle == 'anchor' && resolvedOriginRect != null;
+
+           if (canAnchorMorph) {
              return PeekAnchorMorphTransition(
                animation: animation,
                secondaryAnimation: secondaryAnimation,
-               originRect: effectiveOrigin,
+               originRect: resolvedOriginRect,
                originCardToken:
                    originCardToken ?? PeekMotionOrigin.lastTapCardToken,
                destination: destination ?? (s) => Offset.zero & s,
@@ -579,18 +600,6 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
            );
          },
        );
-}
-
-Rect _fallbackRectFromAlignment(Alignment alignment, Size screen) {
-  const width = 168.0;
-  const height = 252.0;
-  final center = alignment.withinRect(Offset.zero & screen);
-  final left = (center.dx - width / 2).clamp(16.0, screen.width - width - 16.0);
-  final top = (center.dy - height / 2).clamp(
-    16.0,
-    screen.height - height - 16.0,
-  );
-  return Rect.fromLTWH(left, top, width, height);
 }
 
 /// `--dart-define=PEEK_ROUTE=zoom` restores the previous scale-based transition,
@@ -695,13 +704,26 @@ class _PeekSpatialTransitionState extends State<PeekSpatialTransition> {
           child: AnimatedBuilder(
             animation: widget.animation,
             builder: (context, child) {
-              final radius =
-                  startRadius *
-                  (1 - (widget.animation.value / clipSettle).clamp(0.0, 1.0));
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(radius),
-                clipBehavior: Clip.antiAlias,
-                child: child,
+              final raw = widget.animation.value;
+              if (raw >= 0.999) return child!;
+              final progress = (raw / clipSettle).clamp(0.0, 1.0);
+              final radius = startRadius * (1.0 - progress);
+              return Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(radius),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.52 * (1.0 - raw)),
+                      blurRadius: 32,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(radius),
+                  clipBehavior: Clip.antiAlias,
+                  child: child,
+                ),
               );
             },
             child: widget.child,

@@ -230,9 +230,6 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         ),
       );
     }
-    final currentScrollOffset = _scrollController.hasClients
-        ? _scrollController.offset
-        : null;
     final updatedItem = await AppRoutes.openMediaDetail(
       context,
       account: item.isLocal ? null : widget.account,
@@ -250,16 +247,6 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       }
     } else {
       unawaited(_refreshSingleItem(item));
-    }
-    if (currentScrollOffset != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_scrollController.hasClients) return;
-        final maxScroll = _scrollController.position.maxScrollExtent;
-        final clamped = currentScrollOffset.clamp(0.0, maxScroll);
-        if ((_scrollController.offset - clamped).abs() > 0.5) {
-          _scrollController.jumpTo(clamped);
-        }
-      });
     }
   }
 

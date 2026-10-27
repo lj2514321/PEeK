@@ -59,6 +59,8 @@ class PeekMediaImage extends StatelessWidget {
     this.cacheManager,
     this.memCacheWidth,
     this.memCacheHeight,
+    this.fadeInDuration,
+    this.fadeOutDuration,
   });
 
   final Uri? uri;
@@ -75,6 +77,8 @@ class PeekMediaImage extends StatelessWidget {
   final BaseCacheManager? cacheManager;
   final int? memCacheWidth;
   final int? memCacheHeight;
+  final Duration? fadeInDuration;
+  final Duration? fadeOutDuration;
 
   static ImageProvider provider(
     Uri uri, {
@@ -173,10 +177,14 @@ class PeekMediaImage extends StatelessWidget {
       // makes a plain custom CacheManager fail every image in debug builds.
       useOldImageOnUrlChange: true,
       placeholderFadeInDuration: Duration.zero,
-      fadeOutDuration: disableAnimations
-          ? Duration.zero
-          : const Duration(milliseconds: 90),
-      fadeInDuration: disableAnimations ? Duration.zero : AppMotion.fast,
+      fadeOutDuration:
+          fadeOutDuration ??
+          (disableAnimations
+              ? Duration.zero
+              : const Duration(milliseconds: 90)),
+      fadeInDuration:
+          fadeInDuration ??
+          (disableAnimations ? Duration.zero : AppMotion.fast),
       placeholder: (_, _) => _placeholder(loading: true, failed: false),
       errorWidget: (_, _, _) => _placeholder(loading: false, failed: true),
     );

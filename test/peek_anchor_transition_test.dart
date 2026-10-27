@@ -1,3 +1,4 @@
+import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -142,7 +143,7 @@ void main() {
     await tester.pump();
     final lateClip = _pageClipRect(tester)!;
     expect(lateClip.width, greaterThan(midClip.width));
-    expect(lateClip.tlRadiusX, 0.0);
+    expect(lateClip.tlRadiusX, closeTo(AppRadius.value, 0.1));
 
     controller.value = 1.0;
     await tester.pump();
@@ -231,12 +232,70 @@ void main() {
       expect(PeekMotionOrigin.lastTapCardToken, same(cardToken));
     },
   );
+
+  testWidgets(
+    'poster flight works seamlessly for 16:9 cards with aspect crop and settles in slot',
+    (tester) async {
+      // 16:9 card: 320x180
+      const bannerRect = Rect.fromLTWH(140, 220, 320, 180);
+      final controller = await _pump(
+        tester,
+        withPoster: true,
+        originRect: bannerRect,
+      );
+
+      // Frame 0: flyer covers the card
+      controller.value = 0.0;
+      await tester.pump();
+      final startRect = _flyingBoxRect(tester);
+      _expectRect(startRect, bannerRect, tolerance: 1.5);
+      expect(_slotOpacity(tester), 0);
+
+      // Mid-flight: flying smoothly
+      controller.value = 0.5;
+      await tester.pump();
+      final midRect = _flyingBoxRect(tester);
+      expect(midRect.width, greaterThan(startRect.width));
+      expect(_slotOpacity(tester), 0);
+
+      // Settled: lands in slot and slot is revealed
+      controller.value = 1.0;
+      await tester.pump();
+      expect(find.byKey(const Key('flyer')), findsNothing);
+      expect(_slotOpacity(tester), 1);
+    },
+  );
+
+  testWidgets(
+    'expanding container maintains uniform AppRadius.value for wide banners and cards',
+    (tester) async {
+      // 16:9 banner: 320x180
+      const bannerRect = Rect.fromLTWH(40, 60, 320, 180);
+      final controller = await _pump(
+        tester,
+        withPoster: false,
+        originRect: bannerRect,
+      );
+
+      for (final raw in const [0.0, 0.25, 0.50, 0.72]) {
+        controller.value = raw;
+        await tester.pump();
+        final clip = _pageClipRect(tester)!;
+        expect(
+          clip.tlRadiusX,
+          closeTo(AppRadius.value, 0.1),
+          reason: 'Radius must remain AppRadius.value at progress $raw',
+        );
+      }
+    },
+  );
 }
 
 Future<AnimationController> _pump(
   WidgetTester tester, {
   bool withPoster = true,
   Object? originCardToken,
+  Rect originRect = _card,
 }) async {
   final controller = AnimationController(
     vsync: const TestVSync(),
@@ -250,7 +309,7 @@ Future<AnimationController> _pump(
       child: PeekAnchorMorphTransition(
         animation: controller,
         secondaryAnimation: const AlwaysStoppedAnimation<double>(0),
-        originRect: _card,
+        originRect: originRect,
         originCardToken: originCardToken,
         destination: (_) => _slot,
         poster: withPoster
@@ -279,6 +338,16 @@ RRect? _pageClipRect(WidgetTester tester) {
 /// user actually sees, not where the widget was laid out.
 Rect _paintedRect(WidgetTester tester) {
   final box = tester.renderObject<RenderBox>(find.byKey(const Key('flyer')));
+  return MatrixUtils.transformRect(
+    box.getTransformTo(null),
+    Offset.zero & box.size,
+  );
+}
+
+Rect _flyingBoxRect(WidgetTester tester) {
+  final box = tester.renderObject<RenderBox>(
+    find.byKey(const Key('flying-poster-box')),
+  );
   return MatrixUtils.transformRect(
     box.getTransformTo(null),
     Offset.zero & box.size,

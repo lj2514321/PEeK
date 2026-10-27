@@ -110,10 +110,12 @@ class DetailPosterArt extends StatelessWidget {
           ],
         ),
         child: PeekMediaImage(
-          uri: item.imageUri,
+          uri: item.imageUri ?? item.backdropUri,
           headers: item.imageHeaders,
           kind: PeekMediaImageKind.poster,
           placeholderIconSize: 58,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
         ),
       ),
     );

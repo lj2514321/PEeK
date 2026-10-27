@@ -194,9 +194,6 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
   Future<void> _openItem(MediaItem item) async {
     final account = widget.account;
     if (account == null) return;
-    final currentScrollOffset = _scrollController.hasClients
-        ? _scrollController.offset
-        : null;
     final updatedItem = await AppRoutes.openMediaDetail(
       context,
       account: account,
@@ -222,16 +219,6 @@ class FavoritesPageState extends ConsumerState<FavoritesPage> {
           });
         }
       }
-    }
-    if (currentScrollOffset != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_scrollController.hasClients) return;
-        final maxScroll = _scrollController.position.maxScrollExtent;
-        final clamped = currentScrollOffset.clamp(0.0, maxScroll);
-        if ((_scrollController.offset - clamped).abs() > 1.0) {
-          _scrollController.jumpTo(clamped);
-        }
-      });
     }
   }
 

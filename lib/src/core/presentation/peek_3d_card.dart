@@ -69,7 +69,12 @@ class _Peek3DCardState extends State<Peek3DCard> {
   }
 
   void _onPointerDown(PointerDownEvent event) {
-    PeekMotionOrigin.recordTap(context, event.position, cardToken: _cardToken);
+    PeekMotionOrigin.recordTap(
+      context,
+      event.position,
+      cardToken: _cardToken,
+      pointer: event.pointer,
+    );
     if (!_pressed) setState(() => _pressed = true);
   }
 
@@ -89,7 +94,10 @@ class _Peek3DCardState extends State<Peek3DCard> {
 
     final dx = ((localPosition.dx / size.width) * 2.0 - 1.0).clamp(-1.0, 1.0);
     final dy = ((localPosition.dy / size.height) * 2.0 - 1.0).clamp(-1.0, 1.0);
-    _pointerAlignment.value = Offset(dx, dy);
+    final current = _pointerAlignment.value;
+    if ((current.dx - dx).abs() > 0.02 || (current.dy - dy).abs() > 0.02) {
+      _pointerAlignment.value = Offset(dx, dy);
+    }
   }
 
   @override
@@ -190,10 +198,13 @@ class _Peek3DCardState extends State<Peek3DCard> {
                 },
                 child: ValueListenableBuilder<Object?>(
                   valueListenable: PeekSharedFlight.activeCardToken,
-                  builder: (context, activeToken, cardContent) =>
-                      activeToken == _cardToken
-                      ? Opacity(opacity: 0.0, child: cardContent)
-                      : cardContent!,
+                  builder: (context, activeToken, cardContent) => Visibility(
+                    visible: activeToken != _cardToken,
+                    maintainSize: true,
+                    maintainAnimation: false,
+                    maintainState: true,
+                    child: cardContent!,
+                  ),
                   child: RepaintBoundary(
                     child: ClipRRect(borderRadius: radius, child: widget.child),
                   ),

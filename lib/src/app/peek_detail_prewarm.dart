@@ -30,6 +30,7 @@ abstract final class PeekDetailPrewarm {
   /// Only one offscreen render at a time: each costs a frame of GPU work.
   static String? _inFlight;
   static Timer? _dwell;
+  static OverlayEntry? _activeEntry;
 
   static const int _maxRemembered = 96;
 
@@ -46,12 +47,32 @@ abstract final class PeekDetailPrewarm {
 
   static bool get isWarming => _inFlight != null;
 
+  /// Immediately cancels any pending dwell timer and unmounts any in-flight
+  /// prewarm stage, ensuring background prewarm never steals GPU frames from an
+  /// active foreground user interaction or route transition.
+  static void cancelAll() {
+    _dwell?.cancel();
+    _dwell = null;
+    if (_activeEntry != null) {
+      if (_activeEntry!.mounted) {
+        try {
+          _activeEntry!.remove();
+        } catch (_) {}
+      }
+      _activeEntry = null;
+    }
+    _inFlight = null;
+  }
+
   /// Call from a `MouseRegion.onEnter` on anything that opens a detail page.
   static void schedule(BuildContext context, {required MediaItem item}) {
     // Never in widget tests: this inserts overlay entries and burns frames.
     if (AppMotion.isTest) return;
     if (item.kind == MediaItemKind.person) return;
     if (_warmed.contains(item.id) || _inFlight == item.id) return;
+
+    final modalRoute = ModalRoute.of(context);
+    if (modalRoute?.animation?.isAnimating == true) return;
 
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
@@ -74,6 +95,7 @@ abstract final class PeekDetailPrewarm {
     void remove() {
       if (removed) return;
       removed = true;
+      if (_activeEntry == entry) _activeEntry = null;
       if (entry.mounted) {
         try {
           entry.remove();
@@ -119,6 +141,7 @@ abstract final class PeekDetailPrewarm {
       ),
     );
 
+    _activeEntry = entry;
     overlay.insert(entry);
 
     // Safety net: if the transition never settles (window hidden, app closing),
