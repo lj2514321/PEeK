@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:flutter/material.dart';
 
@@ -174,10 +175,12 @@ class _PrewarmStageState extends State<_PrewarmStage>
 
   @override
   Widget build(BuildContext context) {
-    return PeekSpatialTransition(
+    return PeekAnchorMorphTransition(
       animation: _controller,
       secondaryAnimation: kAlwaysDismissedAnimation,
-      originAlignment: Alignment.center,
+      originRect: const Rect.fromLTWH(140, 220, 156, 234),
+      destination: (screen) => DetailHeroLayout.of(screen).posterRect,
+      poster: DetailPosterArt(item: widget.item),
       child: MediaDetailPage(
         account: null,
         initialItem: widget.item,

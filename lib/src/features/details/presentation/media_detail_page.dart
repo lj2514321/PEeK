@@ -6,7 +6,7 @@ import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
-import 'package:embyplayer/src/core/presentation/peek_anchor_transition.dart';
+import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
@@ -64,6 +64,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   final ValueNotifier<bool> _showScrolledTitleNotifier = ValueNotifier<bool>(
     false,
   );
+  ValueNotifier<double>? _flightScrollOffset;
   bool _hydrated = false;
   Animation<double>? _routeAnimation;
   AnimationStatusListener? _routeStatusListener;
@@ -111,6 +112,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _flightScrollOffset = PeekSharedFlight.scrollOffsetOf(context);
     _subscribeRouteAnimation();
   }
 
@@ -184,10 +186,12 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
 
   void _onScroll() {
     if (_scrollController.hasClients) {
-      final show = _scrollController.offset > 160;
+      final offset = _scrollController.offset;
+      final show = offset > 160;
       if (_showScrolledTitleNotifier.value != show) {
         _showScrolledTitleNotifier.value = show;
       }
+      _flightScrollOffset?.value = offset;
     }
   }
 
@@ -519,11 +523,10 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   }
 
   Future<void> _openSimilar(MediaItem item) async {
-    await Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) =>
-            MediaDetailPage(account: widget.account, initialItem: item),
-      ),
+    await AppRoutes.openMediaDetail(
+      context,
+      account: widget.account,
+      item: item,
     );
   }
 
@@ -540,11 +543,10 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
 
   Future<void> _openCollectionItem(MediaItem item) async {
     if (item.id == _item.id) return;
-    await Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) =>
-            MediaDetailPage(account: widget.account, initialItem: item),
-      ),
+    await AppRoutes.openMediaDetail(
+      context,
+      account: widget.account,
+      item: item,
     );
   }
 
@@ -563,11 +565,8 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   }
 
   void _openPersonWork(MediaItem item) {
-    Navigator.of(context).push<void>(
-      Peek3DPageRoute(
-        builder: (context) =>
-            MediaDetailPage(account: widget.account, initialItem: item),
-      ),
+    unawaited(
+      AppRoutes.openMediaDetail(context, account: widget.account, item: item),
     );
   }
 
@@ -579,10 +578,11 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
         tag: tag,
         onOpenMedia: (work) {
           Navigator.of(dialogContext).pop();
-          Navigator.of(context).push<void>(
-            Peek3DPageRoute(
-              builder: (context) =>
-                  MediaDetailPage(account: widget.account, initialItem: work),
+          unawaited(
+            AppRoutes.openMediaDetail(
+              context,
+              account: widget.account,
+              item: work,
             ),
           );
         },
@@ -676,97 +676,105 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                       ),
                     ),
                     SliverToBoxAdapter(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1240),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 64),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (_detailError != null)
-                                  _DetailNotice(
-                                    message: _detailError!,
-                                    actionLabel: '重新读取',
-                                    onAction: _loadDetails,
-                                  ),
-                                if (_playbackError != null)
-                                  _DetailNotice(
-                                    message: _playbackError!,
-                                    actionLabel: '重试播放',
-                                    onAction: () => _playItem(_item),
-                                    error: true,
-                                  ),
-                                if (_detailError != null ||
-                                    _playbackError != null)
-                                  const SizedBox(height: 20),
+                      child: _FlightChoreographedEntrance(
+                        start: 0.18,
+                        end: 0.72,
+                        slideY: 18.0,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1240),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 64),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (_detailError != null)
+                                    _DetailNotice(
+                                      message: _detailError!,
+                                      actionLabel: '重新读取',
+                                      onAction: _loadDetails,
+                                    ),
+                                  if (_playbackError != null)
+                                    _DetailNotice(
+                                      message: _playbackError!,
+                                      actionLabel: '重试播放',
+                                      onAction: () => _playItem(_item),
+                                      error: true,
+                                    ),
+                                  if (_detailError != null ||
+                                      _playbackError != null)
+                                    const SizedBox(height: 20),
 
-                                // Season and Episode Picker (for Series / Seasons)
-                                if (_isSeriesOrSeason &&
-                                    _episodes.isNotEmpty) ...[
-                                  _EpisodePickerSection(
+                                  // Season and Episode Picker (for Series / Seasons)
+                                  if (_isSeriesOrSeason &&
+                                      _episodes.isNotEmpty) ...[
+                                    _EpisodePickerSection(
+                                      item: _item,
+                                      seasonNumbers: _availableSeasonNumbers,
+                                      selectedSeason: _selectedSeasonNumber,
+                                      episodes: currentSeasonEpisodes,
+                                      planningEpisodeId: _planningEpisodeId,
+                                      onSelectSeason: (season) {
+                                        setState(
+                                          () => _selectedSeasonNumber = season,
+                                        );
+                                      },
+                                      onPlayEpisode: (ep) => _playItem(ep),
+                                    ),
+                                    const SizedBox(height: 32),
+                                  ],
+
+                                  // Synopsis & Technical Specs Bento Layout
+                                  _OverviewAndSpecsBento(
                                     item: _item,
-                                    seasonNumbers: _availableSeasonNumbers,
-                                    selectedSeason: _selectedSeasonNumber,
-                                    episodes: currentSeasonEpisodes,
-                                    planningEpisodeId: _planningEpisodeId,
-                                    onSelectSeason: (season) {
+                                    selectedMediaSourceId:
+                                        _selectedMediaSourceId,
+                                    onTapTag: _openTagWorks,
+                                    onSelectMediaSource: (id) {
                                       setState(
-                                        () => _selectedSeasonNumber = season,
+                                        () => _selectedMediaSourceId = id,
                                       );
                                     },
-                                    onPlayEpisode: (ep) => _playItem(ep),
                                   ),
-                                  const SizedBox(height: 32),
-                                ],
 
-                                // Synopsis & Technical Specs Bento Layout
-                                _OverviewAndSpecsBento(
-                                  item: _item,
-                                  selectedMediaSourceId: _selectedMediaSourceId,
-                                  onTapTag: _openTagWorks,
-                                  onSelectMediaSource: (id) {
-                                    setState(() => _selectedMediaSourceId = id);
-                                  },
-                                ),
+                                  // Collection (if media belongs to a BoxSet / Collection)
+                                  if (_collections.isNotEmpty) ...[
+                                    const SizedBox(height: 32),
+                                    _CollectionSection(
+                                      key: _collectionSectionKey,
+                                      currentItem: _item,
+                                      collection: _collections.first,
+                                      items: _collectionItems,
+                                      onOpenItem: _openCollectionItem,
+                                    ),
+                                  ],
 
-                                // Collection (if media belongs to a BoxSet / Collection)
-                                if (_collections.isNotEmpty) ...[
-                                  const SizedBox(height: 32),
-                                  _CollectionSection(
-                                    key: _collectionSectionKey,
-                                    currentItem: _item,
-                                    collection: _collections.first,
-                                    items: _collectionItems,
-                                    onOpenItem: _openCollectionItem,
-                                  ),
-                                ],
+                                  // Cast & Crew
+                                  if (_item.people.isNotEmpty) ...[
+                                    const SizedBox(height: 32),
+                                    _CastSection(
+                                      people: _item.people,
+                                      onOpen: _openPerson,
+                                    ),
+                                  ],
 
-                                // Cast & Crew
-                                if (_item.people.isNotEmpty) ...[
-                                  const SizedBox(height: 32),
-                                  _CastSection(
-                                    people: _item.people,
-                                    onOpen: _openPerson,
-                                  ),
+                                  // Similar Recommendations
+                                  if (_similarItems.isNotEmpty) ...[
+                                    const SizedBox(height: 32),
+                                    _SimilarSection(
+                                      items: _similarItems,
+                                      onOpen: _openSimilar,
+                                    ),
+                                  ] else if (_similarError != null) ...[
+                                    const SizedBox(height: 20),
+                                    _DetailNotice(
+                                      message: '相似推荐暂时无法读取：$_similarError',
+                                      actionLabel: '重试',
+                                      onAction: _loadDetails,
+                                    ),
+                                  ],
                                 ],
-
-                                // Similar Recommendations
-                                if (_similarItems.isNotEmpty) ...[
-                                  const SizedBox(height: 32),
-                                  _SimilarSection(
-                                    items: _similarItems,
-                                    onOpen: _openSimilar,
-                                  ),
-                                ] else if (_similarError != null) ...[
-                                  const SizedBox(height: 20),
-                                  _DetailNotice(
-                                    message: '相似推荐暂时无法读取：$_similarError',
-                                    actionLabel: '重试',
-                                    onAction: _loadDetails,
-                                  ),
-                                ],
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -1034,25 +1042,30 @@ class _DetailHero extends StatelessWidget {
                   item: item,
                   width: layout.posterWidth,
                 );
-                final copy = _DetailCopy(
-                  item: item,
-                  collectionName: collectionName,
-                  onTapCollection: onTapCollection,
-                  onTapTag: onTapTag,
-                  compact: layout.compact,
-                  playable: playable,
-                  planningPlayback: planningPlayback,
-                  updatingFavorite: updatingFavorite,
-                  updatingPlayed: updatingPlayed,
-                  canMarkPlayed: canMarkPlayed,
-                  showUserStateActions: showUserStateActions,
-                  onPlay: onPlay,
-                  onPlayFromBeginning: onPlayFromBeginning,
-                  onPlayExternal: onPlayExternal,
-                  onToggleFavorite: onToggleFavorite,
-                  onTogglePlayed: onTogglePlayed,
-                  onIdentify: onIdentify,
-                  onDownload: onDownload,
+                final copy = _FlightChoreographedEntrance(
+                  start: 0.12,
+                  end: 0.62,
+                  slideY: 14.0,
+                  child: _DetailCopy(
+                    item: item,
+                    collectionName: collectionName,
+                    onTapCollection: onTapCollection,
+                    onTapTag: onTapTag,
+                    compact: layout.compact,
+                    playable: playable,
+                    planningPlayback: planningPlayback,
+                    updatingFavorite: updatingFavorite,
+                    updatingPlayed: updatingPlayed,
+                    canMarkPlayed: canMarkPlayed,
+                    showUserStateActions: showUserStateActions,
+                    onPlay: onPlay,
+                    onPlayFromBeginning: onPlayFromBeginning,
+                    onPlayExternal: onPlayExternal,
+                    onToggleFavorite: onToggleFavorite,
+                    onTogglePlayed: onTogglePlayed,
+                    onIdentify: onIdentify,
+                    onDownload: onDownload,
+                  ),
                 );
 
                 return Padding(
@@ -1176,6 +1189,48 @@ class _DetailHeroPoster extends StatelessWidget {
       builder: (context, flying, child) =>
           flying ? Opacity(opacity: 0, child: child) : child!,
       child: poster,
+    );
+  }
+}
+
+/// Staggered upward glide and fade for detail page sections during an
+/// anchor-morph transition, unmounting completely once settled.
+class _FlightChoreographedEntrance extends StatelessWidget {
+  const _FlightChoreographedEntrance({
+    required this.start,
+    required this.end,
+    required this.slideY,
+    required this.child,
+  });
+
+  final double start;
+  final double end;
+  final double slideY;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (AppMotion.isTest) return child;
+    final animation = PeekSharedFlight.routeAnimationOf(context);
+    if (animation == null) return child;
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, content) {
+        final raw = animation.value;
+        if (raw >= 0.999 || animation.status == AnimationStatus.reverse) {
+          return content!;
+        }
+        final progress = ((raw - start) / (end - start)).clamp(0.0, 1.0);
+        final t = const Cubic(0.22, 1.0, 0.36, 1.0).transform(progress);
+        if (t <= 0.001) {
+          return Opacity(opacity: 0.0, child: content);
+        }
+        return Transform.translate(
+          offset: Offset(0.0, slideY * (1.0 - t)),
+          child: t >= 0.999 ? content! : Opacity(opacity: t, child: content),
+        );
+      },
+      child: child,
     );
   }
 }
@@ -2843,20 +2898,24 @@ class _SimilarCard extends StatelessWidget {
               children: [
                 AspectRatio(
                   aspectRatio: 2 / 3,
-                  child: Container(
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceHigh,
-                      borderRadius: AppRadius.borderRadius,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        width: 1,
+                  child: Peek3DCard(
+                    onTap: onOpen,
+                    borderRadius: AppRadius.value,
+                    child: Container(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceHigh,
+                        borderRadius: AppRadius.borderRadius,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          width: 1,
+                        ),
                       ),
-                    ),
-                    child: PeekMediaImage(
-                      uri: item.imageUri,
-                      headers: item.imageHeaders,
-                      kind: PeekMediaImageKind.poster,
+                      child: PeekMediaImage(
+                        uri: item.imageUri,
+                        headers: item.imageHeaders,
+                        kind: PeekMediaImageKind.poster,
+                      ),
                     ),
                   ),
                 ),
@@ -2966,67 +3025,71 @@ class _CollectionItemCard extends StatelessWidget {
               children: [
                 AspectRatio(
                   aspectRatio: 2 / 3,
-                  child: Container(
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceHigh,
-                      borderRadius: AppRadius.borderRadius,
-                      border: Border.all(
-                        color: isCurrent
-                            ? AppColors.spotlight
-                            : Colors.white.withValues(alpha: 0.12),
-                        width: isCurrent ? 2 : 1,
-                      ),
-                      boxShadow: isCurrent
-                          ? [
-                              BoxShadow(
-                                color: AppColors.spotlight.withValues(
-                                  alpha: 0.35,
-                                ),
-                                blurRadius: 12,
-                                spreadRadius: 1,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        PeekMediaImage(
-                          uri: item.imageUri,
-                          headers: item.imageHeaders,
-                          kind: PeekMediaImageKind.poster,
+                  child: Peek3DCard(
+                    onTap: isCurrent ? null : onOpen,
+                    borderRadius: AppRadius.value,
+                    child: Container(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceHigh,
+                        borderRadius: AppRadius.borderRadius,
+                        border: Border.all(
+                          color: isCurrent
+                              ? AppColors.spotlight
+                              : Colors.white.withValues(alpha: 0.12),
+                          width: isCurrent ? 2 : 1,
                         ),
-                        if (isCurrent)
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.75),
-                                borderRadius: AppRadius.borderRadius,
-                                border: Border.all(
+                        boxShadow: isCurrent
+                            ? [
+                                BoxShadow(
                                   color: AppColors.spotlight.withValues(
-                                    alpha: 0.6,
+                                    alpha: 0.35,
                                   ),
-                                  width: 1,
+                                  blurRadius: 12,
+                                  spreadRadius: 1,
                                 ),
-                              ),
-                              child: const Text(
-                                '当前',
-                                style: TextStyle(
-                                  color: AppColors.spotlight,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
+                              ]
+                            : null,
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          PeekMediaImage(
+                            uri: item.imageUri,
+                            headers: item.imageHeaders,
+                            kind: PeekMediaImageKind.poster,
+                          ),
+                          if (isCurrent)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.75),
+                                  borderRadius: AppRadius.borderRadius,
+                                  border: Border.all(
+                                    color: AppColors.spotlight.withValues(
+                                      alpha: 0.6,
+                                    ),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: const Text(
+                                  '当前',
+                                  style: TextStyle(
+                                    color: AppColors.spotlight,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

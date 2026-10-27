@@ -591,7 +591,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
       },
       child: Listener(
         onPointerDown: (event) {
-          PeekMotionOrigin.recordTap(context, event.position);
+          PeekMotionOrigin.recordTapAlignment(context, event.position);
           if (event.buttons == kBackMouseButton) {
             final nav = Navigator.maybeOf(context);
             if (nav != null && nav.canPop()) {

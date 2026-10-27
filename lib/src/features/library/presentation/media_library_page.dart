@@ -220,20 +220,8 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       return;
     }
     if (!mounted) return;
-    final precacheFutures = <Future<void>>[];
-    final backdropUri = item.backdropUri ?? item.imageUri;
-    if (backdropUri != null) {
-      precacheFutures.add(
-        PeekMediaImage.precache(
-          context,
-          backdropUri,
-          headers: item.imageHeaders,
-          kind: PeekMediaImageKind.backdrop,
-        ),
-      );
-    }
     if (item.imageUri != null) {
-      precacheFutures.add(
+      unawaited(
         PeekMediaImage.precache(
           context,
           item.imageUri!,
@@ -241,12 +229,6 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
           kind: PeekMediaImageKind.poster,
         ),
       );
-    }
-    if (!AppMotion.isTest && precacheFutures.isNotEmpty) {
-      await Future.wait(
-        precacheFutures,
-      ).timeout(const Duration(milliseconds: 24), onTimeout: () => const []);
-      if (!mounted) return;
     }
     final currentScrollOffset = _scrollController.hasClients
         ? _scrollController.offset

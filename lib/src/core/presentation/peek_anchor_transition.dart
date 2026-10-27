@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:embyplayer/src/core/presentation/peek_spring.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -15,17 +17,38 @@ class PeekSharedFlight extends InheritedWidget {
   const PeekSharedFlight({
     super.key,
     required this.flying,
+    this.routeAnimation,
+    this.scrollOffset,
     required super.child,
   });
 
+  /// Global notifier holding the token of the source card whose artwork is
+  /// currently in flight, so the source grid card can hide its own copy and
+  /// leave a clean slot until the reverse flight lands back on it.
+  static final ValueNotifier<Object?> activeCardToken = ValueNotifier<Object?>(
+    null,
+  );
+
   final ValueListenable<bool> flying;
+  final Animation<double>? routeAnimation;
+  final ValueNotifier<double>? scrollOffset;
 
   static ValueListenable<bool>? flyingOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PeekSharedFlight>()?.flying;
 
+  static Animation<double>? routeAnimationOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<PeekSharedFlight>()
+      ?.routeAnimation;
+
+  static ValueNotifier<double>? scrollOffsetOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<PeekSharedFlight>()
+      ?.scrollOffset;
+
   @override
   bool updateShouldNotify(PeekSharedFlight oldWidget) =>
-      oldWidget.flying != flying;
+      oldWidget.flying != flying ||
+      oldWidget.routeAnimation != routeAnimation ||
+      oldWidget.scrollOffset != scrollOffset;
 }
 
 /// Container (anchor) transformation for page pushes.
@@ -62,6 +85,7 @@ class PeekAnchorMorphTransition extends StatefulWidget {
     required this.destination,
     required this.child,
     this.poster,
+    this.originCardToken,
   });
 
   /// Drives the flight, 0 = on the card, 1 = in the poster slot.
@@ -79,11 +103,27 @@ class PeekAnchorMorphTransition extends StatefulWidget {
   /// The card's artwork, normally the destination page's own poster widget.
   final Widget? poster;
 
+  /// Optional identity token of the pressed card so the source grid can hide
+  /// the stationary copy while the shared poster is in flight.
+  final Object? originCardToken;
+
   final Widget child;
 
-  /// The shared element carries the motion, so this curve can be calm: 8% at
-  /// 42 ms, 36% at 126 ms, 78% at half way.
-  static const Curve morphCurve = Cubic(0.32, 0.0, 0.18, 1.0);
+  /// Forward curve for the container & shared poster bursting out of the card.
+  static const Curve morphCurve = Cubic(0.22, 0.86, 0.24, 1.0);
+
+  /// Reverse curve (applied to `1 - raw`) so collapse starts immediately on
+  /// Back and decelerates softly onto the source card.
+  static const Curve reverseMorphCurve = Cubic(0.22, 0.68, 0.18, 1.0);
+
+  /// Curve for the page container expanding out of [originRect] to full window.
+  static const Curve containerCurve = Cubic(0.22, 0.86, 0.24, 1.0);
+
+  /// Fraction of the transition by which the container clip reaches full window.
+  static const double containerExpandEnd = 0.72;
+
+  /// Starting corner radius of the expanding container clip.
+  static const double containerStartRadius = 20.0;
 
   /// The page fades in behind the flight. It starts almost immediately (the
   /// artwork leaves a hole in the grid that has to be covered) and is complete
@@ -91,6 +131,10 @@ class PeekAnchorMorphTransition extends StatefulWidget {
   /// into a page that is already there.
   static const double pageFadeStart = 0.08;
   static const double pageFadeEnd = 0.62;
+
+  /// Maximum scroll offset on the detail page before reverse pop suppresses
+  /// the poster flight (since the hero poster has scrolled offscreen).
+  static const double maxReverseFlightScrollOffset = 280.0;
 
   /// How far this page recedes when another route is pushed on top of it.
   static const double recessScale = 0.03;
@@ -102,6 +146,7 @@ class PeekAnchorMorphTransition extends StatefulWidget {
 
 class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   final ValueNotifier<bool> _flying = ValueNotifier<bool>(false);
+  final ValueNotifier<double> _scrollOffset = ValueNotifier<double>(0.0);
 
   @override
   void initState() {
@@ -123,21 +168,47 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   @override
   void dispose() {
     widget.animation.removeListener(_syncFlying);
+    final token = widget.originCardToken;
+    if (token != null && PeekSharedFlight.activeCardToken.value == token) {
+      PeekSharedFlight.activeCardToken.value = null;
+    }
     _flying.dispose();
+    _scrollOffset.dispose();
     super.dispose();
   }
 
+  bool get _isReverseScrolledOut =>
+      widget.animation.status == AnimationStatus.reverse &&
+      _scrollOffset.value >
+          PeekAnchorMorphTransition.maxReverseFlightScrollOffset;
+
   /// The page hides its poster for exactly as long as the flight is visible.
   void _syncFlying() {
-    final flying = widget.animation.value < 0.999;
+    final raw = widget.animation.value;
+    final flying = raw < 0.999 && !_isReverseScrolledOut;
     if (_flying.value != flying) _flying.value = flying;
+
+    final token = widget.originCardToken;
+    if (token != null) {
+      final activeInAir =
+          flying &&
+          widget.poster != null &&
+          (raw > 0.001 || widget.animation.status == AnimationStatus.forward);
+      if (activeInAir && PeekSharedFlight.activeCardToken.value != token) {
+        PeekSharedFlight.activeCardToken.value = token;
+      } else if (!activeInAir &&
+          PeekSharedFlight.activeCardToken.value == token) {
+        PeekSharedFlight.activeCardToken.value = null;
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final destination = widget.destination(constraints.biggest);
+        final screen = constraints.biggest;
+        final baseDestination = widget.destination(screen);
 
         return AnimatedBuilder(
           animation: Listenable.merge([
@@ -154,33 +225,88 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
             // layers, so the steady state costs what it did before.
             if (raw >= 0.999 && recess <= 0.001) return child!;
 
-            final flying = raw < 0.999;
-            final page = _pageLayer(child!, raw);
+            final isReverse =
+                widget.animation.status == AnimationStatus.reverse;
+            final e = isReverse
+                ? 1.0 -
+                      PeekAnchorMorphTransition.reverseMorphCurve.transform(
+                        1.0 - raw,
+                      )
+                : PeekAnchorMorphTransition.morphCurve.transform(raw);
+            final radius =
+                PeekAnchorMorphTransition.containerStartRadius *
+                (1.0 -
+                    (raw / PeekAnchorMorphTransition.containerExpandEnd).clamp(
+                      0.0,
+                      1.0,
+                    ));
+            final fullRect = Offset.zero & screen;
+            final currentRect =
+                Rect.lerp(widget.originRect, fullRect, e) ?? fullRect;
+
+            final flying = raw < 0.999 && !_isReverseScrolledOut;
+            final destination = _scrollOffset.value > 0.5
+                ? baseDestination.shift(Offset(0, -_scrollOffset.value))
+                : baseDestination;
+            final page = _pageLayer(
+              child!,
+              raw: raw,
+              e: e,
+              radius: radius,
+              isReverse: isReverse,
+            );
             final content = Transform.scale(
               scale: 1 - PeekAnchorMorphTransition.recessScale * recess,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  page,
-                  if (flying && widget.poster != null)
+                  if (e < 0.999)
+                    IgnorePointer(
+                      child: ColoredBox(
+                        color: Colors.black.withValues(alpha: 0.44 * e),
+                      ),
+                    ),
+                  if (e < 0.999)
                     Positioned.fromRect(
-                      rect: destination,
+                      rect: currentRect,
                       child: IgnorePointer(
-                        child: RepaintBoundary(
-                          child: Transform(
-                            alignment: Alignment.center,
-                            transform: _flight(
-                              origin: widget.originRect,
-                              destination: destination,
-                              t: PeekAnchorMorphTransition.morphCurve.transform(
-                                raw,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(radius),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: 0.68 * (1.0 - e),
+                                ),
+                                blurRadius: 38,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 14),
                               ),
-                            ),
-                            child: widget.poster,
+                            ],
                           ),
                         ),
                       ),
                     ),
+                  page,
+                  if (e < 0.999)
+                    Positioned.fromRect(
+                      rect: currentRect,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(radius),
+                            border: Border.all(
+                              color: Colors.white.withValues(
+                                alpha: 0.40 * (1.0 - e),
+                              ),
+                              width: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (flying && widget.poster != null)
+                    _buildFlyingPoster(destination: destination, e: e),
                 ],
               ),
             );
@@ -198,28 +324,106 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
               ],
             );
           },
-          child: PeekSharedFlight(flying: _flying, child: widget.child),
+          child: PeekSharedFlight(
+            flying: _flying,
+            routeAnimation: widget.animation,
+            scrollOffset: _scrollOffset,
+            child: widget.child,
+          ),
         );
       },
     );
   }
 
-  Widget _pageLayer(Widget child, double raw) {
-    final t =
-        ((raw - PeekAnchorMorphTransition.pageFadeStart) /
-                (PeekAnchorMorphTransition.pageFadeEnd -
-                    PeekAnchorMorphTransition.pageFadeStart))
-            .clamp(0.0, 1.0);
+  Widget _pageLayer(
+    Widget child, {
+    required double raw,
+    required double e,
+    required double radius,
+    required bool isReverse,
+  }) {
+    final fadeStart = isReverse
+        ? 0.05
+        : PeekAnchorMorphTransition.pageFadeStart;
+    final fadeEnd = isReverse ? 0.42 : PeekAnchorMorphTransition.pageFadeEnd;
+    final t = ((raw - fadeStart) / (fadeEnd - fadeStart)).clamp(0.0, 1.0);
     final opacity = t * t * (3 - 2 * t);
-    if (opacity >= 0.999) return child;
-    return Opacity(opacity: opacity, child: child);
+    final fadedChild = opacity >= 0.999
+        ? child
+        : Opacity(opacity: opacity, child: child);
+
+    if (e >= 0.999) return fadedChild;
+
+    return ClipRRect(
+      clipper: _AnchorContainerClipper(
+        origin: widget.originRect,
+        progress: e,
+        radius: radius,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const ColoredBox(color: Color(0xFF0A0E17)),
+          fadedChild,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlyingPoster({required Rect destination, required double e}) {
+    final origin = widget.originRect;
+    final originRatio = origin.height > 0 ? origin.width / origin.height : 1.0;
+    final destRatio = destination.height > 0
+        ? destination.width / destination.height
+        : 2 / 3;
+    final needsAspectCrop = (originRatio - destRatio).abs() > 0.18;
+
+    Widget posterChild = widget.poster!;
+    Matrix4 matrix;
+    if (needsAspectCrop && destination.width > 0 && destination.height > 0) {
+      final box = Rect.lerp(origin, destination, e) ?? destination;
+      final scale = math.max(
+        box.width / destination.width,
+        box.height / destination.height,
+      );
+      final dx = box.center.dx - destination.center.dx;
+      final dy = box.center.dy - destination.center.dy;
+      matrix = Matrix4.identity()
+        ..translateByDouble(dx, dy, 0, 1)
+        ..scaleByDouble(scale, scale, 1, 1);
+      final cropW = (box.width / scale).clamp(0.0, destination.width);
+      final cropH = (box.height / scale).clamp(0.0, destination.height);
+      final cropRadius = (16.0 / scale).clamp(4.0, 24.0);
+      posterChild = ClipRRect(
+        clipper: _PosterAspectClipper(
+          width: cropW,
+          height: cropH,
+          radius: cropRadius,
+        ),
+        child: posterChild,
+      );
+    } else {
+      matrix = _flight(origin: origin, destination: destination, t: e);
+    }
+
+    return Positioned.fromRect(
+      rect: destination,
+      child: IgnorePointer(
+        child: RepaintBoundary(
+          child: Transform(
+            alignment: Alignment.center,
+            transform: matrix,
+            child: posterChild,
+          ),
+        ),
+      ),
+    );
   }
 
   /// Transform that maps the destination-sized artwork back onto the card.
   ///
   /// The artwork is laid out once at [destination] and only moved afterwards:
-  /// the scale is uniform whenever the two rectangles share an aspect ratio,
-  /// which the route guarantees before choosing this transition.
+  /// the scale is uniform whenever the two rectangles share an aspect ratio.
   Matrix4 _flight({
     required Rect origin,
     required Rect destination,
@@ -236,4 +440,60 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
 
   static double _lerp(double from, double to, double t) =>
       from + (to - from) * t;
+}
+
+class _PosterAspectClipper extends CustomClipper<RRect> {
+  const _PosterAspectClipper({
+    required this.width,
+    required this.height,
+    required this.radius,
+  });
+
+  final double width;
+  final double height;
+  final double radius;
+
+  @override
+  RRect getClip(Size size) {
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: width,
+      height: height,
+    );
+    return RRect.fromRectAndRadius(rect, Radius.circular(radius));
+  }
+
+  @override
+  bool shouldReclip(_PosterAspectClipper oldClipper) =>
+      oldClipper.width != width ||
+      oldClipper.height != height ||
+      oldClipper.radius != radius;
+}
+
+class _AnchorContainerClipper extends CustomClipper<RRect> {
+  const _AnchorContainerClipper({
+    required this.origin,
+    required this.progress,
+    required this.radius,
+  });
+
+  final Rect origin;
+  final double progress;
+  final double radius;
+
+  @override
+  RRect getClip(Size size) {
+    final full = Offset.zero & size;
+    if (progress >= 0.999) {
+      return RRect.fromRectAndRadius(full, Radius.zero);
+    }
+    final rect = Rect.lerp(origin, full, progress) ?? full;
+    return RRect.fromRectAndRadius(rect, Radius.circular(radius));
+  }
+
+  @override
+  bool shouldReclip(_AnchorContainerClipper oldClipper) =>
+      oldClipper.progress != progress ||
+      oldClipper.origin != origin ||
+      oldClipper.radius != radius;
 }

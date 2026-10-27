@@ -1,4 +1,4 @@
-import 'package:embyplayer/src/core/presentation/peek_anchor_transition.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -106,11 +106,137 @@ void main() {
     expect(find.byKey(const Key('flyer')), findsNothing);
     expect(_pageOpacity(tester), 0);
   });
+
+  testWidgets('publishes activeCardToken while flying and clears on settle', (
+    tester,
+  ) async {
+    final token = Object();
+    final controller = await _pump(tester, originCardToken: token);
+
+    controller.value = 0.25;
+    await tester.pump();
+    expect(PeekSharedFlight.activeCardToken.value, same(token));
+
+    controller.value = 1.0;
+    await tester.pump();
+    expect(PeekSharedFlight.activeCardToken.value, isNull);
+  });
+
+  testWidgets('clips incoming page container from card rect to full window', (
+    tester,
+  ) async {
+    final controller = await _pump(tester);
+
+    controller.value = 0.0;
+    await tester.pump();
+    final startClip = _pageClipRect(tester)!;
+    _expectRect(startClip.outerRect, _card);
+
+    controller.value = 0.35;
+    await tester.pump();
+    final midClip = _pageClipRect(tester)!;
+    expect(midClip.width, greaterThan(_card.width));
+    expect(midClip.width, lessThan(800));
+
+    controller.value = 0.72;
+    await tester.pump();
+    final lateClip = _pageClipRect(tester)!;
+    expect(lateClip.width, greaterThan(midClip.width));
+    expect(lateClip.tlRadiusX, 0.0);
+
+    controller.value = 1.0;
+    await tester.pump();
+    expect(_pageClipRect(tester), isNull);
+  });
+
+  testWidgets(
+    'reverse flight shifts destination by scrollOffset or suppresses when scrolled far',
+    (tester) async {
+      final controller = await _pump(tester);
+      controller.value = 1.0;
+      await tester.pump();
+
+      final pageContext = tester.element(find.byKey(const Key('page-bg')));
+      final scrollNotifier = PeekSharedFlight.scrollOffsetOf(pageContext)!;
+      scrollNotifier.value = 100.0;
+
+      // Begin reversing from 1.0 towards 0.0.
+      controller.animateBack(0.0, duration: const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 3));
+
+      final reverseStart = _paintedRect(tester);
+      expect(reverseStart.top, closeTo(_slot.top - 100.0, 12.0));
+
+      // When scrolled past maxReverseFlightScrollOffset (280), flight is suppressed.
+      scrollNotifier.value = 360.0;
+      await tester.pump(const Duration(milliseconds: 30));
+      expect(find.byKey(const Key('flyer')), findsNothing);
+      expect(_slotOpacity(tester), 1);
+      controller.stop();
+    },
+  );
+
+  testWidgets(
+    'ancestor shell pointer-down does not overwrite card originRect with full-window rect',
+    (tester) async {
+      final cardToken = Object();
+      late BuildContext shellContext;
+      late BuildContext cardContext;
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 800)),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Builder(
+              builder: (context) {
+                shellContext = context;
+                return SizedBox(
+                  width: 1280,
+                  height: 800,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 140,
+                        top: 220,
+                        width: 156,
+                        height: 234,
+                        child: Builder(
+                          builder: (c) {
+                            cardContext = c;
+                            return const SizedBox.expand();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      // Child card records its tap first, then event bubbles up to shell.
+      PeekMotionOrigin.recordTap(
+        cardContext,
+        const Offset(200, 300),
+        cardToken: cardToken,
+      );
+      PeekMotionOrigin.recordTapAlignment(shellContext, const Offset(200, 300));
+      PeekMotionOrigin.recordTap(shellContext, const Offset(200, 300));
+
+      expect(PeekMotionOrigin.lastTapRect, _card);
+      expect(PeekMotionOrigin.lastTapCardToken, same(cardToken));
+    },
+  );
 }
 
 Future<AnimationController> _pump(
   WidgetTester tester, {
   bool withPoster = true,
+  Object? originCardToken,
 }) async {
   final controller = AnimationController(
     vsync: const TestVSync(),
@@ -125,6 +251,7 @@ Future<AnimationController> _pump(
         animation: controller,
         secondaryAnimation: const AlwaysStoppedAnimation<double>(0),
         originRect: _card,
+        originCardToken: originCardToken,
         destination: (_) => _slot,
         poster: withPoster
             ? const ColoredBox(key: Key('flyer'), color: Color(0xFF33CC66))
@@ -135,6 +262,17 @@ Future<AnimationController> _pump(
   );
   await tester.pump();
   return controller;
+}
+
+RRect? _pageClipRect(WidgetTester tester) {
+  final match = find.ancestor(
+    of: find.byKey(const Key('page-bg')),
+    matching: find.byType(ClipRRect),
+  );
+  if (match.evaluate().isEmpty) return null;
+  final clipWidget = tester.widget<ClipRRect>(match.first);
+  final renderBox = tester.renderObject<RenderBox>(match.first);
+  return clipWidget.clipper?.getClip(renderBox.size);
 }
 
 /// The artwork's rectangle in screen space, transforms included — i.e. what the

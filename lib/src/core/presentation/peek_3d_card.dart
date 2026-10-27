@@ -32,6 +32,7 @@ class Peek3DCard extends StatefulWidget {
 }
 
 class _Peek3DCardState extends State<Peek3DCard> {
+  final Object _cardToken = Object();
   bool _hovering = false;
   bool _pressed = false;
   final ValueNotifier<Offset> _pointerAlignment = ValueNotifier<Offset>(
@@ -40,6 +41,9 @@ class _Peek3DCardState extends State<Peek3DCard> {
 
   @override
   void dispose() {
+    if (PeekSharedFlight.activeCardToken.value == _cardToken) {
+      PeekSharedFlight.activeCardToken.value = null;
+    }
     _pointerAlignment.dispose();
     super.dispose();
   }
@@ -65,7 +69,7 @@ class _Peek3DCardState extends State<Peek3DCard> {
   }
 
   void _onPointerDown(PointerDownEvent event) {
-    PeekMotionOrigin.recordTap(context, event.position);
+    PeekMotionOrigin.recordTap(context, event.position, cardToken: _cardToken);
     if (!_pressed) setState(() => _pressed = true);
   }
 
@@ -184,8 +188,15 @@ class _Peek3DCardState extends State<Peek3DCard> {
                     ),
                   );
                 },
-                child: RepaintBoundary(
-                  child: ClipRRect(borderRadius: radius, child: widget.child),
+                child: ValueListenableBuilder<Object?>(
+                  valueListenable: PeekSharedFlight.activeCardToken,
+                  builder: (context, activeToken, cardContent) =>
+                      activeToken == _cardToken
+                      ? Opacity(opacity: 0.0, child: cardContent)
+                      : cardContent!,
+                  child: RepaintBoundary(
+                    child: ClipRRect(borderRadius: radius, child: widget.child),
+                  ),
                 ),
               ),
             ),

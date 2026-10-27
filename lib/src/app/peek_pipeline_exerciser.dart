@@ -1,6 +1,7 @@
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
+import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:flutter/material.dart';
 
@@ -114,10 +115,12 @@ class _PeekPipelineExerciserState extends State<PeekPipelineExerciser>
         fit: StackFit.expand,
         children: [
           const ColoredBox(color: AppColors.canvas),
-          PeekSpatialTransition(
+          PeekAnchorMorphTransition(
             animation: _ticker,
             secondaryAnimation: kAlwaysDismissedAnimation,
-            originAlignment: Alignment.center,
+            originRect: const Rect.fromLTWH(140, 220, 156, 234),
+            destination: (screen) => DetailHeroLayout.of(screen).posterRect,
+            poster: const DetailPosterArt(item: _warmupItem),
             child: const MediaDetailPage(
               account: null,
               initialItem: _warmupItem,

@@ -10,6 +10,7 @@ import 'package:embyplayer/src/core/presentation/peek_3d_card.dart';
 import 'package:embyplayer/src/core/presentation/peek_context_menu.dart';
 import 'package:embyplayer/src/core/presentation/peek_horizontal_rail.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
+import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/core/presentation/peek_smooth_scroll.dart';
 import 'package:embyplayer/src/features/home/domain/home_feed.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
@@ -217,17 +218,6 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   List<Future<void>> _precacheItemForDetail(MediaItem item) {
     if (!mounted) return const [];
     final futures = <Future<void>>[];
-    final backdropUri = item.backdropUri ?? item.imageUri;
-    if (backdropUri != null) {
-      futures.add(
-        PeekMediaImage.precache(
-          context,
-          backdropUri,
-          headers: item.imageHeaders,
-          kind: PeekMediaImageKind.backdrop,
-        ),
-      );
-    }
     if (item.imageUri != null) {
       futures.add(
         PeekMediaImage.precache(
@@ -242,14 +232,7 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
   }
 
   Future<void> _openDetails(MediaItem item) async {
-    // 1. Pre-warm artwork before transition starts to prevent GPU/main-thread decode jank
-    final precacheFutures = _precacheItemForDetail(item);
-    if (!AppMotion.isTest && precacheFutures.isNotEmpty) {
-      await Future.wait(
-        precacheFutures,
-      ).timeout(const Duration(milliseconds: 24), onTimeout: () => const []);
-      if (!mounted) return;
-    }
+    _precacheItemForDetail(item);
 
     final targetOffset = _scrollController.hasClients
         ? _scrollController.offset
@@ -1842,27 +1825,40 @@ class _HomeHero extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: Colors.white.withValues(alpha: 0.14),
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.32),
-                            width: 1.1,
+                      Builder(
+                        builder: (btnContext) => Listener(
+                          onPointerDown: (event) => PeekMotionOrigin.recordTap(
+                            btnContext,
+                            event.position,
                           ),
-                          shape: AppRadius.shape,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: compact ? 18 : 22,
-                            vertical: compact ? 12 : 14,
-                          ),
-                        ),
-                        onPressed: planning ? null : onDetails,
-                        icon: const Icon(Icons.info_outline_rounded, size: 19),
-                        label: Text(
-                          '查看详情',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: compact ? 13 : 14,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.14,
+                              ),
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.32),
+                                width: 1.1,
+                              ),
+                              shape: AppRadius.shape,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: compact ? 18 : 22,
+                                vertical: compact ? 12 : 14,
+                              ),
+                            ),
+                            onPressed: planning ? null : onDetails,
+                            icon: const Icon(
+                              Icons.info_outline_rounded,
+                              size: 19,
+                            ),
+                            label: Text(
+                              '查看详情',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: compact ? 13 : 14,
+                              ),
+                            ),
                           ),
                         ),
                       ),

@@ -6,6 +6,7 @@ import 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
 import 'package:embyplayer/src/core/presentation/peek_spring.dart';
 import 'package:flutter/material.dart';
 
+export 'package:embyplayer/src/core/presentation/peek_anchor_transition.dart';
 export 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
 export 'package:embyplayer/src/core/presentation/peek_magnetic_button.dart';
 export 'package:embyplayer/src/core/presentation/peek_spring.dart';
@@ -22,10 +23,14 @@ abstract final class PeekMotionOrigin {
   /// the actual card that was pressed rather than a ratio of the screen.
   static Rect? _lastTapRect;
 
-  /// How long a recorded rect stays usable. A route opened from somewhere that
-  /// is not a recorded card (an episode row, a programmatic push) must not
-  /// inherit a stale rect and morph out of an unrelated card.
-  static const Duration _rectLifetime = Duration(milliseconds: 900);
+  /// Identity token of the card that recorded the tap, so the source card can
+  /// hide its stationary copy while the shared poster is in flight.
+  static Object? _lastTapCardToken;
+
+  /// How long a recorded rect stays usable. Kept long enough so opening a
+  /// right-click context menu on a card and choosing "查看详情" still morphs
+  /// out of that card.
+  static const Duration _rectLifetime = Duration(seconds: 4);
   static final Stopwatch _sinceTap = Stopwatch();
 
   static Alignment get lastTapAlignment => _lastTapAlignment;
@@ -40,7 +45,17 @@ abstract final class PeekMotionOrigin {
     return _lastTapRect;
   }
 
-  static void recordTap(BuildContext context, Offset globalPosition) {
+  /// The pressed card's token, or null when the last tap is not recent enough.
+  static Object? get lastTapCardToken {
+    if (!_sinceTap.isRunning ||
+        _sinceTap.elapsed > _rectLifetime ||
+        _lastTapRect == null) {
+      return null;
+    }
+    return _lastTapCardToken;
+  }
+
+  static void recordTapAlignment(BuildContext context, Offset globalPosition) {
     final size = MediaQuery.maybeSizeOf(context);
     if (size == null || size.width <= 0 || size.height <= 0) return;
     final ax = ((globalPosition.dx / size.width) * 2.0 - 1.0).clamp(
@@ -52,10 +67,37 @@ abstract final class PeekMotionOrigin {
       0.84,
     );
     _lastTapAlignment = Alignment(ax, ay);
+  }
+
+  static void recordTap(
+    BuildContext context,
+    Offset globalPosition, {
+    Object? cardToken,
+  }) {
+    recordTapAlignment(context, globalPosition);
+    final size = MediaQuery.maybeSizeOf(context);
 
     final box = context.findRenderObject();
     if (box is RenderBox && box.hasSize) {
-      _lastTapRect = box.localToGlobal(Offset.zero) & box.size;
+      // Never treat a full-window/page shell RenderBox as a card origin rect.
+      if ((size != null &&
+              box.size.width >= size.width * 0.60 &&
+              box.size.height >= size.height * 0.60) ||
+          (box.size.width >= 560 && box.size.height >= 420)) {
+        return;
+      }
+      final candidate = box.localToGlobal(Offset.zero) & box.size;
+      // If a deeper child already recorded its rect during this pointer-down
+      // bubble, do not let an enclosing ancestor overwrite it with a larger box.
+      if (_sinceTap.isRunning &&
+          _sinceTap.elapsedMilliseconds < 32 &&
+          _lastTapRect != null &&
+          candidate.width * candidate.height >
+              _lastTapRect!.width * _lastTapRect!.height) {
+        return;
+      }
+      _lastTapRect = candidate;
+      _lastTapCardToken = cardToken;
       _sinceTap
         ..reset()
         ..start();
@@ -495,6 +537,7 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
     super.settings,
     Alignment? originAlignment,
     Rect? originRect,
+    Object? originCardToken,
     Rect Function(Size screen)? destination,
     Widget? sharedPoster,
     super.transitionDuration = const Duration(milliseconds: 360),
@@ -505,26 +548,28 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
          transitionsBuilder: (context, animation, secondaryAnimation, child) {
            if (AppMotion.isTest) return child;
 
-           // Anchor morph needs the pressed widget's rectangle *and* the
-           // destination the page reserved for the same artwork. Routes that
-           // cannot supply both (dedupe, person works, programmatic pushes) and
-           // cards whose shape differs from the poster keep the zoom transition
-           // below: a stretch would read as the artwork being re-cropped.
+           final anchor = originAlignment ?? PeekMotionOrigin.lastTapAlignment;
+           final resolvedOriginRect =
+               originRect ?? PeekMotionOrigin.lastTapRect;
+
            if (_transitionStyle == 'anchor' &&
-               originRect != null &&
-               destination != null &&
-               _isPosterShaped(originRect)) {
+               (resolvedOriginRect != null || destination != null)) {
+             final screen =
+                 MediaQuery.maybeSizeOf(context) ?? const Size(1280, 800);
+             final effectiveOrigin =
+                 resolvedOriginRect ??
+                 _fallbackRectFromAlignment(anchor, screen);
              return PeekAnchorMorphTransition(
                animation: animation,
                secondaryAnimation: secondaryAnimation,
-               originRect: originRect,
-               destination: destination,
+               originRect: effectiveOrigin,
+               originCardToken:
+                   originCardToken ?? PeekMotionOrigin.lastTapCardToken,
+               destination: destination ?? (s) => Offset.zero & s,
                poster: sharedPoster,
                child: child,
              );
            }
-
-           final anchor = originAlignment ?? PeekMotionOrigin.lastTapAlignment;
 
            return PeekSpatialTransition(
              animation: animation,
@@ -536,13 +581,16 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
        );
 }
 
-/// Whether a card is the same shape as the poster it would fly into.
-///
-/// 2:3 cards (library grids, poster rails) fly; 16:9 ones (hero carousels,
-/// episode stills) do not, because the flight would have to stretch them.
-bool _isPosterShaped(Rect rect) {
-  if (rect.height <= 0 || rect.width <= 0) return false;
-  return ((rect.width / rect.height) - (2 / 3)).abs() < 0.06;
+Rect _fallbackRectFromAlignment(Alignment alignment, Size screen) {
+  const width = 168.0;
+  const height = 252.0;
+  final center = alignment.withinRect(Offset.zero & screen);
+  final left = (center.dx - width / 2).clamp(16.0, screen.width - width - 16.0);
+  final top = (center.dy - height / 2).clamp(
+    16.0,
+    screen.height - height - 16.0,
+  );
+  return Rect.fromLTWH(left, top, width, height);
 }
 
 /// `--dart-define=PEEK_ROUTE=zoom` restores the previous scale-based transition,

@@ -53,10 +53,13 @@ abstract final class AppRoutes {
         // reserved for its own poster, so the card's artwork becomes the page's
         // poster instead of being thrown away.
         originRect: PeekMotionOrigin.lastTapRect,
+        originCardToken: PeekMotionOrigin.lastTapCardToken,
         destination: (screen) => DetailHeroLayout.of(screen).posterRect,
         sharedPoster: item.imageUri == null
             ? null
             : DetailPosterArt(item: item),
+        transitionDuration: const Duration(milliseconds: 440),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
         builder: (_) => MediaDetailPage(initialItem: item, account: account),
       ),
     );
