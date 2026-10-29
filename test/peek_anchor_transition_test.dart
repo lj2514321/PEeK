@@ -269,18 +269,25 @@ void main() {
         originRect: bannerRect,
       );
 
-      // Frame 0: flyer covers the card
+      // Frame 0: the poster is entirely visible inside the card, never cut. A
+      // wide card cannot be filled by a 2:3 poster without cropping it, so the
+      // flight starts at the largest even scale that fits instead.
       controller.value = 0.0;
       await tester.pump();
-      final startRect = _flyingBoxRect(tester);
-      _expectRect(startRect, bannerRect, tolerance: 1.5);
+      final startRect = _paintedRect(tester);
+      expect(startRect.center.dx, closeTo(bannerRect.center.dx, 1.0));
+      expect(startRect.center.dy, closeTo(bannerRect.center.dy, 1.0));
+      expect(startRect.width, lessThanOrEqualTo(bannerRect.width + 0.5));
+      expect(startRect.height, lessThanOrEqualTo(bannerRect.height + 0.5));
+      expect(startRect.width / startRect.height, closeTo(2 / 3, 0.01));
       expect(_slotOpacity(tester), 0);
 
-      // Mid-flight: flying smoothly
+      // Mid-flight: grows uniformly, still 2:3
       controller.value = 0.5;
       await tester.pump();
-      final midRect = _flyingBoxRect(tester);
+      final midRect = _paintedRect(tester);
       expect(midRect.width, greaterThan(startRect.width));
+      expect(midRect.width / midRect.height, closeTo(2 / 3, 0.01));
       expect(_slotOpacity(tester), 0);
 
       // Settled: lands in slot and slot is revealed

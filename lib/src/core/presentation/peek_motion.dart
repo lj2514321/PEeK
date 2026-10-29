@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/app/theme.dart';
@@ -96,6 +97,15 @@ abstract final class PeekMotionOrigin {
     Object? cardToken,
     int? pointer,
   }) {
+    // The first recorder of a pointer owns that gesture. A shallow Listener
+    // (hero panel, rail) runs after the card it contains and would replace the
+    // card's rect with its own, so the flight would start from a wide container
+    // and crop the artwork the whole way in.
+    if (pointer != null &&
+        pointer == _activeCardPointer &&
+        _lastTapRect != null) {
+      return;
+    }
     PeekDetailPrewarm.cancelAll();
     _activeCardPointer = pointer;
     recordTapAlignment(context, globalPosition, pointer: pointer);
@@ -554,14 +564,26 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer>
 /// ([PeekMotionOrigin.lastTapAlignment]) from `scale: 0.44 -> 1.0` with
 /// hardware-composited scale, opacity, and container card morphing.
 /// When popped, smoothly shrinks right back into the originating card.
-/// Whether a card is the same shape as the poster it would fly into.
+
+/// Temporary instrumentation: which transition a route chose and why.
 ///
-/// 2:3 cards (library grids, poster rails) fly; anything else — 16:9 hero
-/// banners, continue-watching stills, the wider poster densities — would have
-/// to stretch or crop the artwork on the way in.
-bool _isPosterShaped(Rect rect) {
-  if (rect.height <= 0 || rect.width <= 0) return false;
-  return ((rect.width / rect.height) - (2 / 3)).abs() < 0.06;
+/// Writes to `%LOCALAPPDATA%\PEeK\logs\motion_trace.log` so a report from a
+/// profile build (which has no console) can say exactly which path an open
+/// took, instead of guessing from a description of what it looked like.
+void peekMotionTrace(String message) {
+  try {
+    final root = Platform.environment['LOCALAPPDATA'];
+    if (root == null) return;
+    final dir = Directory('$root\\PEeK\\logs');
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    File('${dir.path}\\motion_trace.log').writeAsStringSync(
+      '${DateTime.now().toIso8601String()} $message\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  } catch (_) {
+    // Instrumentation must never break navigation.
+  }
 }
 
 class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
@@ -592,10 +614,16 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
            // flight — then the crop has to disappear at the end, which reads as
            // the poster snapping into place. Those origins keep the zoom.
            final canAnchorMorph =
-               _transitionStyle == 'anchor' &&
-               resolvedOriginRect != null &&
-               _isPosterShaped(resolvedOriginRect);
+               _transitionStyle == 'anchor' && resolvedOriginRect != null;
 
+           final double aspect = resolvedOriginRect == null
+               ? -1
+               : resolvedOriginRect.width / resolvedOriginRect.height;
+           peekMotionTrace(
+             'route anchor=$canAnchorMorph style=$_transitionStyle '
+             'origin=$resolvedOriginRect aspect=${aspect.toStringAsFixed(3)} '
+             'dest=${destination != null}',
+           );
            if (canAnchorMorph) {
              return PeekAnchorMorphTransition(
                animation: animation,

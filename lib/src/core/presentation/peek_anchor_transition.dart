@@ -394,8 +394,38 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   }
 
   Widget _buildFlyingPoster({required Rect destination, required double e}) {
-    final box = Rect.lerp(widget.originRect, destination, e) ?? destination;
+    // Uniform scale, always. The flyer used to be laid out in a frame that
+    // lerped between the card's rectangle and the poster's, and `BoxFit.cover`
+    // answered the changing aspect by cropping: the artwork stayed cropped for
+    // the entire flight and could only become whole on the frame the flight
+    // ended, which is the snap that made the poster look like it was changing.
+    //
+    // Instead the frame is always the destination and only its scale and centre
+    // travel: from the largest even scale that fits inside the pressed widget
+    // (`contain`, so nothing is ever cut) to exactly 1.0 at the slot.
+    final origin = widget.originRect;
+    final fitWidth = destination.width <= 0
+        ? 1.0
+        : origin.width / destination.width;
+    final fitHeight = destination.height <= 0
+        ? 1.0
+        : origin.height / destination.height;
+    final startScale = (fitWidth < fitHeight ? fitWidth : fitHeight).clamp(
+      0.05,
+      1.0,
+    );
+    final scale = startScale + (1 - startScale) * e;
+    final center =
+        Offset.lerp(origin.center, destination.center, e) ?? destination.center;
+    final frame = Rect.fromCenter(
+      center: center,
+      width: destination.width,
+      height: destination.height,
+    );
 
+    // Forward only: the dissolve exists to hide the hand-off, and on the way
+    // back there is nothing to dissolve into — the flyer stays solid until it
+    // lands on the card.
     final dissolve = widget.animation.status == AnimationStatus.reverse
         ? 0.0
         : ((e - PeekAnchorMorphTransition.handOffStart) /
@@ -404,15 +434,14 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
 
     return Positioned.fromRect(
       key: const Key('flying-poster-box'),
-      rect: box,
+      rect: frame,
       child: IgnorePointer(
         child: Opacity(
           opacity: 1 - dissolve,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.value),
-            child: FittedBox(
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
+          child: Transform.scale(
+            scale: scale,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.value),
               child: RepaintBoundary(
                 child: SizedBox(
                   width: destination.width,
