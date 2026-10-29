@@ -565,6 +565,9 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer>
 /// hardware-composited scale, opacity, and container card morphing.
 /// When popped, smoothly shrinks right back into the originating card.
 
+/// Aspect ratio of an origin rect, or 0 when it has no height.
+double aspectOf(Rect rect) => rect.height <= 0 ? 0 : rect.width / rect.height;
+
 /// Temporary instrumentation: which transition a route chose and why.
 ///
 /// Writes to `%LOCALAPPDATA%\PEeK\logs\motion_trace.log` so a report from a
@@ -614,11 +617,19 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
            // flight — then the crop has to disappear at the end, which reads as
            // the poster snapping into place. Those origins keep the zoom.
            final canAnchorMorph =
-               _transitionStyle == 'anchor' && resolvedOriginRect != null;
+               _transitionStyle == 'anchor' &&
+               resolvedOriginRect != null &&
+               // Only a card that was already showing *this item's poster* may
+               // fly. The hero leads with `imageUri` (2:3); 16:9 sources — hero
+               // banners, continue-watching stills — draw `backdropUri`, a
+               // different asset, so a flight between them has to swap the
+               // picture at one end however it is shaped. Those keep the zoom,
+               // which never claims the two are the same picture.
+               (aspectOf(resolvedOriginRect) - 2 / 3).abs() < 0.06;
 
            final double aspect = resolvedOriginRect == null
                ? -1
-               : resolvedOriginRect.width / resolvedOriginRect.height;
+               : aspectOf(resolvedOriginRect);
            peekMotionTrace(
              'route anchor=$canAnchorMorph style=$_transitionStyle '
              'origin=$resolvedOriginRect aspect=${aspect.toStringAsFixed(3)} '

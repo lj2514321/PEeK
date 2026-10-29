@@ -379,16 +379,6 @@ Rect _paintedRect(WidgetTester tester) {
   );
 }
 
-Rect _flyingBoxRect(WidgetTester tester) {
-  final box = tester.renderObject<RenderBox>(
-    find.byKey(const Key('flying-poster-box')),
-  );
-  return MatrixUtils.transformRect(
-    box.getTransformTo(null),
-    Offset.zero & box.size,
-  );
-}
-
 double? _pageOpacity(WidgetTester tester) {
   final match = find.ancestor(
     of: find.byKey(const Key('page-bg')),
