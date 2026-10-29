@@ -400,55 +400,15 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     );
   }
 
-  /// The flying artwork: the card's own asset on top at the start, the page's
-  /// poster on top at the end.
-  Widget _artwork({required double blend}) {
-    final poster = widget.poster;
-    final source = widget.source;
-    if (source == null || poster == null) return poster ?? source!;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Opacity(opacity: 1 - blend, child: source),
-        Opacity(opacity: blend, child: poster),
-      ],
-    );
-  }
-
   Widget _buildFlyingPoster({required Rect destination, required double e}) {
-    // Uniform scale, always. The flyer used to be laid out in a frame that
-    // lerped between the card's rectangle and the poster's, and `BoxFit.cover`
-    // answered the changing aspect by cropping: the artwork stayed cropped for
-    // the entire flight and could only become whole on the frame the flight
-    // ended, which is the snap that made the poster look like it was changing.
-    //
-    // Instead the frame is always the destination and only its scale and centre
-    // travel: from the largest even scale that fits inside the pressed widget
-    // (`contain`, so nothing is ever cut) to exactly 1.0 at the slot.
-    final origin = widget.originRect;
-    final fitWidth = destination.width <= 0
-        ? 1.0
-        : origin.width / destination.width;
-    final fitHeight = destination.height <= 0
-        ? 1.0
-        : origin.height / destination.height;
-    final startScale = (fitWidth < fitHeight ? fitWidth : fitHeight).clamp(
-      0.05,
-      1.0,
-    );
-    final scale = startScale + (1 - startScale) * e;
-    final center =
-        Offset.lerp(origin.center, destination.center, e) ?? destination.center;
-    final frame = Rect.fromCenter(
-      center: center,
-      width: destination.width,
-      height: destination.height,
-    );
+    // Back to a container that grows out of the pressed card: the frame lerps
+    // from the card's rectangle to the poster slot, so the shape the eye
+    // follows is the same one the page's own clip grows out of. It crops — a
+    // 2:3 poster cannot fill a 16:9 frame — but the artwork blend below covers
+    // exactly that, because at the start the frame is filled by the card's own
+    // asset and the poster's crop is invisible behind it.
+    final frame = Rect.lerp(widget.originRect, destination, e) ?? destination;
 
-    // The artwork the card was showing fades into the page's poster across the
-    // middle of the flight. When both ends are the same picture this does
-    // nothing; when they are different assets (a 16:9 still becoming a poster)
-    // it is the only way neither end has to swap the picture in one frame.
     final rawBlend = ((e - 0.10) / 0.58).clamp(0.0, 1.0);
     final blend = rawBlend * rawBlend * (3 - 2 * rawBlend);
 
@@ -467,21 +427,41 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
       child: IgnorePointer(
         child: Opacity(
           opacity: 1 - dissolve,
-          child: Transform.scale(
-            scale: scale,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.value),
-              child: RepaintBoundary(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.value),
+            child: RepaintBoundary(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
                 child: SizedBox(
                   width: destination.width,
                   height: destination.height,
-                  child: _artwork(blend: blend),
+                  child: _artwork(
+                    blend: blend,
+                    wide: widget.originRect.width > widget.originRect.height,
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// The flying artwork: the card's own still on top at the start, the page's
+  /// poster on top at the end. A poster card (taller than wide) has one asset
+  /// and one layer, exactly as before.
+  Widget _artwork({required double blend, required bool wide}) {
+    final poster = widget.poster;
+    final source = widget.source;
+    if (source == null || poster == null || !wide) return poster ?? source!;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Opacity(opacity: 1 - blend, child: source),
+        Opacity(opacity: blend, child: poster),
+      ],
     );
   }
 }

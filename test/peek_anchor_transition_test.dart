@@ -269,25 +269,22 @@ void main() {
         originRect: bannerRect,
       );
 
-      // Frame 0: the poster is entirely visible inside the card, never cut. A
-      // wide card cannot be filled by a 2:3 poster without cropping it, so the
-      // flight starts at the largest even scale that fits instead.
+      // Frame 0: the flying frame is the card itself again, so the motion grows
+      // out of the pressed widget. It crops a 2:3 poster into a 16:9 frame, and
+      // that is covered by blending the card's own still in at the start.
       controller.value = 0.0;
       await tester.pump();
       final startRect = _paintedRect(tester);
       expect(startRect.center.dx, closeTo(bannerRect.center.dx, 1.0));
       expect(startRect.center.dy, closeTo(bannerRect.center.dy, 1.0));
-      expect(startRect.width, lessThanOrEqualTo(bannerRect.width + 0.5));
-      expect(startRect.height, lessThanOrEqualTo(bannerRect.height + 0.5));
-      expect(startRect.width / startRect.height, closeTo(2 / 3, 0.01));
+      expect(startRect.width, closeTo(bannerRect.width, 1.5));
       expect(_slotOpacity(tester), 0);
 
-      // Mid-flight: grows uniformly, still 2:3
+      // Mid-flight: the frame grows towards the slot
       controller.value = 0.5;
       await tester.pump();
       final midRect = _paintedRect(tester);
       expect(midRect.width, greaterThan(startRect.width));
-      expect(midRect.width / midRect.height, closeTo(2 / 3, 0.01));
       expect(_slotOpacity(tester), 0);
 
       // Settled: lands in slot and slot is revealed
