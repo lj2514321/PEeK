@@ -554,6 +554,16 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer>
 /// ([PeekMotionOrigin.lastTapAlignment]) from `scale: 0.44 -> 1.0` with
 /// hardware-composited scale, opacity, and container card morphing.
 /// When popped, smoothly shrinks right back into the originating card.
+/// Whether a card is the same shape as the poster it would fly into.
+///
+/// 2:3 cards (library grids, poster rails) fly; anything else — 16:9 hero
+/// banners, continue-watching stills, the wider poster densities — would have
+/// to stretch or crop the artwork on the way in.
+bool _isPosterShaped(Rect rect) {
+  if (rect.height <= 0 || rect.width <= 0) return false;
+  return ((rect.width / rect.height) - (2 / 3)).abs() < 0.06;
+}
+
 class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
   PeekSpatialPageRoute({
     required WidgetBuilder builder,
@@ -576,8 +586,15 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
            final resolvedOriginRect =
                originRect ?? PeekMotionOrigin.lastTapRect;
 
+           // A card is only allowed to fly when it is the same shape as the
+           // poster slot. Anything else has to change the frame's aspect, and
+           // `BoxFit.cover` answers that by cropping the artwork for the whole
+           // flight — then the crop has to disappear at the end, which reads as
+           // the poster snapping into place. Those origins keep the zoom.
            final canAnchorMorph =
-               _transitionStyle == 'anchor' && resolvedOriginRect != null;
+               _transitionStyle == 'anchor' &&
+               resolvedOriginRect != null &&
+               _isPosterShaped(resolvedOriginRect);
 
            if (canAnchorMorph) {
              return PeekAnchorMorphTransition(
