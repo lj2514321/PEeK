@@ -226,11 +226,11 @@ Future<Uri> _writePng(
   return file.absolute.uri;
 }
 
-MediaItem _detailItem(_Assets assets) {
+MediaItem _detailItem(_Assets assets, {String id = 'bench-movie'}) {
   final Uri? poster = _noImages ? null : assets.poster;
   final Uri? backdrop = _noImages ? null : assets.backdrop;
   return MediaItem(
-    id: 'bench-movie',
+    id: id,
     name: 'Sample Feature 样例电影',
     kind: MediaItemKind.movie,
     overview: '用于压测详情页首次渲染的剧情简介，包含足够多的文字以撑开布局。' * 6,
@@ -456,6 +456,32 @@ class _BenchAppState extends State<_BenchApp> {
       _report('hover prewarm (discarded)', List<FrameTiming>.of(_timings));
     }
 
+    if (_mode == 'morph') {
+      // A real pointer tap on a real card, through the real route: this is the
+      // only way to measure the shared-element flight the user actually sees,
+      // because the anchor path needs a recorded origin rect.
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        _timings.clear();
+        final box =
+            _firstCardKey.currentContext!.findRenderObject()! as RenderBox;
+        final at = box.localToGlobal(box.size.center(Offset.zero));
+        GestureBinding.instance.handlePointerEvent(
+          PointerDownEvent(position: at, kind: PointerDeviceKind.mouse),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 32));
+        GestureBinding.instance.handlePointerEvent(
+          PointerUpEvent(position: at, kind: PointerDeviceKind.mouse),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 1100));
+        _report('morph flight #$attempt', List<FrameTiming>.of(_timings));
+        _navigator.currentState!.pop();
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+      }
+      debugPrint('BENCH done');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      exit(0);
+    }
+
     for (var attempt = 1; attempt <= 3; attempt++) {
       _timings.clear();
       _navigator.currentState!.push<void>(_routeFor(widget.detail));
@@ -649,6 +675,15 @@ class _BenchAppState extends State<_BenchApp> {
   }
 
   Widget _hoverHome() {
+    // A different item per card, so every hover warms a *new* page instead of
+    // the one the previous card already warmed.
+    final fixtures = _benchAssets;
+    final hoverItems = <MediaItem>[
+      for (var i = 0; i < 6; i++)
+        fixtures == null
+            ? widget.detail
+            : _detailItem(fixtures, id: 'bench-hover-$i'),
+    ];
     return GridView.count(
       crossAxisCount: 3,
       padding: const EdgeInsets.all(24),
@@ -662,7 +697,7 @@ class _BenchAppState extends State<_BenchApp> {
               onTap: () {},
               onHoverIntent: _noPrewarm
                   ? null
-                  : () => PeekDetailPrewarm.schedule(ctx, item: widget.detail),
+                  : () => PeekDetailPrewarm.schedule(ctx, item: hoverItems[i]),
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(

@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
-import 'package:embyplayer/src/core/presentation/peek_motion.dart';
-import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:flutter/material.dart';
 
@@ -31,6 +29,10 @@ abstract final class PeekDetailPrewarm {
   static String? _inFlight;
   static Timer? _dwell;
   static OverlayEntry? _activeEntry;
+
+  /// --dart-define=PEEK_PREWARM=true restores the hover pre-warm, so the
+  /// trade above can be re-measured instead of remembered.
+  static const bool _enabled = bool.fromEnvironment('PEEK_PREWARM');
 
   static const int _maxRemembered = 96;
 
@@ -66,6 +68,14 @@ abstract final class PeekDetailPrewarm {
 
   /// Call from a `MouseRegion.onEnter` on anything that opens a detail page.
   static void schedule(BuildContext context, {required MediaItem item}) {
+    // Off by default. Measured on Windows (ANGLE/D3D11, 1280x800, profile): the
+    // first prewarm paints a whole detail page — blurred ambient bloom included
+    // — inside a single hover frame, which cost 227 ms of raster and 23 ms of
+    // build on this machine, and the startup exerciser does not cover it. What
+    // it buys is 8 ms on the first real flight (49 vs 57 ms) and one fewer frame
+    // over 33 ms. That trade is not worth a fifth-of-a-second freeze the pointer
+    // cannot escape, so the code stays behind a define for A/B work only.
+    if (!_enabled) return;
     // Never in widget tests: this inserts overlay entries and burns frames.
     if (AppMotion.isTest) return;
     if (item.kind == MediaItemKind.person) return;
@@ -158,57 +168,49 @@ abstract final class PeekDetailPrewarm {
   }
 }
 
-/// The offscreen payload: the real page, inside the real transition, driven
-/// through the same scales the user will see.
+/// The offscreen payload: the real page, painted at rest.
+///
+/// It used to replay the whole 200 ms flight offscreen, on the theory that the
+/// first real flight then had every layer compiled. Measured on Windows
+/// (ANGLE/D3D11, 1280x800, profile): that replay cost 205 ms of raster time and
+/// 22 ms of build on the frame it ran — on the user's *hover*, i.e. a freeze the
+/// pointer could not escape — and it was redundant, because
+/// `PeekPipelineExerciser` already drives the anchor transition through its
+/// scales at startup while the splash gate is up.
+///
+/// What is item-specific, and all this stage is responsible for now: this item's
+/// page, its artwork decode and the blurred ambient bloom behind the poster.
 class _PrewarmStage extends StatefulWidget {
   const _PrewarmStage({required this.item, this.onSettled});
 
   final MediaItem item;
 
-  /// Fired once the transition reaches its completed state, i.e. after the
-  /// clip has been dropped and the page has been re-rasterized unclipped.
+  /// Fired after the page has been painted, so the stage can be torn down
+  /// without racing the decode it was there to warm.
   final VoidCallback? onSettled;
 
   @override
   State<_PrewarmStage> createState() => _PrewarmStageState();
 }
 
-class _PrewarmStageState extends State<_PrewarmStage>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
+class _PrewarmStageState extends State<_PrewarmStage> {
   @override
   void initState() {
     super.initState();
-    _controller =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 200),
-        )..addStatusListener((status) {
-          if (status == AnimationStatus.completed) widget.onSettled?.call();
-        });
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Two frames: one to build and paint, one for the artwork decode to land.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onSettled?.call();
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return PeekAnchorMorphTransition(
-      animation: _controller,
-      secondaryAnimation: kAlwaysDismissedAnimation,
-      originRect: const Rect.fromLTWH(140, 220, 156, 234),
-      destination: (screen) => DetailHeroLayout.of(screen).posterRect,
-      poster: DetailPosterArt(item: widget.item),
-      child: MediaDetailPage(
-        account: null,
-        initialItem: widget.item,
-        isWarmup: true,
-      ),
+    return MediaDetailPage(
+      account: null,
+      initialItem: widget.item,
+      isWarmup: true,
     );
   }
 }
