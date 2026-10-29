@@ -193,11 +193,18 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   /// The page hides its poster for exactly as long as the flight is visible.
   void _syncFlying() {
     final raw = widget.animation.value;
-    // The page's own poster is painted from handOffStart on, underneath the
-    // flyer, so the flyer can dissolve into it instead of being swapped for it
-    // in a single frame.
+    // Forward: the page's own poster is painted from `handOffStart` on,
+    // underneath the flyer, so the flyer can dissolve into it instead of being
+    // swapped for it in a single frame.
+    //
+    // Backward: the flyer must carry the *whole* retract. Showing the page's
+    // poster instead leaves the poster at full size while the container clip
+    // closes in on it, so it gets cropped back into the card instead of shrunk
+    // into it.
+    final handOff = widget.animation.status != AnimationStatus.reverse;
     final flying =
-        raw < PeekAnchorMorphTransition.handOffStart && !_isReverseScrolledOut;
+        raw < (handOff ? PeekAnchorMorphTransition.handOffStart : 0.999) &&
+        !_isReverseScrolledOut;
     if (_flying.value != flying) _flying.value = flying;
 
     final token = widget.originCardToken;
@@ -389,10 +396,11 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   Widget _buildFlyingPoster({required Rect destination, required double e}) {
     final box = Rect.lerp(widget.originRect, destination, e) ?? destination;
 
-    final dissolve =
-        ((e - PeekAnchorMorphTransition.handOffStart) /
-                (1 - PeekAnchorMorphTransition.handOffStart))
-            .clamp(0.0, 1.0);
+    final dissolve = widget.animation.status == AnimationStatus.reverse
+        ? 0.0
+        : ((e - PeekAnchorMorphTransition.handOffStart) /
+                  (1 - PeekAnchorMorphTransition.handOffStart))
+              .clamp(0.0, 1.0);
 
     return Positioned.fromRect(
       key: const Key('flying-poster-box'),
