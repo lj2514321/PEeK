@@ -238,12 +238,13 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
     return futures;
   }
 
-  Future<void> _openDetails(MediaItem item) async {
+  Future<void> _openDetails(MediaItem item, {bool heroVignette = false}) async {
     _ambientHoverDebounce?.cancel();
     _precacheItemForDetail(item);
 
     await AppRoutes.openMediaDetail(
       context,
+      heroVignette: heroVignette,
       account: widget.account,
       item: item,
     );
@@ -443,8 +444,9 @@ class AuthenticatedHomePageState extends ConsumerState<AuthenticatedHomePage> {
                                 },
                                 onPlay: (item) =>
                                     unawaited(_continuePlayback(item)),
-                                onDetails: (item) =>
-                                    unawaited(_openDetails(item)),
+                                onDetails: (item) => unawaited(
+                                  _openDetails(item, heroVignette: true),
+                                ),
                               )
                             : _HomeEmptyHero(
                                 error: _pageError,

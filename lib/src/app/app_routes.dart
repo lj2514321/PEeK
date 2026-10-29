@@ -32,6 +32,7 @@ abstract final class AppRoutes {
     BuildContext context, {
     required MediaItem item,
     AuthenticatedServer? account,
+    bool heroVignette = false,
   }) {
     PeekDetailPrewarm.cancelAll();
     if (item.kind == MediaItemKind.person && account != null) {
@@ -62,9 +63,10 @@ abstract final class AppRoutes {
         sharedPoster: item.imageUri == null && item.backdropUri == null
             ? null
             : DetailPosterArt(item: item),
-        // The card's own look, vignette included: the carousel darkens its
-        // edges by default, so the bare artwork would be brighter than the card
-        // it takes off from.
+        // The card's own look. The hero carousel darkens its edges by default and
+        // passes that on; rails (continue watching) draw the bare still, so they
+        // must not get the vignette or the flight would end up darker than the
+        // card it is landing on.
         sourceArtwork: item.backdropUri == null
             ? null
             : Stack(
@@ -76,7 +78,7 @@ abstract final class AppRoutes {
                     uri: item.backdropUri,
                     kind: PeekMediaImageKind.backdrop,
                   ),
-                  const HomeHeroVignette(),
+                  if (heroVignette) const HomeHeroVignette(),
                 ],
               ),
         transitionDuration: const Duration(milliseconds: 440),
