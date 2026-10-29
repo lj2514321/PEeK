@@ -705,74 +705,112 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                                       _playbackError != null)
                                     const SizedBox(height: 20),
 
-                                  // Season and Episode Picker (for Series / Seasons)
-                                  if (_isSeriesOrSeason &&
-                                      _episodes.isNotEmpty) ...[
-                                    _EpisodePickerSection(
-                                      item: _item,
-                                      seasonNumbers: _availableSeasonNumbers,
-                                      selectedSeason: _selectedSeasonNumber,
-                                      episodes: currentSeasonEpisodes,
-                                      planningEpisodeId: _planningEpisodeId,
-                                      onSelectSeason: (season) {
-                                        setState(
-                                          () => _selectedSeasonNumber = season,
-                                        );
-                                      },
-                                      onPlayEpisode: (ep) => _playItem(ep),
-                                    ),
-                                    const SizedBox(height: 32),
-                                  ],
+                                  // Staged across the flight, one group per
+                                  // frame. Delaying the column as a single
+                                  // block did not help: the whole below-hero
+                                  // tree was still built in one go (measured
+                                  // 15-17 ms of UI thread), it just happened
+                                  // one frame later. Splitting it is what keeps
+                                  // every frame under budget.
+                                  _FlightStaged(
+                                    at: 0.20,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        // Season and Episode Picker (for Series / Seasons)
+                                        if (_isSeriesOrSeason &&
+                                            _episodes.isNotEmpty) ...[
+                                          _EpisodePickerSection(
+                                            item: _item,
+                                            seasonNumbers:
+                                                _availableSeasonNumbers,
+                                            selectedSeason:
+                                                _selectedSeasonNumber,
+                                            episodes: currentSeasonEpisodes,
+                                            planningEpisodeId:
+                                                _planningEpisodeId,
+                                            onSelectSeason: (season) {
+                                              setState(
+                                                () => _selectedSeasonNumber =
+                                                    season,
+                                              );
+                                            },
+                                            onPlayEpisode: (ep) =>
+                                                _playItem(ep),
+                                          ),
+                                          const SizedBox(height: 32),
+                                        ],
 
-                                  // Synopsis & Technical Specs Bento Layout
-                                  _OverviewAndSpecsBento(
-                                    item: _item,
-                                    selectedMediaSourceId:
-                                        _selectedMediaSourceId,
-                                    onTapTag: _openTagWorks,
-                                    onSelectMediaSource: (id) {
-                                      setState(
-                                        () => _selectedMediaSourceId = id,
-                                      );
-                                    },
+                                        // Synopsis & Technical Specs Bento Layout
+                                        _OverviewAndSpecsBento(
+                                          item: _item,
+                                          selectedMediaSourceId:
+                                              _selectedMediaSourceId,
+                                          onTapTag: _openTagWorks,
+                                          onSelectMediaSource: (id) {
+                                            setState(
+                                              () => _selectedMediaSourceId = id,
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                  _FlightStaged(
+                                    at: 0.34,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        // Collection (if media belongs to a BoxSet / Collection)
+                                        if (_collections.isNotEmpty) ...[
+                                          const SizedBox(height: 32),
+                                          _CollectionSection(
+                                            key: _collectionSectionKey,
+                                            currentItem: _item,
+                                            collection: _collections.first,
+                                            items: _collectionItems,
+                                            onOpenItem: _openCollectionItem,
+                                          ),
+                                        ],
 
-                                  // Collection (if media belongs to a BoxSet / Collection)
-                                  if (_collections.isNotEmpty) ...[
-                                    const SizedBox(height: 32),
-                                    _CollectionSection(
-                                      key: _collectionSectionKey,
-                                      currentItem: _item,
-                                      collection: _collections.first,
-                                      items: _collectionItems,
-                                      onOpenItem: _openCollectionItem,
+                                        // Cast & Crew
+                                        if (_item.people.isNotEmpty) ...[
+                                          const SizedBox(height: 32),
+                                          _CastSection(
+                                            people: _item.people,
+                                            onOpen: _openPerson,
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                  ],
-
-                                  // Cast & Crew
-                                  if (_item.people.isNotEmpty) ...[
-                                    const SizedBox(height: 32),
-                                    _CastSection(
-                                      people: _item.people,
-                                      onOpen: _openPerson,
+                                  ),
+                                  _FlightStaged(
+                                    at: 0.46,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        // Similar Recommendations
+                                        if (_similarItems.isNotEmpty) ...[
+                                          const SizedBox(height: 32),
+                                          _SimilarSection(
+                                            items: _similarItems,
+                                            onOpen: _openSimilar,
+                                          ),
+                                        ] else if (_similarError != null) ...[
+                                          const SizedBox(height: 20),
+                                          _DetailNotice(
+                                            message:
+                                                '相似推荐暂时无法读取：$_similarError',
+                                            actionLabel: '重试',
+                                            onAction: _loadDetails,
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                  ],
-
-                                  // Similar Recommendations
-                                  if (_similarItems.isNotEmpty) ...[
-                                    const SizedBox(height: 32),
-                                    _SimilarSection(
-                                      items: _similarItems,
-                                      onOpen: _openSimilar,
-                                    ),
-                                  ] else if (_similarError != null) ...[
-                                    const SizedBox(height: 20),
-                                    _DetailNotice(
-                                      message: '相似推荐暂时无法读取：$_similarError',
-                                      actionLabel: '重试',
-                                      onAction: _loadDetails,
-                                    ),
-                                  ],
+                                  ),
                                 ],
                               ),
                             ),
@@ -1225,6 +1263,7 @@ class _FlightChoreographedEntrance extends StatelessWidget {
         if (raw >= 0.999 || animation.status == AnimationStatus.reverse) {
           return content!;
         }
+
         final progress = ((raw - start) / (end - start)).clamp(0.0, 1.0);
         final t = const Cubic(0.22, 1.0, 0.36, 1.0).transform(progress);
         if (t <= 0.001) {
@@ -1241,6 +1280,34 @@ class _FlightChoreographedEntrance extends StatelessWidget {
           child: t >= 0.999 ? content! : Opacity(opacity: t, child: content),
         );
       },
+      child: child,
+    );
+  }
+}
+
+/// Holds one group of below-the-fold sections back until the flight reaches
+/// [at], then builds it once.
+///
+/// The detail page built hero, synopsis, cast, similar and episodes in the same
+/// frame as the flight's opening, and that build — 15 to 17 ms of UI thread on
+/// this machine — is a dropped frame wherever it lands. Spreading the groups
+/// over the flight puts each one in a frame of its own, and none of them is
+/// visible before its `at` anyway: they sit below a hero that is still flying.
+class _FlightStaged extends StatelessWidget {
+  const _FlightStaged({required this.at, required this.child});
+
+  final double at;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (AppMotion.isTest) return child;
+    final animation = PeekSharedFlight.routeAnimationOf(context);
+    if (animation == null) return child;
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, staged) =>
+          animation.value >= at ? staged! : const SizedBox.shrink(),
       child: child,
     );
   }
