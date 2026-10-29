@@ -123,6 +123,31 @@ void main() {
     expect(PeekSharedFlight.activeCardToken.value, isNull);
   });
 
+  testWidgets('the flyer dissolves into the page poster, never swaps', (
+    tester,
+  ) async {
+    final controller = await _pump(tester);
+
+    controller.value = 0.95;
+    await tester.pump();
+
+    // Both are painted at once: the page's poster underneath, the flyer fading
+    // over it. A single-frame swap makes every residual difference — the crop
+    // left over from a card that was not 2:3, the halo and shadow the flyer
+    // does not carry — jump on the last frame.
+    expect(_slotOpacity(tester), 1);
+    final flyerOpacity = tester
+        .widgetList<Opacity>(
+          find.ancestor(
+            of: find.byKey(const Key('flyer')),
+            matching: find.byType(Opacity),
+          ),
+        )
+        .first
+        .opacity;
+    expect(flyerOpacity, lessThan(1));
+    expect(flyerOpacity, greaterThan(0));
+  });
   testWidgets('clips incoming page container from card rect to full window', (
     tester,
   ) async {

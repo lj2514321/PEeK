@@ -137,6 +137,13 @@ class PeekAnchorMorphTransition extends StatefulWidget {
   /// the poster flight (since the hero poster has scrolled offscreen).
   static const double maxReverseFlightScrollOffset = 280.0;
 
+  /// Where the hand-off starts. From here the page's poster is painted under
+  /// the flyer and the flyer fades out over the last tenth of the flight.
+  /// Swapping the two in one frame makes every difference between them jump:
+  /// the residual crop of a card that was not 2:3, and the halo and shadow the
+  /// flyer does not carry.
+  static const double handOffStart = 0.90;
+
   /// How far this page recedes when another route is pushed on top of it.
   static const double recessScale = 0.03;
 
@@ -186,7 +193,11 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   /// The page hides its poster for exactly as long as the flight is visible.
   void _syncFlying() {
     final raw = widget.animation.value;
-    final flying = raw < 0.999 && !_isReverseScrolledOut;
+    // The page's own poster is painted from handOffStart on, underneath the
+    // flyer, so the flyer can dissolve into it instead of being swapped for it
+    // in a single frame.
+    final flying =
+        raw < PeekAnchorMorphTransition.handOffStart && !_isReverseScrolledOut;
     if (_flying.value != flying) _flying.value = flying;
 
     final token = widget.originCardToken;
@@ -378,20 +389,28 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   Widget _buildFlyingPoster({required Rect destination, required double e}) {
     final box = Rect.lerp(widget.originRect, destination, e) ?? destination;
 
+    final dissolve =
+        ((e - PeekAnchorMorphTransition.handOffStart) /
+                (1 - PeekAnchorMorphTransition.handOffStart))
+            .clamp(0.0, 1.0);
+
     return Positioned.fromRect(
       key: const Key('flying-poster-box'),
       rect: box,
       child: IgnorePointer(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.value),
-          child: FittedBox(
-            fit: BoxFit.cover,
-            alignment: Alignment.center,
-            child: RepaintBoundary(
-              child: SizedBox(
-                width: destination.width,
-                height: destination.height,
-                child: widget.poster!,
+        child: Opacity(
+          opacity: 1 - dissolve,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.value),
+            child: FittedBox(
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+              child: RepaintBoundary(
+                child: SizedBox(
+                  width: destination.width,
+                  height: destination.height,
+                  child: widget.poster!,
+                ),
               ),
             ),
           ),
