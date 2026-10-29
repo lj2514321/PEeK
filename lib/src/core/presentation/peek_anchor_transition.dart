@@ -409,7 +409,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     // asset and the poster's crop is invisible behind it.
     final frame = Rect.lerp(widget.originRect, destination, e) ?? destination;
 
-    final rawBlend = ((e - 0.10) / 0.58).clamp(0.0, 1.0);
+    final rawBlend = ((e - 0.12) / 0.48).clamp(0.0, 1.0);
     final blend = rawBlend * rawBlend * (3 - 2 * rawBlend);
 
     // Forward only: the dissolve exists to hide the hand-off, and on the way
@@ -430,17 +430,10 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.value),
             child: RepaintBoundary(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                child: SizedBox(
-                  width: destination.width,
-                  height: destination.height,
-                  child: _artwork(
-                    blend: blend,
-                    wide: widget.originRect.width > widget.originRect.height,
-                  ),
-                ),
+              child: _artwork(
+                blend: blend,
+                destination: destination,
+                wide: widget.originRect.width > widget.originRect.height,
               ),
             ),
           ),
@@ -449,18 +442,50 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     );
   }
 
-  /// The flying artwork: the card's own still on top at the start, the page's
-  /// poster on top at the end. A poster card (taller than wide) has one asset
-  /// and one layer, exactly as before.
-  Widget _artwork({required double blend, required bool wide}) {
+  /// The flying artwork.
+  ///
+  /// The two pieces are laid out differently on purpose. The page's poster is
+  /// laid out at the poster slot's size and scaled to fill the frame, so it is
+  /// exact on the frame the flight ends. The card's own still has to be exact on
+  /// the frame the flight *starts*, so it fills the frame directly — the same
+  /// rectangle and the same `cover` crop the card itself was drawing. Blending
+  /// two crops of two different assets is the point: the picture changes over
+  /// the middle of the flight, not at either end.
+  Widget _artwork({
+    required double blend,
+    required Rect destination,
+    required bool wide,
+  }) {
     final poster = widget.poster;
     final source = widget.source;
-    if (source == null || poster == null || !wide) return poster ?? source!;
+    if (source == null || poster == null || !wide) {
+      return FittedBox(
+        fit: BoxFit.cover,
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: destination.width,
+          height: destination.height,
+          child: poster ?? source!,
+        ),
+      );
+    }
     return Stack(
       fit: StackFit.expand,
       children: [
+        // Fills the frame: matches the pressed card exactly at the start.
         Opacity(opacity: 1 - blend, child: source),
-        Opacity(opacity: blend, child: poster),
+        Opacity(
+          opacity: blend,
+          child: FittedBox(
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: destination.width,
+              height: destination.height,
+              child: poster,
+            ),
+          ),
+        ),
       ],
     );
   }
