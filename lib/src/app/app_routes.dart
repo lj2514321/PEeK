@@ -13,6 +13,7 @@ import 'package:embyplayer/src/core/domain/server.dart';
 import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/dedupe/presentation/media_dedupe_page.dart';
+import 'package:embyplayer/src/features/home/presentation/home_hero_vignette.dart';
 import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
 import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
 import 'package:embyplayer/src/features/people/presentation/person_works_page.dart';
@@ -61,13 +62,22 @@ abstract final class AppRoutes {
         sharedPoster: item.imageUri == null && item.backdropUri == null
             ? null
             : DetailPosterArt(item: item),
+        // The card's own look, vignette included: the carousel darkens its
+        // edges by default, so the bare artwork would be brighter than the card
+        // it takes off from.
         sourceArtwork: item.backdropUri == null
             ? null
-            : DetailPosterArt(
-                item: item,
-                decorated: false,
-                uri: item.backdropUri,
-                kind: PeekMediaImageKind.backdrop,
+            : Stack(
+                fit: StackFit.expand,
+                children: [
+                  DetailPosterArt(
+                    item: item,
+                    decorated: false,
+                    uri: item.backdropUri,
+                    kind: PeekMediaImageKind.backdrop,
+                  ),
+                  const HomeHeroVignette(),
+                ],
               ),
         transitionDuration: const Duration(milliseconds: 440),
         reverseTransitionDuration: const Duration(milliseconds: 300),
