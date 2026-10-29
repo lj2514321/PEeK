@@ -364,10 +364,16 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     required double radius,
     required bool isReverse,
   }) {
+    // On the way back the page has to be gone before its container clip gets
+    // small. The clip shrinks from the full window to the card, and every glyph
+    // it crosses is sliced by a hard edge for a frame: text that is still fully
+    // opaque under a moving clip is what reads as flicker, and once the window
+    // is small enough the content *under* the page shows through the gaps.
+    // So the fade leads the clip on the retract instead of trailing it.
     final fadeStart = isReverse
-        ? 0.05
+        ? 0.25
         : PeekAnchorMorphTransition.pageFadeStart;
-    final fadeEnd = isReverse ? 0.42 : PeekAnchorMorphTransition.pageFadeEnd;
+    final fadeEnd = isReverse ? 0.85 : PeekAnchorMorphTransition.pageFadeEnd;
     final t = ((raw - fadeStart) / (fadeEnd - fadeStart)).clamp(0.0, 1.0);
     final opacity = t * t * (3 - 2 * t);
 
