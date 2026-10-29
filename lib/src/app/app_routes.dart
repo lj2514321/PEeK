@@ -60,7 +60,7 @@ abstract final class AppRoutes {
         destination: (screen) => DetailHeroLayout.of(screen).posterRect,
         sharedPoster: item.imageUri == null && item.backdropUri == null
             ? null
-            : DetailPosterArt(item: item, decorated: false),
+            : DetailPosterArt(item: item),
         sourceArtwork: item.backdropUri == null
             ? null
             : DetailPosterArt(

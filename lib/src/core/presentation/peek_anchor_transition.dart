@@ -200,20 +200,11 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   /// The page hides its poster for exactly as long as the flight is visible.
   void _syncFlying() {
     final raw = widget.animation.value;
-    // Forward: the page's own poster is painted from `handOffStart` on,
-    // underneath the flyer, so the flyer can dissolve into it instead of being
-    // swapped for it in a single frame.
-    //
-    // Backward: the flyer must carry the *whole* retract. Showing the page's
-    // poster instead leaves the poster at full size while the container clip
-    // closes in on it, so it gets cropped back into the card instead of shrunk
-    // into it.
-    final handOff = widget.animation.status != AnimationStatus.reverse;
-    final flying =
-        raw < (handOff ? PeekAnchorMorphTransition.handOffStart : 0.999) &&
-        !_isReverseScrolledOut;
+    final flying = raw < 0.999 && !_isReverseScrolledOut;
     if (_flying.value != flying) _flying.value = flying;
 
+    // The pressed card stays hidden while the flight is up, so the eye follows
+    // one piece of artwork instead of two.
     final token = widget.originCardToken;
     if (token != null) {
       final activeInAir =
@@ -412,29 +403,17 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     final rawBlend = ((e - 0.12) / 0.48).clamp(0.0, 1.0);
     final blend = rawBlend * rawBlend * (3 - 2 * rawBlend);
 
-    // Forward only: the dissolve exists to hide the hand-off, and on the way
-    // back there is nothing to dissolve into — the flyer stays solid until it
-    // lands on the card.
-    final dissolve = widget.animation.status == AnimationStatus.reverse
-        ? 0.0
-        : ((e - PeekAnchorMorphTransition.handOffStart) /
-                  (1 - PeekAnchorMorphTransition.handOffStart))
-              .clamp(0.0, 1.0);
-
     return Positioned.fromRect(
       key: const Key('flying-poster-box'),
       rect: frame,
       child: IgnorePointer(
-        child: Opacity(
-          opacity: 1 - dissolve,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.value),
-            child: RepaintBoundary(
-              child: _artwork(
-                blend: blend,
-                destination: destination,
-                wide: widget.originRect.width > widget.originRect.height,
-              ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.value),
+          child: RepaintBoundary(
+            child: _artwork(
+              blend: blend,
+              destination: destination,
+              wide: widget.originRect.width > widget.originRect.height,
             ),
           ),
         ),
