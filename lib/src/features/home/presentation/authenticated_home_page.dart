@@ -929,6 +929,12 @@ class _HomeHeroCarousel extends StatefulWidget {
   State<_HomeHeroCarousel> createState() => _HomeHeroCarouselState();
 }
 
+/// True while the enclosing route is animating, i.e. while a flight is up.
+bool _routeIsMoving(BuildContext context) {
+  final route = ModalRoute.of(context);
+  return route?.animation?.isAnimating ?? false;
+}
+
 class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
   static const _autoAdvanceInterval = Duration(seconds: 6);
   static const int _virtualItemCount = 10000;
@@ -1095,7 +1101,15 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
             : 480.0;
 
         return MouseRegion(
+          // The hover state must not change while a route is in the air. The
+          // route covers the pointer on the way out (exit) and uncovers it on
+          // the way back (enter), and both fire mid-flight: the carousel would
+          // scale its artwork and darken its sides while the poster is still
+          // travelling, which reads as the card jumping under the animation.
+          // Nothing is lost: the next pointer move re-evaluates this once the
+          // transition has settled.
           onEnter: (_) {
+            if (_routeIsMoving(context)) return;
             if (!_hovering) {
               _hovering = true;
               _hoveringNotifier.value = true;
@@ -1103,6 +1117,7 @@ class _HomeHeroCarouselState extends State<_HomeHeroCarousel> {
             _timer?.cancel();
           },
           onExit: (_) {
+            if (_routeIsMoving(context)) return;
             if (_hovering) {
               _hovering = false;
               _hoveringNotifier.value = false;
