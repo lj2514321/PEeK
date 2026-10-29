@@ -598,6 +598,7 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
     Object? originCardToken,
     Rect Function(Size screen)? destination,
     Widget? sharedPoster,
+    Widget? sourceArtwork,
     bool forceTransitionInTest = false,
     super.transitionDuration = const Duration(milliseconds: 360),
     super.reverseTransitionDuration = const Duration(milliseconds: 260),
@@ -644,6 +645,7 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
                    originCardToken ?? PeekMotionOrigin.lastTapCardToken,
                destination: destination ?? (s) => Offset.zero & s,
                poster: sharedPoster,
+               source: sourceArtwork,
                child: child,
              );
            }

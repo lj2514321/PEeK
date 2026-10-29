@@ -10,6 +10,7 @@ import 'package:embyplayer/src/core/domain/media_item.dart';
 import 'package:embyplayer/src/core/domain/playback_plan.dart';
 import 'package:embyplayer/src/core/domain/playback_settings.dart';
 import 'package:embyplayer/src/core/domain/server.dart';
+import 'package:embyplayer/src/core/presentation/peek_media_image.dart';
 import 'package:embyplayer/src/core/presentation/peek_motion.dart';
 import 'package:embyplayer/src/features/dedupe/presentation/media_dedupe_page.dart';
 import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
@@ -60,6 +61,14 @@ abstract final class AppRoutes {
         sharedPoster: item.imageUri == null && item.backdropUri == null
             ? null
             : DetailPosterArt(item: item, decorated: false),
+        sourceArtwork: item.backdropUri == null
+            ? null
+            : DetailPosterArt(
+                item: item,
+                decorated: false,
+                uri: item.backdropUri,
+                kind: PeekMediaImageKind.backdrop,
+              ),
         transitionDuration: const Duration(milliseconds: 440),
         reverseTransitionDuration: const Duration(milliseconds: 300),
         builder: (_) => MediaDetailPage(initialItem: item, account: account),

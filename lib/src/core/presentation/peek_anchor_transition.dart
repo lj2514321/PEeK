@@ -86,6 +86,7 @@ class PeekAnchorMorphTransition extends StatefulWidget {
     required this.destination,
     required this.child,
     this.poster,
+    this.source,
     this.originCardToken,
   });
 
@@ -103,6 +104,12 @@ class PeekAnchorMorphTransition extends StatefulWidget {
 
   /// The card's artwork, normally the destination page's own poster widget.
   final Widget? poster;
+
+  /// The artwork the pressed card was already showing. When the card drew a
+  /// different asset than the page's poster (a 16:9 still), the flight blends
+  /// the two: the source is whole at the start and gone at the end, so neither
+  /// end has to swap the picture in one frame.
+  final Widget? source;
 
   /// Optional identity token of the pressed card so the source grid can hide
   /// the stationary copy while the shared poster is in flight.
@@ -393,6 +400,21 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     );
   }
 
+  /// The flying artwork: the card's own asset on top at the start, the page's
+  /// poster on top at the end.
+  Widget _artwork({required double blend}) {
+    final poster = widget.poster;
+    final source = widget.source;
+    if (source == null || poster == null) return poster ?? source!;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Opacity(opacity: 1 - blend, child: source),
+        Opacity(opacity: blend, child: poster),
+      ],
+    );
+  }
+
   Widget _buildFlyingPoster({required Rect destination, required double e}) {
     // Uniform scale, always. The flyer used to be laid out in a frame that
     // lerped between the card's rectangle and the poster's, and `BoxFit.cover`
@@ -423,6 +445,13 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
       height: destination.height,
     );
 
+    // The artwork the card was showing fades into the page's poster across the
+    // middle of the flight. When both ends are the same picture this does
+    // nothing; when they are different assets (a 16:9 still becoming a poster)
+    // it is the only way neither end has to swap the picture in one frame.
+    final rawBlend = ((e - 0.10) / 0.58).clamp(0.0, 1.0);
+    final blend = rawBlend * rawBlend * (3 - 2 * rawBlend);
+
     // Forward only: the dissolve exists to hide the hand-off, and on the way
     // back there is nothing to dissolve into — the flyer stays solid until it
     // lands on the card.
@@ -446,7 +475,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                 child: SizedBox(
                   width: destination.width,
                   height: destination.height,
-                  child: widget.poster!,
+                  child: _artwork(blend: blend),
                 ),
               ),
             ),

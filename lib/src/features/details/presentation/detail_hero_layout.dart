@@ -84,7 +84,13 @@ class DetailHeroLayout {
 /// the grid used, so the first frame is a synchronous cache hit instead of a
 /// placeholder flash.
 class DetailPosterArt extends StatelessWidget {
-  const DetailPosterArt({super.key, required this.item, this.decorated = true});
+  const DetailPosterArt({
+    super.key,
+    required this.item,
+    this.decorated = true,
+    this.uri,
+    this.kind = PeekMediaImageKind.poster,
+  });
 
   final MediaItem item;
 
@@ -96,6 +102,11 @@ class DetailPosterArt extends StatelessWidget {
   /// started yet. The page keeps them, so they arrive with the hand-off — which
   /// is the frame the page itself becomes visible.
   final bool decorated;
+
+  /// Asset override. The flight starts on the artwork the pressed card was
+  /// drawing, which for 16:9 sources is the backdrop, not the poster.
+  final Uri? uri;
+  final PeekMediaImageKind kind;
 
   @override
   Widget build(BuildContext context) {
@@ -118,9 +129,9 @@ class DetailPosterArt extends StatelessWidget {
               ],
       ),
       child: PeekMediaImage(
-        uri: item.imageUri ?? item.backdropUri,
+        uri: uri ?? item.imageUri ?? item.backdropUri,
         headers: item.imageHeaders,
-        kind: PeekMediaImageKind.poster,
+        kind: kind,
         placeholderIconSize: 58,
         fadeInDuration: Duration.zero,
         fadeOutDuration: Duration.zero,
