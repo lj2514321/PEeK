@@ -59,7 +59,7 @@ abstract final class AppRoutes {
         destination: (screen) => DetailHeroLayout.of(screen).posterRect,
         sharedPoster: item.imageUri == null && item.backdropUri == null
             ? null
-            : DetailPosterArt(item: item),
+            : DetailPosterArt(item: item, decorated: false),
         transitionDuration: const Duration(milliseconds: 440),
         reverseTransitionDuration: const Duration(milliseconds: 300),
         builder: (_) => MediaDetailPage(initialItem: item, account: account),

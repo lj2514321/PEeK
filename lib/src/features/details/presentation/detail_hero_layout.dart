@@ -84,40 +84,53 @@ class DetailHeroLayout {
 /// the grid used, so the first frame is a synchronous cache hit instead of a
 /// placeholder flash.
 class DetailPosterArt extends StatelessWidget {
-  const DetailPosterArt({super.key, required this.item});
+  const DetailPosterArt({super.key, required this.item, this.decorated = true});
 
   final MediaItem item;
 
+  /// Whether to paint the ambient halo and the drop shadow.
+  ///
+  /// The flight turns them off. They are a blurred halo and a 32 px shadow
+  /// behind a poster that is already moving, and painting them in the flight's
+  /// first frame put a 45 ms raster in front of an animation that had not
+  /// started yet. The page keeps them, so they arrive with the hand-off — which
+  /// is the frame the page itself becomes visible.
+  final bool decorated;
+
   @override
   Widget build(BuildContext context) {
+    final art = Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.borderRadius,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.28),
+          width: 1.2,
+        ),
+        boxShadow: !decorated
+            ? null
+            : const [
+                BoxShadow(
+                  color: Color(0x73000000),
+                  blurRadius: 32,
+                  offset: Offset(0, 16),
+                ),
+              ],
+      ),
+      child: PeekMediaImage(
+        uri: item.imageUri ?? item.backdropUri,
+        headers: item.imageHeaders,
+        kind: PeekMediaImageKind.poster,
+        placeholderIconSize: 58,
+        fadeInDuration: Duration.zero,
+        fadeOutDuration: Duration.zero,
+      ),
+    );
+    if (!decorated) return art;
     return PosterAmbientGlow(
       glowColor: const Color(0x454A90E2),
       borderRadius: AppRadius.value,
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: AppRadius.borderRadius,
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.28),
-            width: 1.2,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x73000000),
-              blurRadius: 32,
-              offset: Offset(0, 16),
-            ),
-          ],
-        ),
-        child: PeekMediaImage(
-          uri: item.imageUri ?? item.backdropUri,
-          headers: item.imageHeaders,
-          kind: PeekMediaImageKind.poster,
-          placeholderIconSize: 58,
-          fadeInDuration: Duration.zero,
-          fadeOutDuration: Duration.zero,
-        ),
-      ),
+      child: art,
     );
   }
 }
