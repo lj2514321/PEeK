@@ -1172,29 +1172,54 @@ class _AmbientBloom extends StatelessWidget {
 
   /// The blurred layer is scaled up before it is clipped. A 3-sigma blur fades
   /// to nothing at the edges, and this overscan pushes that fringe well outside
-  /// the viewport; it also lands the on-screen radius near 64px.
+  /// the viewport.
   static const double _overscan = 1.32;
-  static const double _sigma = 48;
+
+  /// How much smaller the wash is computed than it is shown.
+  static const double _downsample = 4;
+
+  /// Blur radius *at the downsampled size*; on screen it reads as
+  /// `_sigma * _downsample * _overscan`, i.e. about 63 px.
+  static const double _sigma = 12;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: Transform.scale(
-        scale: _overscan,
-        child: ImageFiltered(
-          imageFilter: ImageFilter.blur(
-            sigmaX: _sigma,
-            sigmaY: _sigma,
-            tileMode: TileMode.decal,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The wash is computed at 1/4 resolution and blown back up. This layer
+        // is a full-viewport blur, its rasterisation was 45 ms the first time a
+        // page with a new item opened — the one frame every "first open" of a
+        // new title paid — and none of that detail can be seen through the two
+        // veils above it. A quarter-size layer is 16x less pixels, and the
+        // upscale is what the eye reads as the blur anyway.
+        final width = constraints.maxWidth / _downsample;
+        final height = constraints.maxHeight / _downsample;
+        if (width < 1 || height < 1) return const SizedBox.shrink();
+        return ClipRect(
+          child: OverflowBox(
+            minWidth: width,
+            maxWidth: width,
+            minHeight: height,
+            maxHeight: height,
+            child: Transform.scale(
+              scale: _downsample * _overscan,
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(
+                  sigmaX: _sigma,
+                  sigmaY: _sigma,
+                  tileMode: TileMode.decal,
+                ),
+                child: PeekMediaImage(
+                  uri: item.imageUri,
+                  headers: item.imageHeaders,
+                  kind: PeekMediaImageKind.poster,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
           ),
-          child: PeekMediaImage(
-            uri: item.imageUri,
-            headers: item.imageHeaders,
-            kind: PeekMediaImageKind.poster,
-            fit: BoxFit.cover,
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
