@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/domain/media_item.dart';
-import 'package:embyplayer/src/features/details/presentation/media_detail_page.dart';
+import 'package:embyplayer/src/features/details/presentation/detail_hero_layout.dart';
 import 'package:flutter/material.dart';
 
 /// Renders the detail page for an item once, offscreen, as soon as the pointer
@@ -168,25 +168,21 @@ abstract final class PeekDetailPrewarm {
   }
 }
 
-/// The offscreen payload: the real page, painted at rest.
+/// The offscreen payload: the item's poster, drawn once at the size the flight
+/// will draw it.
 ///
-/// It used to replay the whole 200 ms flight offscreen, on the theory that the
-/// first real flight then had every layer compiled. Measured on Windows
-/// (ANGLE/D3D11, 1280x800, profile): that replay cost 205 ms of raster time and
-/// 22 ms of build on the frame it ran — on the user's *hover*, i.e. a freeze the
-/// pointer could not escape — and it was redundant, because
-/// `PeekPipelineExerciser` already drives the anchor transition through its
-/// scales at startup while the splash gate is up.
-///
-/// What is item-specific, and all this stage is responsible for now: this item's
-/// page, its artwork decode and the blurred ambient bloom behind the poster.
+/// Two measurements got us here. A full-page prewarm cost 227 ms in one hover
+/// frame and bought 8 ms on the first flight. Then the first-open spike was
+/// isolated: with the fixtures' artwork removed, a 42.9 ms frame disappears
+/// entirely and only the page's own 22 ms first paint is left. So the expensive
+/// thing is one image drawn at the flight's size, and that — nothing larger — is
+/// what this stage pays for.
 class _PrewarmStage extends StatefulWidget {
   const _PrewarmStage({required this.item, this.onSettled});
 
   final MediaItem item;
 
-  /// Fired after the page has been painted, so the stage can be torn down
-  /// without racing the decode it was there to warm.
+  /// Fired after the poster has been painted, so the stage can be torn down.
   final VoidCallback? onSettled;
 
   @override
@@ -198,7 +194,8 @@ class _PrewarmStageState extends State<_PrewarmStage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Two frames: one to build and paint, one for the artwork decode to land.
+      // A second frame so the artwork decode, if it was still running, lands
+      // before the stage is torn down.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.onSettled?.call();
       });
@@ -207,10 +204,14 @@ class _PrewarmStageState extends State<_PrewarmStage> {
 
   @override
   Widget build(BuildContext context) {
-    return MediaDetailPage(
-      account: null,
-      initialItem: widget.item,
-      isWarmup: true,
+    final width = DetailHeroLayout.of(MediaQuery.sizeOf(context)).posterWidth;
+    return Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(
+        width: width,
+        height: width / DetailHeroLayout.posterAspectRatio,
+        child: DetailPosterArt(item: widget.item, decorated: false),
+      ),
     );
   }
 }
