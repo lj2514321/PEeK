@@ -568,12 +568,18 @@ class _DestinationMotionLayerState extends State<_DestinationMotionLayer>
 /// Aspect ratio of an origin rect, or 0 when it has no height.
 double aspectOf(Rect rect) => rect.height <= 0 ? 0 : rect.width / rect.height;
 
-/// Temporary instrumentation: which transition a route chose and why.
+/// --dart-define=PEEK_MOTION_TRACE=true logs which transition a route chose\n/// and why. Kept because it is what finally located two bugs that reading the\n/// code could not: a card's origin rect replaced by its container's, and a\n/// flight frame that cropped for its whole length.\nconst bool _motionTraceEnabled = bool.fromEnvironment('PEEK_MOTION_TRACE');\n\n/// Which transition a route chose and why.
 ///
 /// Writes to `%LOCALAPPDATA%\PEeK\logs\motion_trace.log` so a report from a
 /// profile build (which has no console) can say exactly which path an open
 /// took, instead of guessing from a description of what it looked like.
+/// `--dart-define=PEEK_MOTION_TRACE=true` turns the transition trace back on.
+const bool _motionTraceEnabled = bool.fromEnvironment('PEEK_MOTION_TRACE');
+
 void peekMotionTrace(String message) {
+  // Off unless asked for: this runs once per frame of every route transition,
+  // and a synchronous append per frame is not something to ship by accident.
+  if (!_motionTraceEnabled) return;
   try {
     final root = Platform.environment['LOCALAPPDATA'];
     if (root == null) return;
