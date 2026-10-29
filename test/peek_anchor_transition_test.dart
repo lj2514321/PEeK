@@ -85,17 +85,17 @@ void main() {
     await tester.pump();
     // Fully faded in by the end of the window, where the layer is dropped
     // entirely rather than kept as an `Opacity(1)`.
-    expect(_pageOpacity(tester), isNull);
+    expect(_pageOpacity(tester), 1.0);
   });
 
-  testWidgets('settling leaves no flight layers behind', (tester) async {
+  testWidgets('settling neutralises every flight layer', (tester) async {
     final controller = await _pump(tester);
 
     controller.value = 1;
     await tester.pump();
 
     expect(find.byKey(const Key('flyer')), findsNothing);
-    expect(_pageOpacity(tester), isNull);
+    expect(_pageOpacity(tester), 1.0);
   });
 
   testWidgets('a page without artwork still fades in', (tester) async {
@@ -330,6 +330,9 @@ RRect? _pageClipRect(WidgetTester tester) {
   );
   if (match.evaluate().isEmpty) return null;
   final clipWidget = tester.widget<ClipRRect>(match.first);
+  // A `Clip.none` layer paints no clip at all, which is how the settled state
+  // stays free while keeping the same widget tree.
+  if (clipWidget.clipBehavior == Clip.none) return null;
   final renderBox = tester.renderObject<RenderBox>(match.first);
   return clipWidget.clipper?.getClip(renderBox.size);
 }

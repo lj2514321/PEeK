@@ -222,10 +222,12 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
               widget.secondaryAnimation.value.clamp(0.0, 1.0),
             );
 
-            // Settled and nothing on top: hand the page back with no extra
-            // layers, so the steady state costs what it did before.
-            if (raw >= 0.999 && recess <= 0.001) return child!;
-
+            // Settled and nothing on top: every layer below is already a no-op
+            // by value (opacity 1 skips its save layer, `Clip.none` skips the
+            // clip, a transparent scrim paints nothing), so the shape is kept.
+            // It used to return the bare child here, and that changed the
+            // widget type at this position — which re-inflates the whole detail
+            // page at hand-off, measured as a 19 ms build frame on every open.
             final isReverse =
                 widget.animation.status == AnimationStatus.reverse;
             final e = isReverse
@@ -262,12 +264,14 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                 children: [
                   if (e < 0.999)
                     IgnorePointer(
+                      key: const ValueKey('anchor-scrim'),
                       child: ColoredBox(
                         color: Colors.black.withValues(alpha: 0.44 * e),
                       ),
                     ),
                   if (e < 0.85)
                     Positioned.fromRect(
+                      key: const ValueKey('anchor-shadow'),
                       rect: currentRect,
                       child: IgnorePointer(
                         child: DecoratedBox(
@@ -287,9 +291,10 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                         ),
                       ),
                     ),
-                  page,
+                  KeyedSubtree(key: const ValueKey('anchor-page'), child: page),
                   if (e < 0.85)
                     Positioned.fromRect(
+                      key: const ValueKey('anchor-border'),
                       rect: currentRect,
                       child: IgnorePointer(
                         child: DecoratedBox(
@@ -311,7 +316,8 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
               ),
             );
 
-            if (recess <= 0.001) return content;
+            // Always the same shape. A transparent scrim and a `Transform` at
+            // scale 1 cost nothing; a missing child costs the page its element.
             return Stack(
               fit: StackFit.expand,
               children: [
@@ -348,23 +354,22 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     final fadeEnd = isReverse ? 0.42 : PeekAnchorMorphTransition.pageFadeEnd;
     final t = ((raw - fadeStart) / (fadeEnd - fadeStart)).clamp(0.0, 1.0);
     final opacity = t * t * (3 - 2 * t);
-    final fadedChild = opacity >= 0.999
-        ? child
-        : Opacity(opacity: opacity, child: child);
 
-    if (e >= 0.999) return fadedChild;
-
+    // Same shape at every value: `Opacity(1)` and `Clip.none` are free, while
+    // swapping this subtree for the bare child re-inflated the page — the whole
+    // detail page, measured at 19 ms — on the frame the flight landed.
     return ClipRRect(
       clipper: _AnchorContainerClipper(
         origin: widget.originRect,
         progress: e,
         radius: radius,
       ),
+      clipBehavior: e >= 0.999 ? Clip.none : Clip.antiAlias,
       child: Stack(
         fit: StackFit.expand,
         children: [
           const ColoredBox(color: Color(0xFF0A0E17)),
-          fadedChild,
+          Opacity(opacity: opacity, child: child),
         ],
       ),
     );
