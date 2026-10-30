@@ -11,6 +11,7 @@ import 'package:embyplayer/src/features/dedupe/data/duplicate_detector_service.d
 import 'package:embyplayer/src/features/dedupe/data/duplicate_ignored_store.dart';
 import 'package:embyplayer/src/features/dedupe/domain/duplicate_media_group.dart';
 import 'package:embyplayer/src/app/app_routes.dart';
+import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
 import 'package:flutter/material.dart';
@@ -420,6 +421,21 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
           .read(playbackPreparationProvider)
           .prepare(widget.account, item);
       if (!mounted) return;
+      if (prepared.settings.useExternalPlayer) {
+        final service = ref.read(externalPlayerServiceProvider);
+        final launched = await service.launch(
+          prepared.plan,
+          executablePath: prepared.settings.externalPlayerPath,
+          title: prepared.item.name,
+        );
+        if (!mounted) return;
+        if (launched) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已在外部播放器中启动《${prepared.item.name}》')),
+          );
+          return;
+        }
+      }
       await AppRoutes.openPlayback(
         context,
         account: widget.account,

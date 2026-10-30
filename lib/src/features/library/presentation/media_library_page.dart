@@ -14,6 +14,7 @@ import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/app/peek_detail_prewarm.dart';
 import 'package:embyplayer/src/features/local_library/data/local_media_library_service.dart';
 import 'package:embyplayer/src/features/local_library/domain/local_media_library.dart';
+import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/player/domain/playback_queue.dart';
 import 'package:embyplayer/src/features/player/presentation/global_playback_coordinator.dart';
 import 'package:embyplayer/src/features/servers/data/media_library_service.dart';
@@ -1115,6 +1116,26 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       final queue = PlaybackQueue(items: playableItems, currentIndex: 0);
 
       _exitSelectionMode();
+
+      if (prepared.settings.useExternalPlayer) {
+        final service = ref.read(externalPlayerServiceProvider);
+        final launched = await service.launch(
+          prepared.plan,
+          executablePath: prepared.settings.externalPlayerPath,
+          title: prepared.item.name,
+        );
+        if (!mounted) return;
+        if (launched) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已在外部播放器中启动《${prepared.item.name}》')),
+          );
+          return;
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('未能唤起外部播放器，正在回退到内置播放器...')),
+          );
+        }
+      }
 
       await AppRoutes.openPlayback(
         context,

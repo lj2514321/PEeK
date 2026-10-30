@@ -83,7 +83,7 @@ void main() {
     });
 
     test(
-      'buildPotPlayerArgs places switches before targetUrl and formats headers',
+      'buildPotPlayerArgs places targetUrl first and formats spaceless switches',
       () {
         const service = ExternalPlayerService();
         const targetUrl =
@@ -100,25 +100,43 @@ void main() {
           subtitleUri: Uri.parse('http://127.0.0.1:8096/subtitles.vtt'),
         );
 
-        // Target URL must be the very last argument
-        expect(args.last, targetUrl);
+        // Per PotPlayer CmdLine64.txt ("PotPlayerMini64.exe ["content"] [/switch]"),
+        // targetUrl must be the first argument.
+        expect(args.first, targetUrl);
 
-        // Switches must be present
+        // Switches must be present and free of whitespace/newlines so Windows
+        // Process.start does not wrap them in outer quotes (which PotPlayer's
+        // playlist parser treats as media files in PotPlayerMini64.dpl).
         expect(args, contains('/seek=00:01:30'));
-        // PotPlayer does not support /title= switch
         expect(args.any((a) => a.startsWith('/title=')), isFalse);
         expect(args, contains('/user_agent=PEeK/1.0.0'));
         expect(args, contains('/referer=http://127.0.0.1:8096/'));
         expect(args, contains('/sub=http://127.0.0.1:8096/subtitles.vtt'));
+        expect(args, contains('/headers=X-Emby-Token:test_token_abc'));
+        for (final sw in args.skip(1)) {
+          expect(sw.contains(RegExp(r'\s')), isFalse);
+        }
+      },
+    );
 
-        final headersArg = args.firstWhere((a) => a.startsWith('/headers='));
-        expect(headersArg, contains('X-Emby-Token: test_token_abc'));
-        expect(headersArg, contains('X-MediaBrowser-Token: test_token_abc'));
-        expect(
-          headersArg,
-          contains('Authorization: MediaBrowser Token=test_token_abc'),
+    test(
+      'buildPotPlayerArgs omits User-Agent with spaces to prevent quote-merging URL corruption',
+      () {
+        const service = ExternalPlayerService();
+        const targetUrl =
+            'http://127.0.0.1:8096/Videos/item123/stream.mp4?Static=true';
+        final args = service.buildPotPlayerArgs(
+          targetUrl: targetUrl,
+          httpHeaders: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'X-Emby-Token': 'test_token_abc',
+          },
+          streamUri: Uri.parse(targetUrl),
         );
-        expect(headersArg, contains('\r\n'));
+
+        expect(args.first, targetUrl);
+        expect(args.any((a) => a.startsWith('/user_agent=')), isFalse);
+        expect(args, contains('/headers=X-Emby-Token:test_token_abc'));
       },
     );
 

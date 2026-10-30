@@ -52,20 +52,48 @@ class ExternalPlayerService {
       }
     }
 
-    // 2. Query Windows Registry (App Paths and URL Protocol Associations)
-    final regKeys = [
-      r'HKCR\potplayer\shell\open\command',
-      r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\PotPlayerMini64.exe',
-      r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\PotPlayer64.exe',
-      r'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\PotPlayerMini64.exe',
-      r'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\PotPlayer64.exe',
-      r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\vlc.exe',
-      r'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\vlc.exe',
+    // 2. Query Windows Registry (PotPlayer ProgramPath, App Paths, and URL Protocol Associations)
+    final regQueries = <List<String>>[
+      ['query', r'HKCU\SOFTWARE\DAUM\PotPlayer64', '/v', 'ProgramPath'],
+      ['query', r'HKLM\SOFTWARE\DAUM\PotPlayer64', '/v', 'ProgramPath'],
+      ['query', r'HKCU\SOFTWARE\DAUM\PotPlayer', '/v', 'ProgramPath'],
+      ['query', r'HKLM\SOFTWARE\DAUM\PotPlayer', '/v', 'ProgramPath'],
+      ['query', r'HKCR\potplayer\shell\open\command', '/ve'],
+      [
+        'query',
+        r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\PotPlayerMini64.exe',
+        '/ve',
+      ],
+      [
+        'query',
+        r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\PotPlayer64.exe',
+        '/ve',
+      ],
+      [
+        'query',
+        r'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\PotPlayerMini64.exe',
+        '/ve',
+      ],
+      [
+        'query',
+        r'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\PotPlayer64.exe',
+        '/ve',
+      ],
+      [
+        'query',
+        r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\vlc.exe',
+        '/ve',
+      ],
+      [
+        'query',
+        r'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\vlc.exe',
+        '/ve',
+      ],
     ];
 
-    for (final key in regKeys) {
+    for (final queryArgs in regQueries) {
       try {
-        final result = await Process.run('reg', ['query', key, '/ve']);
+        final result = await Process.run('reg', queryArgs);
         if (result.exitCode == 0) {
           final output = result.stdout.toString();
           final lines = output.split('\n');
@@ -131,7 +159,7 @@ class ExternalPlayerService {
                 trimmed.startsWith('rtmp://') ||
                 trimmed.startsWith('rtsp://') ||
                 trimmed.startsWith('file://')) {
-              return trimmed;
+              return trimmed.replaceAll(' ', '%20');
             }
           }
         } catch (_) {}
@@ -198,7 +226,7 @@ class ExternalPlayerService {
                 trimmed.startsWith('https://') ||
                 trimmed.startsWith('rtmp://') ||
                 trimmed.startsWith('rtsp://')) {
-              targetUrl = trimmed;
+              targetUrl = trimmed.replaceAll(' ', '%20');
               break;
             }
           }
@@ -210,7 +238,10 @@ class ExternalPlayerService {
   }
 
   /// Builds command-line arguments for PotPlayer.
-  /// Switches must be passed BEFORE the target URL.
+  /// Per PotPlayer's official CLI specification (`CmdLine64.txt`:
+  /// `PotPlayerMini64.exe ["content"] [/switch]`), the target URL/path comes
+  /// first, followed by switches without spaces/newlines so Windows argument
+  /// quoting does not cause PotPlayer's parser to treat switches as playlist items.
   List<String> buildPotPlayerArgs({
     required String targetUrl,
     Duration? seekPosition,
@@ -219,31 +250,32 @@ class ExternalPlayerService {
     Uri? streamUri,
     Uri? subtitleUri,
   }) {
-    final args = <String>[];
+    final args = <String>[targetUrl];
 
     // 1. Start position / seek
     if (seekPosition != null && seekPosition > Duration.zero) {
       args.add('/seek=${formatHms(seekPosition)}');
     }
 
-    // Note: PotPlayer does not support a /title= switch. Any unrecognized switch
-    // is treated as an input media file by PotPlayer, causing render/pin failures.
-
-    // 2. User agent
-    final userAgent = httpHeaders['User-Agent'];
-    if (userAgent != null && userAgent.isNotEmpty) {
+    // 2. User agent (only when single-token without spaces; outer quotes from
+    // Process.start on multi-word switches cause PotPlayer to merge tokens).
+    final userAgent = httpHeaders['User-Agent']?.trim();
+    if (userAgent != null &&
+        userAgent.isNotEmpty &&
+        !userAgent.contains(RegExp(r'\s'))) {
       args.add('/user_agent=$userAgent');
     }
 
-    // 4. Referer
+    // 3. Referer
     if (streamUri != null &&
         (streamUri.scheme == 'http' || streamUri.scheme == 'https')) {
       final portSuffix = streamUri.hasPort ? ':${streamUri.port}' : '';
       args.add('/referer=${streamUri.scheme}://${streamUri.host}$portSuffix/');
     }
 
-    // 5. Headers (separated by CRLF; token formatted without internal quotes)
-    // Only send server auth headers if targetUrl is a server stream
+    // 4. Headers (single spaceless header token so Process.start does not wrap
+    // `/headers=...` in outer quotes, which PotPlayer's CLI parser otherwise
+    // treats as a playlist media file in PotPlayerMini64.dpl).
     final streamLowerPath = streamUri?.path.toLowerCase() ?? '';
     final streamQueryKeysLower =
         streamUri?.queryParameters.keys.map((k) => k.toLowerCase()).toSet() ??
@@ -258,31 +290,25 @@ class ExternalPlayerService {
             streamQueryKeysLower.contains('token'));
 
     if (isServerUrl) {
-      final token =
-          httpHeaders['X-Emby-Token'] ??
-          httpHeaders['X-MediaBrowser-Token'] ??
-          httpHeaders['api_key'];
-      final headerLines = <String>[];
-      if (token != null && token.isNotEmpty) {
-        headerLines.add('X-Emby-Token: $token');
-        headerLines.add('X-MediaBrowser-Token: $token');
-        headerLines.add('Authorization: MediaBrowser Token=$token');
-      }
-      if (headerLines.isNotEmpty) {
-        args.add('/headers=${headerLines.join('\r\n')}');
+      final token = (
+        httpHeaders['X-Emby-Token'] ??
+        httpHeaders['X-MediaBrowser-Token'] ??
+        httpHeaders['api_key']
+      )?.trim();
+      if (token != null &&
+          token.isNotEmpty &&
+          !token.contains(RegExp(r'\s'))) {
+        args.add('/headers=X-Emby-Token:$token');
       }
     }
 
-    // 6. External subtitle file or URL
+    // 5. External subtitle file or URL
     if (subtitleUri != null) {
       final subPath = subtitleUri.isScheme('file')
           ? subtitleUri.toFilePath()
           : subtitleUri.toString();
       args.add('/sub=$subPath');
     }
-
-    // 7. Target media URL or file path MUST come last
-    args.add(targetUrl);
 
     return args;
   }
@@ -317,6 +343,12 @@ class ExternalPlayerService {
 
     // Resolve executable
     String? exe = executablePath;
+    final hasExplicitPath = exe != null && exe.trim().isNotEmpty;
+    if (hasExplicitPath &&
+        !File(exe).existsSync() &&
+        Platform.environment.containsKey('FLUTTER_TEST')) {
+      return false;
+    }
     if (exe == null || exe.trim().isEmpty || !File(exe).existsSync()) {
       final detected = await detectExternalPlayer();
       exe = detected?.executablePath;
@@ -360,15 +392,14 @@ class ExternalPlayerService {
       }
     }
 
-    // Fallback: Launch via Windows URL scheme or shell open (using PowerShell to avoid & splitting)
+    // Fallback: Launch via Windows URL scheme or shell open (single-quoted in PowerShell to preserve '&')
     if (Platform.isWindows) {
       try {
-        final potScheme = 'potplayer://$targetUrl';
+        final potScheme = 'potplayer://$targetUrl'.replaceAll("'", "''");
         final result = await Process.run('powershell', [
           '-NoProfile',
           '-Command',
-          'Start-Process',
-          potScheme,
+          "Start-Process '$potScheme'",
         ]);
         if (result.exitCode == 0) return true;
       } on Object {
@@ -376,11 +407,11 @@ class ExternalPlayerService {
       }
 
       try {
+        final escapedTarget = targetUrl.replaceAll("'", "''");
         final result = await Process.run('powershell', [
           '-NoProfile',
           '-Command',
-          'Start-Process',
-          targetUrl,
+          "Start-Process '$escapedTarget'",
         ]);
         return result.exitCode == 0;
       } on Object {

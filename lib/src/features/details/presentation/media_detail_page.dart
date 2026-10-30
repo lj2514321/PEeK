@@ -314,20 +314,40 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
     bool fromBeginning = false,
     bool? forceExternalPlayer,
   }) async {
+    var resolvedTarget = targetItem;
+    if ((resolvedTarget.kind == MediaItemKind.series ||
+            resolvedTarget.kind == MediaItemKind.season) &&
+        _episodes.isNotEmpty) {
+      final seasonEpisodes =
+          _seasonEpisodeMap[_selectedSeasonNumber] ?? _episodes;
+      if (fromBeginning) {
+        resolvedTarget = seasonEpisodes.isNotEmpty
+            ? seasonEpisodes.first
+            : _episodes.first;
+      } else {
+        resolvedTarget =
+            _episodes
+                .where((ep) => ep.resumePosition > Duration.zero)
+                .firstOrNull ??
+            seasonEpisodes.where((ep) => !ep.played).firstOrNull ??
+            _episodes.where((ep) => !ep.played).firstOrNull ??
+            (seasonEpisodes.isNotEmpty ? seasonEpisodes.first : _episodes.first);
+      }
+    }
     setState(() {
       _planningPlayback = true;
-      _planningEpisodeId = targetItem.id;
+      _planningEpisodeId = resolvedTarget.id;
       _playbackError = null;
     });
     try {
       final coordinator = ref.read(globalPlaybackCoordinatorProvider.notifier);
       final livePos = fromBeginning
           ? Duration.zero
-          : coordinator.getEffectivePosition(targetItem.id);
+          : coordinator.getEffectivePosition(resolvedTarget.id);
       final effectiveTarget =
-          (livePos != null && livePos > targetItem.resumePosition)
-          ? targetItem.copyWith(resumePosition: livePos)
-          : targetItem;
+          (livePos != null && livePos > resolvedTarget.resumePosition)
+          ? resolvedTarget.copyWith(resumePosition: livePos)
+          : resolvedTarget;
       final prepared = await ref
           .read(playbackPreparationProvider)
           .prepare(
@@ -335,7 +355,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
             effectiveTarget,
             fromBeginning: fromBeginning,
             startPosition: livePos,
-            mediaSourceId: targetItem.id == _item.id
+            mediaSourceId: resolvedTarget.id == _item.id
                 ? _selectedMediaSourceId
                 : null,
           );
@@ -349,14 +369,14 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
           prepared.plan,
           executablePath: prepared.settings.externalPlayerPath,
           seekPosition: fromBeginning ? Duration.zero : null,
-          title: targetItem.name,
+          title: prepared.item.name,
         );
         if (!mounted) return;
         if (launched) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已在外部播放器中启动《${targetItem.name}》')),
+            SnackBar(content: Text('已在外部播放器中启动《${prepared.item.name}》')),
           );
-          if (!targetItem.isLocal) await _loadDetails(forceRefresh: true);
+          if (!prepared.item.isLocal) await _loadDetails(forceRefresh: true);
           return;
         } else {
           ScaffoldMessenger.of(context).showSnackBar(

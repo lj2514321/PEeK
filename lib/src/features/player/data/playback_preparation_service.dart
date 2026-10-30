@@ -101,16 +101,64 @@ class PlaybackPreparationService {
     if (account == null) {
       throw const PlaybackServiceException('请先登录媒体服务器。');
     }
-    final queueFuture = _buildQueue(account, item);
+
+    var targetItem = item;
+    var effectiveResumeAt = resumeAt;
+    var effectiveStartPosition = startPosition;
+    List<MediaItem>? preloadedEpisodes;
+
+    if (targetItem.kind == MediaItemKind.series ||
+        targetItem.kind == MediaItemKind.season) {
+      final seriesId = targetItem.seriesId ?? targetItem.id;
+      final episodes = await _library.getEpisodesForSeries(
+        account,
+        seriesId: seriesId,
+      );
+      if (episodes.isEmpty) {
+        throw const PlaybackServiceException('该剧集暂无可播放的分集。');
+      }
+      preloadedEpisodes = episodes;
+      final seasonFiltered =
+          targetItem.kind == MediaItemKind.season &&
+              targetItem.indexNumber != null
+          ? episodes
+                .where((ep) => ep.parentIndexNumber == targetItem.indexNumber)
+                .toList(growable: false)
+          : const <MediaItem>[];
+      final candidates = seasonFiltered.isNotEmpty ? seasonFiltered : episodes;
+      if (fromBeginning) {
+        targetItem = candidates.first;
+        effectiveResumeAt = Duration.zero;
+        effectiveStartPosition = Duration.zero;
+      } else {
+        targetItem =
+            candidates
+                .where((ep) => ep.resumePosition > Duration.zero)
+                .firstOrNull ??
+            candidates.where((ep) => !ep.played).firstOrNull ??
+            candidates.first;
+        effectiveResumeAt = targetItem.resumePosition;
+        effectiveStartPosition = targetItem.resumePosition;
+      }
+    }
+
+    final queueFuture = preloadedEpisodes != null
+        ? Future.value(
+            PlaybackQueue.fromEpisodes(
+              current: targetItem,
+              episodes: preloadedEpisodes,
+            ),
+          )
+        : _buildQueue(account, targetItem);
     final settingsFuture = _readSettings();
     final plan = await _playback.createPlan(
       account,
-      item,
-      startPosition: fromBeginning ? Duration.zero : startPosition,
-      mediaSourceId: mediaSourceId,
+      targetItem,
+      startPosition: fromBeginning ? Duration.zero : effectiveStartPosition,
+      mediaSourceId: targetItem.id == item.id ? mediaSourceId : null,
     );
     return PreparedPlayback(
-      item: item.copyWith(resumePosition: resumeAt),
+      item: targetItem.copyWith(resumePosition: effectiveResumeAt),
       plan: plan,
       settings: await settingsFuture,
       queue: await queueFuture,
