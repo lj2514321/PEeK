@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/app/glass.dart';
@@ -506,9 +507,41 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       );
     }
 
-    final horizontalPadding = MediaQuery.sizeOf(context).width < 720
-        ? 20.0
-        : 32.0;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final horizontalPadding = screenWidth < 720 ? 20.0 : 32.0;
+    const maxContentWidth = 1440.0;
+    final horizontalMargin = math.max(
+      horizontalPadding,
+      (screenWidth - maxContentWidth) / 2.0,
+    );
+
+    final effectiveGridWidth =
+        math.max(300.0, screenWidth.clamp(0.0, maxContentWidth) - horizontalMargin * 2);
+    final baseColumns = switch (effectiveGridWidth) {
+      < 440 => 2,
+      < 660 => 3,
+      < 900 => 4,
+      < 1140 => 5,
+      < 1400 => 6,
+      _ => 7,
+    };
+    final densityOffset = switch (_density) {
+      MediaGridDensity.spacious => -1,
+      MediaGridDensity.standard => 0,
+      MediaGridDensity.compact => 1,
+    };
+    final columns = (baseColumns + densityOffset).clamp(2, 8);
+    final spacing = switch (_density) {
+      MediaGridDensity.spacious => 18.0,
+      MediaGridDensity.standard => 14.0,
+      MediaGridDensity.compact => 10.0,
+    };
+    final childAspectRatio = switch (_density) {
+      MediaGridDensity.spacious => 0.61,
+      MediaGridDensity.standard => 0.63,
+      MediaGridDensity.compact => 0.65,
+    };
+
     final selectedItems = _items
         .where((item) => _selectedIds.contains(item.id))
         .toList(growable: false);
@@ -522,22 +555,19 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         children: [
           PeekSmoothScroll(
             controller: _scrollController,
-            child: SingleChildScrollView(
-              key: PageStorageKey(
-                'media-library-scroll-${_selectedLibrary?.id ?? 'root'}-${_path.map((e) => e.id).join('/')}',
-              ),
+            child: CustomScrollView(
+              key: const PageStorageKey('media-library-scroll-view'),
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                28,
-                horizontalPadding,
-                _selectionMode ? 120 : 48,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1280),
-                  child: RepaintBoundary(
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalMargin,
+                    28,
+                    horizontalMargin,
+                    _items.isEmpty ? (_selectionMode ? 120 : 48) : 18,
+                  ),
+                  sliver: SliverToBoxAdapter(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -604,17 +634,19 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                             onDedupePressed: _openDedupePage,
                             onSelectPressed: _enterSelectionMode,
                           ),
-                          const SizedBox(height: 18),
-                          if (_error != null)
+                          if (_error != null) ...[
+                            const SizedBox(height: 18),
                             _InlineLibraryError(
                               message: _error!,
                               onRetry: _path.isEmpty
                                   ? _loadCatalog
                                   : () => _reloadCurrentNode(),
-                            )
-                          else if (_loadingItems || _loadingCatalog)
-                            const _ItemsLoadingGrid()
-                          else if (_items.isEmpty)
+                            ),
+                          ] else if (_loadingItems || _loadingCatalog) ...[
+                            const SizedBox(height: 18),
+                            const _ItemsLoadingGrid(),
+                          ] else if (_items.isEmpty) ...[
+                            const SizedBox(height: 18),
                             _EmptyLibrary(
                               filtered: _activeFilterCount > 0,
                               onClearFilters: _activeFilterCount > 0
@@ -634,27 +666,6 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                                       await _reloadCurrentNode();
                                     }
                                   : null,
-                            )
-                          else ...[
-                            _MediaGrid(
-                              generation: _requestGeneration,
-                              items: _items,
-                              density: _density,
-                              selectionMode: _selectionMode,
-                              selectedIds: _selectedIds,
-                              onOpen: _openItem,
-                              onToggleSelection: _toggleSelection,
-                              onEnterSelection: _enterSelectionMode,
-                              onDelete: _deleteItemDirect,
-                              selectionAvailable: true,
-                            ),
-                            _PaginationFooter(
-                              loadedCount: _items.length,
-                              totalCount: _totalItemCount,
-                              hasMore: _nextStartIndex < _totalItemCount,
-                              loading: _loadingMore,
-                              error: _paginationError,
-                              onLoadMore: _loadMore,
                             ),
                           ],
                         ],
@@ -662,7 +673,63 @@ class MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                     ),
                   ),
                 ),
-              ),
+                if (_libraries.isNotEmpty &&
+                    _error == null &&
+                    !_loadingItems &&
+                    !_loadingCatalog &&
+                    _items.isNotEmpty) ...[
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: horizontalMargin),
+                    sliver: SliverGrid(
+                      key: ValueKey('media-library-grid-${_density.name}-$columns'),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: spacing,
+                        mainAxisSpacing: spacing + 6,
+                        childAspectRatio: childAspectRatio,
+                      ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final item = _items[index];
+                        return PeekStaggeredGridItem(
+                          key: ValueKey(
+                            'lib-item-${_density.name}-$_requestGeneration-$index-${item.id}',
+                          ),
+                          index: index,
+                          columns: columns,
+                          child: _MediaCard(
+                            item: item,
+                            selectionMode: _selectionMode,
+                            selected: _selectedIds.contains(item.id),
+                            onOpen: () => _openItem(item),
+                            onToggleSelection: () => _toggleSelection(item.id),
+                            onEnterSelection: () =>
+                                _enterSelectionMode(item.id),
+                            onDelete: () => _deleteItemDirect(item),
+                          ),
+                        );
+                      }, childCount: _items.length),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalMargin,
+                      18,
+                      horizontalMargin,
+                      _selectionMode ? 120 : 48,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: _PaginationFooter(
+                        loadedCount: _items.length,
+                        totalCount: _totalItemCount,
+                        hasMore: _nextStartIndex < _totalItemCount,
+                        loading: _loadingMore,
+                        error: _paginationError,
+                        onLoadMore: _loadMore,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           // Floating sticky action bar at the bottom of the screen
@@ -1477,20 +1544,36 @@ class _DensityButton extends StatelessWidget {
       selected: selected,
       button: true,
       label: tooltip,
-      child: IconButton(
-        tooltip: tooltip,
-        onPressed: onPressed,
-        visualDensity: VisualDensity.compact,
-        style: IconButton.styleFrom(
-          minimumSize: const Size.square(44),
-          backgroundColor: selected
-              ? AppColors.spotlight.withValues(alpha: 0.16)
-              : Colors.transparent,
-          foregroundColor: selected
-              ? AppColors.spotlight
-              : AppColors.textSecondary,
+      child: Tooltip(
+        message: tooltip,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.spotlight.withValues(alpha: 0.22)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: selected
+                  ? AppColors.spotlight.withValues(alpha: 0.55)
+                  : Colors.transparent,
+              width: 1.1,
+            ),
+          ),
+          child: IconButton(
+            onPressed: onPressed,
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              minimumSize: const Size.square(38),
+              backgroundColor: Colors.transparent,
+              foregroundColor: selected
+                  ? AppColors.spotlight
+                  : AppColors.textSecondary,
+            ),
+            icon: Icon(icon, size: 19),
+          ),
         ),
-        icon: Icon(icon, size: 18),
       ),
     );
   }
@@ -2079,86 +2162,6 @@ class _LibraryIcon extends StatelessWidget {
             : AppColors.textTertiary,
         placeholderIconSize: 22,
       ),
-    );
-  }
-}
-
-class _MediaGrid extends StatelessWidget {
-  const _MediaGrid({
-    required this.generation,
-    required this.items,
-    required this.density,
-    required this.selectionMode,
-    required this.selectedIds,
-    required this.onOpen,
-    required this.onToggleSelection,
-    required this.onEnterSelection,
-    this.onDelete,
-    this.selectionAvailable = true,
-  });
-
-  final int generation;
-  final List<MediaItem> items;
-  final MediaGridDensity density;
-  final bool selectionMode;
-  final Set<String> selectedIds;
-  final ValueChanged<MediaItem> onOpen;
-  final ValueChanged<String> onToggleSelection;
-  final ValueChanged<String> onEnterSelection;
-  final ValueChanged<MediaItem>? onDelete;
-  final bool selectionAvailable;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final baseColumns = switch (constraints.maxWidth) {
-          < 520 => 2,
-          < 780 => 3,
-          < 1040 => 4,
-          < 1240 => 5,
-          _ => 6,
-        };
-        final densityOffset = switch (density) {
-          MediaGridDensity.spacious => -1,
-          MediaGridDensity.standard => 0,
-          MediaGridDensity.compact => 1,
-        };
-        final columns = (baseColumns + densityOffset).clamp(2, 7);
-        final spacing = switch (density) {
-          MediaGridDensity.spacious => 18.0,
-          MediaGridDensity.standard => 14.0,
-          MediaGridDensity.compact => 10.0,
-        };
-        return GridView.builder(
-          primary: false,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: items.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: spacing,
-            mainAxisSpacing: spacing + 6,
-            childAspectRatio: density == MediaGridDensity.compact ? 0.64 : 0.62,
-          ),
-          itemBuilder: (context, index) => PeekStaggeredGridItem(
-            key: ValueKey('lib-stagger-$generation-$index-${items[index].id}'),
-            index: index,
-            columns: columns,
-            child: _MediaCard(
-              item: items[index],
-              selectionMode: selectionMode,
-              selected: selectedIds.contains(items[index].id),
-              onOpen: () => onOpen(items[index]),
-              onToggleSelection: () => onToggleSelection(items[index].id),
-              onEnterSelection: selectionAvailable
-                  ? () => onEnterSelection(items[index].id)
-                  : null,
-              onDelete: onDelete != null ? () => onDelete!(items[index]) : null,
-            ),
-          ),
-        );
-      },
     );
   }
 }

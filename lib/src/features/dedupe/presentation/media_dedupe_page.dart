@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:embyplayer/src/app/app_chrome.dart';
 import 'package:embyplayer/src/app/glass.dart';
 import 'package:embyplayer/src/app/theme.dart';
 import 'package:embyplayer/src/core/network/network_providers.dart';
@@ -14,6 +15,7 @@ import 'package:embyplayer/src/app/app_routes.dart';
 import 'package:embyplayer/src/features/player/data/external_player_service.dart';
 import 'package:embyplayer/src/features/servers/domain/media_item.dart';
 import 'package:embyplayer/src/features/servers/domain/server.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -494,7 +496,7 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
             children: [
               _buildHeader(context),
               _buildMetricBar(filteredGroups.length, formattedSavings),
-              _buildFilterChips(),
+              _buildToolbar(context),
               Expanded(
                 child: _scanning
                     ? Center(
@@ -563,8 +565,12 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final rightPadding = defaultTargetPlatform == TargetPlatform.windows
+        ? AppChrome.windowControlsWidth + 16.0
+        : 28.0;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
+      padding: EdgeInsets.fromLTRB(28, 20, rightPadding, 12),
       child: Row(
         children: [
           IconButton(
@@ -573,56 +579,34 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
             icon: const Icon(Icons.arrow_back_rounded),
           ),
           const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.libraryName != null
-                    ? '媒体库查重与智能去重 · ${widget.libraryName}'
-                    : '媒体库查重与智能去重',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.libraryName != null
+                      ? '媒体库查重与智能去重 · ${widget.libraryName}'
+                      : '媒体库查重与智能去重',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              const Text(
-                '基于 TMDb 元数据、封面海报、同名演职员、片长及识别码，多维聚类识别冗余文件',
-                style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
-              ),
-            ],
-          ),
-          const Spacer(),
-          if (_totalSelectedDeleteCount > 0) ...[
-            TextButton(
-              onPressed: _clearAllDeleteSelection,
-              child: const Text('取消全选'),
+                const SizedBox(height: 3),
+                const Text(
+                  '基于 TMDb 元数据、封面海报、同名演职员、片长及识别码，多维聚类识别冗余文件',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-          ],
-          OutlinedButton.icon(
-            key: const ValueKey('dedupe-smart-preselect-btn'),
-            onPressed: _scanning || _groups.isEmpty
-                ? null
-                : _selectAllRecommendedDelete,
-            icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-            label: const Text('一键预选冗余'),
           ),
-          const SizedBox(width: 10),
-          FilledButton.icon(
-            key: const ValueKey('dedupe-batch-delete-btn'),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: _scanning || _totalSelectedDeleteCount == 0
-                ? null
-                : _batchDeleteSelected,
-            icon: const Icon(Icons.delete_sweep_rounded, size: 16),
-            label: Text('批量清理 ($_totalSelectedDeleteCount 项)'),
-          ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 16),
           FilledButton.icon(
             onPressed: _scanning ? null : _initAndScan,
             icon: const Icon(Icons.refresh_rounded, size: 18),
@@ -634,42 +618,77 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
   }
 
   Widget _buildMetricBar(int groupCount, String formattedSavings) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 4, 28, 14),
-      child: Row(
-        children: [
-          _buildMetricCard(
-            title: '已扫描条目',
-            value: '$_scannedItemCount 项',
-            icon: Icons.movie_filter_outlined,
-            color: AppColors.indigo,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 860;
+        final card1 = _buildMetricCard(
+          title: '已扫描条目',
+          value: '$_scannedItemCount 项',
+          icon: Icons.movie_filter_outlined,
+          color: AppColors.indigo,
+        );
+        final card2 = _buildMetricCard(
+          title: '发现重复组',
+          value: '$groupCount 组',
+          icon: Icons.difference_rounded,
+          color: AppColors.spotlight,
+        );
+        final card3 = _buildMetricCard(
+          title: '预估可释放空间',
+          value: formattedSavings,
+          icon: Icons.cleaning_services_rounded,
+          color: AppColors.success,
+        );
+        final card4 = _buildMetricCard(
+          title: '已选待清理',
+          value:
+              '$_totalSelectedDeleteCount 项 · $_formattedSelectedDeleteBytes',
+          icon: Icons.delete_sweep_rounded,
+          color: _totalSelectedDeleteCount > 0
+              ? AppColors.error
+              : AppColors.textTertiary,
+        );
+
+        if (isCompact) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(28, 4, 28, 14),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: card1),
+                    const SizedBox(width: 14),
+                    Expanded(child: card2),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: card3),
+                    const SizedBox(width: 14),
+                    Expanded(child: card4),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(28, 4, 28, 14),
+          child: Row(
+            children: [
+              Expanded(child: card1),
+              const SizedBox(width: 14),
+              Expanded(child: card2),
+              const SizedBox(width: 14),
+              Expanded(child: card3),
+              const SizedBox(width: 14),
+              Expanded(child: card4),
+            ],
           ),
-          const SizedBox(width: 14),
-          _buildMetricCard(
-            title: '发现重复组',
-            value: '$groupCount 组',
-            icon: Icons.difference_rounded,
-            color: AppColors.spotlight,
-          ),
-          const SizedBox(width: 14),
-          _buildMetricCard(
-            title: '预估可释放空间',
-            value: formattedSavings,
-            icon: Icons.cleaning_services_rounded,
-            color: AppColors.success,
-          ),
-          const SizedBox(width: 14),
-          _buildMetricCard(
-            title: '已选待清理',
-            value:
-                '$_totalSelectedDeleteCount 项 · $_formattedSelectedDeleteBytes',
-            icon: Icons.delete_sweep_rounded,
-            color: _totalSelectedDeleteCount > 0
-                ? AppColors.error
-                : AppColors.textTertiary,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -679,69 +698,141 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
     required IconData icon,
     required Color color,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: AppGlass.decoration(radius: 16, elevated: true),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 18),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: AppGlass.decoration(radius: 16, elevated: true),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textTertiary,
-                    ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textTertiary,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildFilterChips() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
-      child: Row(
-        children: [
-          _filterChip('all', '全部类型'),
-          const SizedBox(width: 8),
-          _filterChip('movie', '电影'),
-          const SizedBox(width: 8),
-          _filterChip('series', '剧集/单集'),
-          const SizedBox(width: 8),
-          _filterChip('local', '本地文件'),
-        ],
-      ),
+  Widget _buildToolbar(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 780;
+
+        final filterChips = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _filterChip('all', '全部类型'),
+            const SizedBox(width: 8),
+            _filterChip('movie', '电影'),
+            const SizedBox(width: 8),
+            _filterChip('series', '剧集/单集'),
+            const SizedBox(width: 8),
+            _filterChip('local', '本地文件'),
+          ],
+        );
+
+        final actionButtons = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_totalSelectedDeleteCount > 0) ...[
+              TextButton(
+                onPressed: _clearAllDeleteSelection,
+                child: const Text('取消全选'),
+              ),
+              const SizedBox(width: 8),
+            ],
+            OutlinedButton.icon(
+              key: const ValueKey('dedupe-smart-preselect-btn'),
+              onPressed: _scanning || _groups.isEmpty
+                  ? null
+                  : _selectAllRecommendedDelete,
+              icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+              label: const Text('一键预选冗余'),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.icon(
+              key: const ValueKey('dedupe-batch-delete-btn'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: _scanning || _totalSelectedDeleteCount == 0
+                  ? null
+                  : _batchDeleteSelected,
+              icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+              label: Text('批量清理 ($_totalSelectedDeleteCount 项)'),
+            ),
+          ],
+        );
+
+        if (isNarrow) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: filterChips,
+                ),
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: actionButtons,
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: filterChips,
+                ),
+              ),
+              const SizedBox(width: 16),
+              actionButtons,
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -794,12 +885,16 @@ class _MediaDedupePageState extends ConsumerState<MediaDedupePage> {
               Expanded(
                 child: Row(
                   children: [
-                    Text(
-                      group.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                    Flexible(
+                      child: Text(
+                        group.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
                     if (group.productionYear != null) ...[

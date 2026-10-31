@@ -341,6 +341,58 @@ void main() {
       expect(find.text('服务器'), findsWidgets);
     },
   );
+
+  testWidgets(
+    'sidebar destination hover is circular (48x52) in collapsed rail and pill in extended rail',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final account = _account();
+      final library = _ShellLibraryService();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            serverAuthenticationProvider.overrideWithValue(
+              _ShellAuthenticationService(account),
+            ),
+            mediaLibraryProvider.overrideWithValue(library),
+            searchHistoryStoreProvider.overrideWithValue(
+              MemorySearchHistoryStore(),
+            ),
+            playbackSettingsStoreProvider.overrideWithValue(
+              MemoryPlaybackSettingsStore(),
+            ),
+          ],
+          child: const EmbyPlayerApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // In extended mode, destination width is 192, height is 52
+      final mediaLibFinder = find.byKey(
+        const ValueKey('sidebar-destination-媒体库'),
+      );
+      expect(mediaLibFinder, findsOneWidget);
+      expect(tester.getSize(mediaLibFinder), const Size(192, 52));
+
+      // Collapse the rail
+      await tester.tap(find.byKey(const ValueKey('sidebar-toggle')));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width, 80);
+
+      // In collapsed mode, destination width is strictly 48, height is 52 (circular capsule matching selected indicator)
+      expect(tester.getSize(mediaLibFinder), const Size(48, 52));
+
+      // Re-expand the rail
+      await tester.tap(find.byKey(const ValueKey('sidebar-toggle')));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byKey(const ValueKey('app-sidebar'))).width, 224);
+      expect(tester.getSize(mediaLibFinder), const Size(192, 52));
+    },
+  );
 }
 
 class _ShellAuthenticationService extends ServerAuthenticationService {

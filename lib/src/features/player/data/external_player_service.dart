@@ -290,14 +290,12 @@ class ExternalPlayerService {
             streamQueryKeysLower.contains('token'));
 
     if (isServerUrl) {
-      final token = (
-        httpHeaders['X-Emby-Token'] ??
-        httpHeaders['X-MediaBrowser-Token'] ??
-        httpHeaders['api_key']
-      )?.trim();
-      if (token != null &&
-          token.isNotEmpty &&
-          !token.contains(RegExp(r'\s'))) {
+      final token =
+          (httpHeaders['X-Emby-Token'] ??
+                  httpHeaders['X-MediaBrowser-Token'] ??
+                  httpHeaders['api_key'])
+              ?.trim();
+      if (token != null && token.isNotEmpty && !token.contains(RegExp(r'\s'))) {
         args.add('/headers=X-Emby-Token:$token');
       }
     }

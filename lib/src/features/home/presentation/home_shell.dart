@@ -1024,6 +1024,7 @@ class _AppRailContents extends StatelessWidget {
                             child: _RailDestination(
                               destination: destinations[index],
                               extended: extended,
+                              pillWidth: pillWidth,
                               revealProgress: _motionInterval(
                                 progress,
                                 0.22 + (index * 0.055),
@@ -1182,10 +1183,11 @@ class _LiquidRailIndicatorState extends State<_LiquidRailIndicator>
   }
 }
 
-class _RailDestination extends StatelessWidget {
+class _RailDestination extends StatefulWidget {
   const _RailDestination({
     required this.destination,
     required this.extended,
+    required this.pillWidth,
     required this.revealProgress,
     required this.selected,
     required this.onTap,
@@ -1193,78 +1195,157 @@ class _RailDestination extends StatelessWidget {
 
   final _AppDestination destination;
   final bool extended;
+  final double pillWidth;
   final double revealProgress;
   final bool selected;
   final VoidCallback onTap;
 
   @override
+  State<_RailDestination> createState() => _RailDestinationState();
+}
+
+class _RailDestinationState extends State<_RailDestination> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final destination = widget.destination;
+    final selected = widget.selected;
+    final extended = widget.extended;
+    final onTap = widget.onTap;
+    final revealProgress = widget.revealProgress;
+    final pillWidth = widget.pillWidth;
+
     final item = Semantics(
       button: true,
       selected: selected,
       label: destination.label,
       child: TweenAnimationBuilder<double>(
-        tween: Tween(end: selected ? 1 : 0),
+        tween: Tween(end: selected ? 1.0 : 0.0),
         duration: AppMotion.responsive(context, AppMotion.fast),
         curve: PeekCurves.spatialEnter,
         builder: (context, selection, child) {
+          final hoverAlpha = _isHovered ? 0.95 : 0.68;
           final foreground = Color.lerp(
-            Colors.white.withValues(alpha: 0.68),
+            Colors.white.withValues(alpha: hoverAlpha),
             Colors.white,
             selection,
           );
-          return Material(
-            key: ValueKey('sidebar-destination-${destination.label}'),
-            color: Colors.transparent,
-            borderRadius: AppRadius.borderRadius,
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: AppRadius.borderRadius,
-              hoverColor: Colors.white.withValues(alpha: 0.08),
-              child: SizedBox(
-                height: 52,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 48,
-                      child: Center(
-                        child: Transform.scale(
-                          scale: 1 + (0.08 * selection),
-                          child: Icon(
-                            selected
-                                ? destination.selectedIcon
-                                : destination.icon,
-                            color: foreground,
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _RailReveal(
-                        progress: revealProgress,
-                        child: Text(
-                          destination.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.clip,
-                          style: TextStyle(
-                            color: Color.lerp(
-                              Colors.white.withValues(alpha: 0.72),
-                              Colors.white,
-                              selection,
+          final textHoverAlpha = _isHovered ? 0.95 : 0.72;
+          final textColor = Color.lerp(
+            Colors.white.withValues(alpha: textHoverAlpha),
+            Colors.white,
+            selection,
+          );
+
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: pillWidth,
+              height: 52,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Circular glass hover indicator matching selected pill geometry
+                  Positioned.fill(
+                    child: AnimatedOpacity(
+                      opacity: (_isHovered && !selected) ? 1.0 : 0.0,
+                      duration: AppMotion.responsive(context, AppMotion.fast),
+                      curve: Curves.easeOutCubic,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.white.withValues(alpha: 0.22),
+                                Colors.white.withValues(alpha: 0.08),
+                              ],
                             ),
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.44),
+                              width: 1.1,
+                            ),
+                            borderRadius: AppRadius.borderRadius,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                blurRadius: 16,
+                                spreadRadius: -1,
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                  ],
-                ),
+                  ),
+                  // Bounded interactive Material and InkWell
+                  Positioned.fill(
+                    child: Material(
+                      key: ValueKey('sidebar-destination-${destination.label}'),
+                      color: Colors.transparent,
+                      borderRadius: AppRadius.borderRadius,
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: onTap,
+                        onHover: (hovered) {
+                          if (_isHovered != hovered) {
+                            setState(() => _isHovered = hovered);
+                          }
+                        },
+                        borderRadius: AppRadius.borderRadius,
+                        hoverColor: Colors.transparent,
+                        splashColor: Colors.white.withValues(alpha: 0.12),
+                        highlightColor: Colors.transparent,
+                        child: OverflowBox(
+                          alignment: Alignment.centerLeft,
+                          minWidth: 192,
+                          maxWidth: 192,
+                          minHeight: 52,
+                          maxHeight: 52,
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 48,
+                                child: Center(
+                                  child: Transform.scale(
+                                    scale: 1 + (0.08 * selection),
+                                    child: Icon(
+                                      selected
+                                          ? destination.selectedIcon
+                                          : destination.icon,
+                                      color: foreground,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _RailReveal(
+                                  progress: revealProgress,
+                                  child: Text(
+                                    destination.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.clip,
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontWeight: selected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           );

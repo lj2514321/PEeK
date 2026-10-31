@@ -43,6 +43,7 @@ class _Peek3DCardState extends State<Peek3DCard> {
   void dispose() {
     if (PeekSharedFlight.activeCardToken.value == _cardToken) {
       PeekSharedFlight.activeCardToken.value = null;
+      PeekSharedFlight.cardFlightOpacity.value = 1.0;
     }
     _pointerAlignment.dispose();
     super.dispose();
@@ -105,9 +106,32 @@ class _Peek3DCardState extends State<Peek3DCard> {
     if (AppMotion.isTest) {
       return GestureDetector(
         onTap: widget.onTap,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          child: widget.child,
+        child: ValueListenableBuilder<Object?>(
+          valueListenable: PeekSharedFlight.activeCardToken,
+          builder: (context, activeToken, child) {
+            if (activeToken != _cardToken) return child!;
+            return ValueListenableBuilder<double>(
+              valueListenable: PeekSharedFlight.cardFlightOpacity,
+              builder: (context, opacity, c) {
+                if (opacity <= 0.001) {
+                  return Visibility(
+                    visible: false,
+                    maintainSize: true,
+                    maintainAnimation: true,
+                    maintainState: true,
+                    child: c!,
+                  );
+                }
+                if (opacity >= 0.999) return c!;
+                return Opacity(opacity: opacity.clamp(0.0, 1.0), child: c!);
+              },
+              child: child,
+            );
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            child: widget.child,
+          ),
         ),
       );
     }
@@ -198,13 +222,33 @@ class _Peek3DCardState extends State<Peek3DCard> {
                 },
                 child: ValueListenableBuilder<Object?>(
                   valueListenable: PeekSharedFlight.activeCardToken,
-                  builder: (context, activeToken, cardContent) => Visibility(
-                    visible: activeToken != _cardToken,
-                    maintainSize: true,
-                    maintainAnimation: false,
-                    maintainState: true,
-                    child: cardContent!,
-                  ),
+                  builder: (context, activeToken, cardContent) {
+                    if (activeToken != _cardToken) {
+                      return cardContent!;
+                    }
+                    return ValueListenableBuilder<double>(
+                      valueListenable: PeekSharedFlight.cardFlightOpacity,
+                      builder: (context, opacity, child) {
+                        if (opacity <= 0.001) {
+                          return Visibility(
+                            visible: false,
+                            maintainSize: true,
+                            maintainAnimation: true,
+                            maintainState: true,
+                            child: child!,
+                          );
+                        }
+                        if (opacity >= 0.999) {
+                          return child!;
+                        }
+                        return Opacity(
+                          opacity: opacity.clamp(0.0, 1.0),
+                          child: child!,
+                        );
+                      },
+                      child: cardContent,
+                    );
+                  },
                   child: RepaintBoundary(
                     child: ClipRRect(borderRadius: radius, child: widget.child),
                   ),

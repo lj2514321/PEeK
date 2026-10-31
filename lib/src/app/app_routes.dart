@@ -58,16 +58,17 @@ abstract final class AppRoutes {
         // reserved for its own poster, so the card's artwork becomes the page's
         // poster instead of being thrown away.
         originRect: PeekMotionOrigin.lastTapRect,
+        originClipFractions: PeekMotionOrigin.lastTapClipFractions,
         originCardToken: PeekMotionOrigin.lastTapCardToken,
         destination: (screen) => DetailHeroLayout.of(screen).posterRect,
         sharedPoster: item.imageUri == null && item.backdropUri == null
             ? null
-            : DetailPosterArt(item: item),
+            : DetailPosterArt(item: item, decorated: false),
         // The card's own look. The hero carousel darkens its edges by default and
         // passes that on; rails (continue watching) draw the bare still, so they
         // must not get the vignette or the flight would end up darker than the
         // card it is landing on.
-        sourceArtwork: item.backdropUri == null
+        sourceArtwork: (item.backdropUri ?? item.imageUri) == null
             ? null
             : Stack(
                 fit: StackFit.expand,
@@ -75,8 +76,10 @@ abstract final class AppRoutes {
                   DetailPosterArt(
                     item: item,
                     decorated: false,
-                    uri: item.backdropUri,
-                    kind: PeekMediaImageKind.backdrop,
+                    uri: item.backdropUri ?? item.imageUri,
+                    kind: item.backdropUri != null
+                        ? PeekMediaImageKind.backdrop
+                        : PeekMediaImageKind.poster,
                   ),
                   if (heroVignette) const HomeHeroVignette(),
                 ],

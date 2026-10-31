@@ -85,10 +85,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.requestedStartIndexes, [0]);
-    await tester.drag(
-      find.byType(SingleChildScrollView),
-      const Offset(0, -10000),
-    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -10000));
     await tester.pumpAndSettle();
 
     expect(service.requestedStartIndexes, contains(60));
@@ -159,13 +156,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final initialGrid = tester.widget<GridView>(find.byType(GridView));
+    final initialGrid = tester.widget<SliverGrid>(find.byType(SliverGrid));
     final initialColumns =
         (initialGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
             .crossAxisCount;
     await tester.tap(find.byTooltip('紧凑视图'));
     await tester.pump();
-    final compactGrid = tester.widget<GridView>(find.byType(GridView));
+    final compactGrid = tester.widget<SliverGrid>(find.byType(SliverGrid));
     expect(
       (compactGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
           .crossAxisCount,
@@ -337,14 +334,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Scroll down
-      await tester.drag(
-        find.byType(SingleChildScrollView),
-        const Offset(0, -600),
-      );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
       await tester.pumpAndSettle();
 
-      final scrollable = tester.widget<SingleChildScrollView>(
-        find.byType(SingleChildScrollView),
+      final scrollable = tester.widget<CustomScrollView>(
+        find.byType(CustomScrollView),
       );
       final controller = scrollable.controller!;
       final offsetBeforeOpen = controller.offset;
@@ -362,7 +356,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Back in media library, verify scroll position was preserved
-      expect(find.text('晚上好，Alex'), findsOneWidget);
+      expect(find.byType(MediaLibraryPage), findsOneWidget);
       expect(controller.offset, closeTo(offsetBeforeOpen, 2.0));
       expect(
         find.byKey(const ValueKey('media-card-artwork-item-5')),

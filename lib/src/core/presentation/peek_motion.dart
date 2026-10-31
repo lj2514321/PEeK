@@ -7,6 +7,7 @@ import 'package:embyplayer/src/core/presentation/peek_anchor_transition.dart';
 import 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
 import 'package:embyplayer/src/core/presentation/peek_spring.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 export 'package:embyplayer/src/core/presentation/peek_anchor_transition.dart';
 export 'package:embyplayer/src/core/presentation/peek_cascading_sheet.dart';
@@ -24,6 +25,7 @@ abstract final class PeekMotionOrigin {
   /// The anchor-morph transition starts as this rectangle, so it must come from
   /// the actual card that was pressed rather than a ratio of the screen.
   static Rect? _lastTapRect;
+  static EdgeInsets _lastTapClipFractions = EdgeInsets.zero;
 
   /// Identity token of the card that recorded the tap, so the source card can
   /// hide its stationary copy while the shared poster is in flight.
@@ -39,6 +41,16 @@ abstract final class PeekMotionOrigin {
   static final Stopwatch _sinceTap = Stopwatch();
 
   static Alignment get lastTapAlignment => _lastTapAlignment;
+
+  /// Fractional insets clipped off by ancestor viewports at tap time.
+  static EdgeInsets get lastTapClipFractions {
+    if (!_sinceTap.isRunning ||
+        _sinceTap.elapsed > _rectLifetime ||
+        _lastTapRect == null) {
+      return EdgeInsets.zero;
+    }
+    return _lastTapClipFractions;
+  }
 
   /// The pressed widget's rect, or null when the last tap is not recent enough.
   static Rect? get lastTapRect {
@@ -85,6 +97,7 @@ abstract final class PeekMotionOrigin {
     final isSamePointer = pointer != null && pointer == _activeCardPointer;
     if (!recentCardTap && !isSamePointer) {
       _lastTapRect = null;
+      _lastTapClipFractions = EdgeInsets.zero;
       _lastTapCardToken = null;
       _sinceTap.stop();
       _sinceTap.reset();
@@ -129,7 +142,62 @@ abstract final class PeekMotionOrigin {
               _lastTapRect!.width * _lastTapRect!.height) {
         return;
       }
+      Rect visibleRect = candidate;
+      if (size != null) {
+        visibleRect = visibleRect.intersect(Offset.zero & size);
+      }
+      RenderObject? ancestor = box.parent;
+      while (ancestor != null) {
+        if (ancestor is RenderViewportBase) {
+          final ancestorBox = ancestor as RenderBox;
+          if (ancestorBox.hasSize) {
+            final vpRect =
+                ancestorBox.localToGlobal(Offset.zero) & ancestorBox.size;
+            visibleRect = visibleRect.intersect(vpRect);
+          }
+        } else if (ancestor is RenderClipRect || ancestor is RenderClipRRect) {
+          final ancestorBox = ancestor as RenderBox;
+          if (ancestorBox.hasSize) {
+            final clipRect =
+                ancestorBox.localToGlobal(Offset.zero) & ancestorBox.size;
+            visibleRect = visibleRect.intersect(clipRect);
+          }
+        }
+        ancestor = ancestor.parent;
+      }
+
+      EdgeInsets clipFractions = EdgeInsets.zero;
+      if (candidate.width > 0 && candidate.height > 0 && !visibleRect.isEmpty) {
+        final leftFrac = ((visibleRect.left - candidate.left) / candidate.width)
+            .clamp(0.0, 1.0);
+        final topFrac = ((visibleRect.top - candidate.top) / candidate.height)
+            .clamp(0.0, 1.0);
+        final rightFrac =
+            ((candidate.right - visibleRect.right) / candidate.width).clamp(
+              0.0,
+              1.0,
+            );
+        final bottomFrac =
+            ((candidate.bottom - visibleRect.bottom) / candidate.height).clamp(
+              0.0,
+              1.0,
+            );
+
+        if (leftFrac > 0.005 ||
+            topFrac > 0.005 ||
+            rightFrac > 0.005 ||
+            bottomFrac > 0.005) {
+          clipFractions = EdgeInsets.fromLTRB(
+            leftFrac,
+            topFrac,
+            rightFrac,
+            bottomFrac,
+          );
+        }
+      }
+
       _lastTapRect = candidate;
+      _lastTapClipFractions = clipFractions;
       _lastTapCardToken = cardToken;
       _sinceTap
         ..reset()
@@ -232,7 +300,9 @@ class _PeekStaggeredGridItemState extends State<PeekStaggeredGridItem>
     super.didUpdateWidget(oldWidget);
     if (AppMotion.isTest) return;
     if (oldWidget.columns != widget.columns) {
-      _triggerStaggeredWave();
+      if (!_settled) {
+        _triggerStaggeredWave();
+      }
     }
   }
 
@@ -601,6 +671,7 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
     super.settings,
     Alignment? originAlignment,
     Rect? originRect,
+    EdgeInsets? originClipFractions,
     Object? originCardToken,
     Rect Function(Size screen)? destination,
     Widget? sharedPoster,
@@ -617,6 +688,8 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
            final anchor = originAlignment ?? PeekMotionOrigin.lastTapAlignment;
            final resolvedOriginRect =
                originRect ?? PeekMotionOrigin.lastTapRect;
+           final resolvedClipFractions =
+               originClipFractions ?? PeekMotionOrigin.lastTapClipFractions;
 
            // A card is only allowed to fly when it is the same shape as the
            // poster slot. Anything else has to change the frame's aspect, and
@@ -639,6 +712,7 @@ class PeekSpatialPageRoute<T> extends PageRouteBuilder<T> {
                animation: animation,
                secondaryAnimation: secondaryAnimation,
                originRect: resolvedOriginRect,
+               originClipFractions: resolvedClipFractions,
                originCardToken:
                    originCardToken ?? PeekMotionOrigin.lastTapCardToken,
                destination: destination ?? (s) => Offset.zero & s,

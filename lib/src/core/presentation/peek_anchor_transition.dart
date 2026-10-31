@@ -30,6 +30,15 @@ class PeekSharedFlight extends InheritedWidget {
     null,
   );
 
+  /// Global notifier holding the opacity of the source card during flight (0.0 .. 1.0).
+  ///
+  /// Instead of abruptly popping visibility at the very end of the transition,
+  /// the source card smoothly fades in while the flyer fades out DURING the morph flight,
+  /// completing the handoff before the animation finishes.
+  static final ValueNotifier<double> cardFlightOpacity = ValueNotifier<double>(
+    1.0,
+  );
+
   final ValueListenable<bool> flying;
   final Animation<double>? routeAnimation;
   final ValueNotifier<double>? scrollOffset;
@@ -88,6 +97,7 @@ class PeekAnchorMorphTransition extends StatefulWidget {
     this.poster,
     this.source,
     this.originCardToken,
+    this.originClipFractions = EdgeInsets.zero,
   });
 
   /// Drives the flight, 0 = on the card, 1 = in the poster slot.
@@ -114,6 +124,11 @@ class PeekAnchorMorphTransition extends StatefulWidget {
   /// Optional identity token of the pressed card so the source grid can hide
   /// the stationary copy while the shared poster is in flight.
   final Object? originCardToken;
+
+  /// When the origin card was partially clipped (e.g. at the edge of a horizontal rail),
+  /// these fractional insets (0..1) define what was clipped out so that the flyer can
+  /// smoothly retract to and expand from the exact visible ratio.
+  final EdgeInsets originClipFractions;
 
   final Widget child;
 
@@ -186,10 +201,186 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     final token = widget.originCardToken;
     if (token != null && PeekSharedFlight.activeCardToken.value == token) {
       PeekSharedFlight.activeCardToken.value = null;
+      PeekSharedFlight.cardFlightOpacity.value = 1.0;
     }
     _flying.dispose();
     _scrollOffset.dispose();
     super.dispose();
+  }
+
+  Rect get _visibleOriginRect {
+    if (widget.originClipFractions == EdgeInsets.zero) {
+      return widget.originRect;
+    }
+    final insets = widget.originClipFractions;
+    final w = widget.originRect.width;
+    final h = widget.originRect.height;
+    return Rect.fromLTRB(
+      widget.originRect.left + w * insets.left,
+      widget.originRect.top + h * insets.top,
+      widget.originRect.right - w * insets.right,
+      widget.originRect.bottom - h * insets.bottom,
+    );
+  }
+
+  /// When a card was partially clipped at an edge, the artwork inside aligns
+  /// to the visible edge so that the visible portion is not shifted or squashed.
+  Alignment get _edgeAlignment {
+    final insets = widget.originClipFractions;
+    if (insets == EdgeInsets.zero) return Alignment.center;
+    final x = insets.right > 0.005 ? -1.0 : (insets.left > 0.005 ? 1.0 : 0.0);
+    final y = insets.bottom > 0.005 ? -1.0 : (insets.top > 0.005 ? 1.0 : 0.0);
+    return Alignment(x, y);
+  }
+
+  /// Computes the shape adaptation progress (0.0 = origin edge shape, 1.0 = destination full shape).
+  ///
+  /// Shape deformation progresses smoothly in coordination with the flight, allowing
+  /// the flyer to travel distortion-free and finish shape adaptation before landing.
+  double _computeShapeProgress({required double raw, required bool isReverse}) {
+    if (widget.originClipFractions == EdgeInsets.zero) {
+      return 1.0;
+    }
+
+    const double earlyCutoff = 0.35;
+
+    if (isReverse) {
+      // In retract: pop progress p goes 0.0 -> 1.0.
+      // Shape adapts from 1.0 (destination) to 0.0 (origin edge ratio) in early stage (p in 0.0..0.35).
+      // Fulfills: "不要在动画末期再适配形变，应该在前期".
+      final p = (1.0 - raw).clamp(0.0, 1.0);
+      final t = (p / earlyCutoff).clamp(0.0, 1.0);
+      final curvedT = Curves.easeInOutCubic.transform(t);
+      return 1.0 - curvedT;
+    } else {
+      // In expand: forward progress raw goes 0.0 -> 1.0.
+      // Shape blooms from 0.0 (origin edge ratio) to 1.0 (destination) in early stage (raw in 0.0..0.35).
+      final t = (raw / earlyCutoff).clamp(0.0, 1.0);
+      final curvedT = Curves.easeInOutCubic.transform(t);
+      return curvedT;
+    }
+  }
+
+  /// Calculates the flying poster's bounding box where spatial movement follows [spatialE]
+  /// and edge shape / aspect ratio adaptation completes early via [shapeE].
+  Rect _computeFlyingFrame({
+    required Rect destination,
+    required double spatialE,
+    required double shapeE,
+  }) {
+    final origin = _visibleOriginRect;
+    if (widget.originClipFractions == EdgeInsets.zero) {
+      return Rect.lerp(origin, destination, spatialE) ?? destination;
+    }
+
+    final height = ui.lerpDouble(origin.height, destination.height, spatialE)!;
+    final originAspect = origin.width / origin.height;
+    final destAspect = destination.width / destination.height;
+    final currentAspect = ui.lerpDouble(originAspect, destAspect, shapeE)!;
+    final width = height * currentAspect;
+
+    final insets = widget.originClipFractions;
+    final double left;
+    if (insets.left > 0.005) {
+      final right = ui.lerpDouble(origin.right, destination.right, spatialE)!;
+      left = right - width;
+    } else {
+      left = ui.lerpDouble(origin.left, destination.left, spatialE)!;
+    }
+
+    final double top;
+    if (insets.top > 0.005) {
+      final bottom = ui.lerpDouble(
+        origin.bottom,
+        destination.bottom,
+        spatialE,
+      )!;
+      top = bottom - height;
+    } else {
+      top = ui.lerpDouble(origin.top, destination.top, spatialE)!;
+    }
+
+    return Rect.fromLTWH(left, top, width, height);
+  }
+
+  /// The corners touching a clipped viewport edge remain flat (radius 0) at origin,
+  /// and smoothly interpolate to full corner radius at destination via [shapeE].
+  BorderRadius _flyingBorderRadius(double shapeE) {
+    final insets = widget.originClipFractions;
+    final baseRadius = AppRadius.value;
+    if (insets == EdgeInsets.zero) {
+      return BorderRadius.circular(baseRadius);
+    }
+    final tl = (insets.left > 0.005 || insets.top > 0.005)
+        ? Radius.circular(ui.lerpDouble(0.0, baseRadius, shapeE)!)
+        : Radius.circular(baseRadius);
+    final bl = (insets.left > 0.005 || insets.bottom > 0.005)
+        ? Radius.circular(ui.lerpDouble(0.0, baseRadius, shapeE)!)
+        : Radius.circular(baseRadius);
+    final tr = (insets.right > 0.005 || insets.top > 0.005)
+        ? Radius.circular(ui.lerpDouble(0.0, baseRadius, shapeE)!)
+        : Radius.circular(baseRadius);
+    final br = (insets.right > 0.005 || insets.bottom > 0.005)
+        ? Radius.circular(ui.lerpDouble(0.0, baseRadius, shapeE)!)
+        : Radius.circular(baseRadius);
+
+    return BorderRadius.only(
+      topLeft: tl,
+      bottomLeft: bl,
+      topRight: tr,
+      bottomRight: br,
+    );
+  }
+
+  /// Computes the flying poster's opacity throughout the flight.
+  ///
+  /// In retract (isReverse):
+  /// - Hand-off from page poster slot: raw in [0.90, 0.999]
+  /// - Mid-flight morphing travel: fully opaque (raw in [0.20, 0.90])
+  /// - Final smooth landing onto the origin card: fades out (raw in [0.02, 0.20]),
+  ///   completing hand-off smoothly by raw=0.02 without any late jarring pop.
+  double _computeFlyerOpacity({required double raw, required bool isReverse}) {
+    if (isReverse) {
+      if (raw <= 0.02) {
+        return 0.0;
+      }
+      if (raw > 0.90) {
+        final t = ((0.999 - raw) / (0.999 - 0.90)).clamp(0.0, 1.0);
+        return t * t * (3 - 2 * t);
+      }
+      if (raw >= 0.20) {
+        return 1.0;
+      }
+      final t = ((raw - 0.02) / (0.20 - 0.02)).clamp(0.0, 1.0);
+      return t * t * (3 - 2 * t);
+    } else {
+      if (raw < 0.90) {
+        return 1.0;
+      }
+      final t = ((0.999 - raw) / (0.999 - 0.90)).clamp(0.0, 1.0);
+      return t * t * (3 - 2 * t);
+    }
+  }
+
+  /// Computes the source card's opacity while in flight.
+  ///
+  /// In retract (isReverse):
+  /// - The source card smoothly fades in during morph (raw in [0.02, 0.20]),
+  ///   reaching 100% full opacity by raw=0.02 well before the animation terminates.
+  double _computeCardFlightOpacity({
+    required double raw,
+    required bool isReverse,
+  }) {
+    if (isReverse) {
+      if (raw <= 0.02) return 1.0;
+      if (raw >= 0.20) return 0.0;
+      final t = ((0.20 - raw) / (0.20 - 0.02)).clamp(0.0, 1.0);
+      return t * t * (3 - 2 * t);
+    } else {
+      if (raw >= 0.24) return 0.0;
+      final t = ((0.24 - raw) / 0.24).clamp(0.0, 1.0);
+      return t * t * (3 - 2 * t);
+    }
   }
 
   bool get _isReverseScrolledOut =>
@@ -200,22 +391,37 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   /// The page hides its poster for exactly as long as the flight is visible.
   void _syncFlying() {
     final raw = widget.animation.value;
+    final isReverse = widget.animation.status == AnimationStatus.reverse;
     final flying = raw < 0.999 && !_isReverseScrolledOut;
     if (_flying.value != flying) _flying.value = flying;
 
-    // The pressed card stays hidden while the flight is up, so the eye follows
-    // one piece of artwork instead of two.
+    // The pressed card stays hidden while the flight is up, but cross-fades
+    // smoothly during morph so that handoff is complete before the animation finishes.
     final token = widget.originCardToken;
     if (token != null) {
       final activeInAir =
           flying &&
           widget.poster != null &&
           (raw > 0.001 || widget.animation.status == AnimationStatus.forward);
-      if (activeInAir && PeekSharedFlight.activeCardToken.value != token) {
-        PeekSharedFlight.activeCardToken.value = token;
-      } else if (!activeInAir &&
-          PeekSharedFlight.activeCardToken.value == token) {
-        PeekSharedFlight.activeCardToken.value = null;
+      if (activeInAir) {
+        if (PeekSharedFlight.activeCardToken.value != token) {
+          PeekSharedFlight.activeCardToken.value = token;
+        }
+        final cardOpacity = _computeCardFlightOpacity(
+          raw: raw,
+          isReverse: isReverse,
+        );
+        if ((PeekSharedFlight.cardFlightOpacity.value - cardOpacity).abs() >
+            0.005) {
+          PeekSharedFlight.cardFlightOpacity.value = cardOpacity;
+        }
+      } else {
+        if (PeekSharedFlight.activeCardToken.value == token) {
+          PeekSharedFlight.activeCardToken.value = null;
+        }
+        if (PeekSharedFlight.cardFlightOpacity.value != 1.0) {
+          PeekSharedFlight.cardFlightOpacity.value = 1.0;
+        }
       }
     }
   }
@@ -252,7 +458,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                         1.0 - raw,
                       )
                 : PeekAnchorMorphTransition.morphCurve.transform(raw);
-            final startRadius = widget.originRect.width < 100
+            final startRadius = _visibleOriginRect.width < 100
                 ? 12.0
                 : AppRadius.value;
             final radius =
@@ -260,7 +466,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                 AppRadius.value;
             final fullRect = Offset.zero & screen;
             final currentRect =
-                Rect.lerp(widget.originRect, fullRect, e) ?? fullRect;
+                Rect.lerp(_visibleOriginRect, fullRect, e) ?? fullRect;
 
             final flying = raw < 0.999 && !_isReverseScrolledOut;
             final destination = _scrollOffset.value > 0.5
@@ -285,7 +491,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                         color: Colors.black.withValues(alpha: 0.44 * e),
                       ),
                     ),
-                  if (e < 0.85)
+                  if (!isReverse && e < 0.85)
                     Positioned.fromRect(
                       key: const ValueKey('anchor-shadow'),
                       rect: currentRect,
@@ -308,7 +514,7 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                       ),
                     ),
                   KeyedSubtree(key: const ValueKey('anchor-page'), child: page),
-                  if (e < 0.85)
+                  if (!isReverse && e < 0.85)
                     Positioned.fromRect(
                       key: const ValueKey('anchor-border'),
                       rect: currentRect,
@@ -326,8 +532,22 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
                         ),
                       ),
                     ),
-                  if (flying && widget.poster != null)
-                    _buildFlyingPoster(destination: destination, e: e),
+                  if (flying &&
+                      widget.poster != null &&
+                      (!isReverse || raw > 0.02))
+                    _buildFlyingPoster(
+                      destination: destination,
+                      spatialE: e,
+                      shapeE: _computeShapeProgress(
+                        raw: raw,
+                        isReverse: isReverse,
+                      ),
+                      flyerOpacity: _computeFlyerOpacity(
+                        raw: raw,
+                        isReverse: isReverse,
+                      ),
+                      isReverse: isReverse,
+                    ),
                 ],
               ),
             );
@@ -380,50 +600,89 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
     // Same shape at every value: `Opacity(1)` and `Clip.none` are free, while
     // swapping this subtree for the bare child re-inflated the page — the whole
     // detail page, measured at 19 ms — on the frame the flight landed.
+    if (isReverse && opacity <= 0.001) {
+      return const SizedBox.shrink();
+    }
+    final clipper = isReverse
+        ? null
+        : _AnchorContainerClipper(
+            origin: _visibleOriginRect,
+            progress: e,
+            radius: radius,
+          );
+    final content = Stack(
+      fit: StackFit.expand,
+      children: [
+        if (!isReverse) const ColoredBox(color: Color(0xFF0A0E17)),
+        Opacity(opacity: opacity, child: child),
+      ],
+    );
+    if (clipper == null) {
+      return content;
+    }
     return ClipRRect(
-      clipper: _AnchorContainerClipper(
-        origin: widget.originRect,
-        progress: e,
-        radius: radius,
-      ),
+      clipper: clipper,
       clipBehavior: e >= 0.999 ? Clip.none : Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          const ColoredBox(color: Color(0xFF0A0E17)),
-          Opacity(opacity: opacity, child: child),
-        ],
-      ),
+      child: content,
     );
   }
 
-  Widget _buildFlyingPoster({required Rect destination, required double e}) {
-    // Back to a container that grows out of the pressed card: the frame lerps
-    // from the card's rectangle to the poster slot, so the shape the eye
-    // follows is the same one the page's own clip grows out of. It crops — a
-    // 2:3 poster cannot fill a 16:9 frame — but the artwork blend below covers
-    // exactly that, because at the start the frame is filled by the card's own
-    // asset and the poster's crop is invisible behind it.
-    final frame = Rect.lerp(widget.originRect, destination, e) ?? destination;
+  Widget _buildFlyingPoster({
+    required Rect destination,
+    required double spatialE,
+    required double shapeE,
+    required double flyerOpacity,
+    required bool isReverse,
+  }) {
+    if (flyerOpacity <= 0.001) {
+      return const SizedBox.shrink();
+    }
 
-    final rawBlend = ((e - 0.12) / 0.48).clamp(0.0, 1.0);
+    // Spatial position follows spatialE; aspect ratio and edge flattening adapt
+    // in the early stage via shapeE so that landing and travel are distortion-free.
+    final frame = _computeFlyingFrame(
+      destination: destination,
+      spatialE: spatialE,
+      shapeE: shapeE,
+    );
+
+    final double rawBlend;
+    if (isReverse) {
+      // In retract: spatialE goes from 1.0 down to 0.0.
+      // The cross-fade ("渐变") completes DURING the morphing flight:
+      // Starting from spatialE = 0.85 and completing at spatialE = 0.25 (blend = 0.0).
+      // Fulfills: "渐变在形变过程中应该就完成了，而不是形变动画结束或即将结束再突然渐变".
+      rawBlend = ((spatialE - 0.25) / (0.85 - 0.25)).clamp(0.0, 1.0);
+    } else {
+      rawBlend = ((spatialE - 0.15) / 0.52).clamp(0.0, 1.0);
+    }
     final blend = rawBlend * rawBlend * (3 - 2 * rawBlend);
+
+    Widget posterContent = ClipRRect(
+      borderRadius: _flyingBorderRadius(shapeE),
+      child: RepaintBoundary(
+        child: _artwork(
+          blend: blend,
+          destination: destination,
+          frame: frame,
+          alignment: _edgeAlignment,
+          wide: widget.originRect.width > widget.originRect.height,
+          shapeE: shapeE,
+        ),
+      ),
+    );
+
+    if (flyerOpacity < 0.999) {
+      posterContent = Opacity(
+        opacity: flyerOpacity.clamp(0.0, 1.0),
+        child: posterContent,
+      );
+    }
 
     return Positioned.fromRect(
       key: const Key('flying-poster-box'),
       rect: frame,
-      child: IgnorePointer(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.value),
-          child: RepaintBoundary(
-            child: _artwork(
-              blend: blend,
-              destination: destination,
-              wide: widget.originRect.width > widget.originRect.height,
-            ),
-          ),
-        ),
-      ),
+      child: IgnorePointer(child: posterContent),
     );
   }
 
@@ -432,21 +691,23 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
   /// The two pieces are laid out differently on purpose. The page's poster is
   /// laid out at the poster slot's size and scaled to fill the frame, so it is
   /// exact on the frame the flight ends. The card's own still has to be exact on
-  /// the frame the flight *starts*, so it fills the frame directly — the same
-  /// rectangle and the same `cover` crop the card itself was drawing. Blending
-  /// two crops of two different assets is the point: the picture changes over
-  /// the middle of the flight, not at either end.
+  /// the frame the flight *starts*. When the origin card was clipped at an edge,
+  /// the source still is laid out with its full unclipped width and offset so the
+  /// visible portion matches the edge card exactly without centering distortion.
   Widget _artwork({
     required double blend,
     required Rect destination,
+    required Rect frame,
+    required Alignment alignment,
     required bool wide,
+    required double shapeE,
   }) {
     final poster = widget.poster;
     final source = widget.source;
     if (source == null || poster == null || !wide) {
       return FittedBox(
         fit: BoxFit.cover,
-        alignment: Alignment.center,
+        alignment: alignment,
         child: SizedBox(
           width: destination.width,
           height: destination.height,
@@ -454,16 +715,53 @@ class _PeekAnchorMorphTransitionState extends State<PeekAnchorMorphTransition> {
         ),
       );
     }
+
+    final insets = widget.originClipFractions;
+    final hasClip = insets != EdgeInsets.zero;
+
+    Widget renderedSource;
+    if (hasClip && shapeE < 0.999) {
+      // The edge card on the rail has unclipped dimensions larger than the visible frame.
+      // Position the source artwork with the exact offset so inside the clipped flyer
+      // it reveals the exact same slice of the still that was visible on the rail!
+      final fullW = (1.0 - insets.left - insets.right) > 0.001
+          ? frame.width / (1.0 - insets.left - insets.right)
+          : frame.width;
+      final fullH = (1.0 - insets.top - insets.bottom) > 0.001
+          ? frame.height / (1.0 - insets.top - insets.bottom)
+          : frame.height;
+      final currentW = ui.lerpDouble(fullW, frame.width, shapeE)!;
+      final currentH = ui.lerpDouble(fullH, frame.height, shapeE)!;
+      final currentLeft = ui.lerpDouble(-fullW * insets.left, 0.0, shapeE)!;
+      final currentTop = ui.lerpDouble(-fullH * insets.top, 0.0, shapeE)!;
+
+      renderedSource = Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: currentLeft,
+            top: currentTop,
+            width: currentW,
+            height: currentH,
+            child: source,
+          ),
+        ],
+      );
+    } else {
+      renderedSource = source;
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: [
         // Fills the frame: matches the pressed card exactly at the start.
-        Opacity(opacity: 1 - blend, child: source),
+        Opacity(opacity: (1 - blend).clamp(0.0, 1.0), child: renderedSource),
         Opacity(
-          opacity: blend,
+          opacity: blend.clamp(0.0, 1.0),
           child: FittedBox(
             fit: BoxFit.cover,
-            alignment: Alignment.center,
+            alignment: alignment,
             child: SizedBox(
               width: destination.width,
               height: destination.height,

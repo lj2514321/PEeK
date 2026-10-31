@@ -54,7 +54,9 @@ abstract final class AppMotion {
   static const enterCurve = Curves.easeOutCubic;
   static const exitCurve = Curves.easeInCubic;
 
-  static final bool isTest = Platform.environment.containsKey('FLUTTER_TEST');
+  static bool? debugOverrideIsTest;
+  static bool get isTest =>
+      debugOverrideIsTest ?? Platform.environment.containsKey('FLUTTER_TEST');
 
   static Duration responsive(BuildContext context, Duration duration) {
     return MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;

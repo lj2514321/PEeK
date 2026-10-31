@@ -141,7 +141,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
       _routeStatusListener = (status) {
         if (status == AnimationStatus.completed) {
           _cleanRouteListener();
-          _scheduleHydration();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _scheduleHydration();
+          });
         }
       };
       animation.addStatusListener(_routeStatusListener!);
@@ -331,7 +333,9 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                 .firstOrNull ??
             seasonEpisodes.where((ep) => !ep.played).firstOrNull ??
             _episodes.where((ep) => !ep.played).firstOrNull ??
-            (seasonEpisodes.isNotEmpty ? seasonEpisodes.first : _episodes.first);
+            (seasonEpisodes.isNotEmpty
+                ? seasonEpisodes.first
+                : _episodes.first);
       }
     }
     setState(() {
@@ -733,7 +737,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                                   // one frame later. Splitting it is what keeps
                                   // every frame under budget.
                                   _FlightStaged(
-                                    at: 0.20,
+                                    frameDelay: 0,
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
@@ -778,7 +782,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                                     ),
                                   ),
                                   _FlightStaged(
-                                    at: 0.34,
+                                    frameDelay: 1,
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
@@ -807,7 +811,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                                     ),
                                   ),
                                   _FlightStaged(
-                                    at: 0.46,
+                                    frameDelay: 2,
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
@@ -1272,7 +1276,7 @@ class _DetailHeroPoster extends StatelessWidget {
       builder: (context, flying, child) => Visibility(
         visible: !flying,
         maintainSize: true,
-        maintainAnimation: false,
+        maintainAnimation: true,
         maintainState: true,
         child: child!,
       ),
@@ -1311,18 +1315,11 @@ class _FlightChoreographedEntrance extends StatelessWidget {
 
         final progress = ((raw - start) / (end - start)).clamp(0.0, 1.0);
         final t = const Cubic(0.22, 1.0, 0.36, 1.0).transform(progress);
-        if (t <= 0.001) {
-          return Visibility(
-            visible: false,
-            maintainSize: true,
-            maintainAnimation: false,
-            maintainState: true,
-            child: content!,
-          );
-        }
         return Transform.translate(
           offset: Offset(0.0, slideY * (1.0 - t)),
-          child: t >= 0.999 ? content! : Opacity(opacity: t, child: content),
+          child: RepaintBoundary(
+            child: t >= 0.999 ? content! : Opacity(opacity: t, child: content),
+          ),
         );
       },
       child: child,
@@ -1338,23 +1335,81 @@ class _FlightChoreographedEntrance extends StatelessWidget {
 /// this machine — is a dropped frame wherever it lands. Spreading the groups
 /// over the flight puts each one in a frame of its own, and none of them is
 /// visible before its `at` anyway: they sit below a hero that is still flying.
-class _FlightStaged extends StatelessWidget {
-  const _FlightStaged({required this.at, required this.child});
+class _FlightStaged extends StatefulWidget {
+  const _FlightStaged({this.frameDelay = 0, required this.child});
 
-  final double at;
+  final int frameDelay;
   final Widget child;
 
   @override
+  State<_FlightStaged> createState() => _FlightStagedState();
+}
+
+class _FlightStagedState extends State<_FlightStaged> {
+  bool _mounted = false;
+  Animation<double>? _routeAnimation;
+  AnimationStatusListener? _statusListener;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (AppMotion.isTest) {
+      _mounted = true;
+      return;
+    }
+    final anim = PeekSharedFlight.routeAnimationOf(context);
+    if (anim == null || anim.status == AnimationStatus.completed) {
+      _triggerMount();
+      return;
+    }
+    if (_routeAnimation != anim) {
+      if (_routeAnimation != null && _statusListener != null) {
+        _routeAnimation!.removeStatusListener(_statusListener!);
+      }
+      _routeAnimation = anim;
+      _statusListener = (status) {
+        if (!_mounted && mounted) {
+          if (status == AnimationStatus.completed ||
+              status == AnimationStatus.reverse) {
+            _triggerMount();
+            _routeAnimation?.removeStatusListener(_statusListener!);
+            _statusListener = null;
+          }
+        }
+      };
+      anim.addStatusListener(_statusListener!);
+    }
+  }
+
+  void _triggerMount() {
+    if (_mounted || !mounted) return;
+    // Spread mounting across idle post-frame callbacks so the hand-off frame is never overloaded
+    void schedule(int remaining) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _mounted) return;
+        if (remaining <= 0) {
+          setState(() => _mounted = true);
+        } else {
+          schedule(remaining - 1);
+        }
+      });
+    }
+
+    schedule(widget.frameDelay);
+  }
+
+  @override
+  void dispose() {
+    if (_routeAnimation != null && _statusListener != null) {
+      _routeAnimation!.removeStatusListener(_statusListener!);
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (AppMotion.isTest) return child;
-    final animation = PeekSharedFlight.routeAnimationOf(context);
-    if (animation == null) return child;
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, staged) =>
-          animation.value >= at ? staged! : const SizedBox.shrink(),
-      child: child,
-    );
+    if (_mounted || AppMotion.isTest) return widget.child;
+    return const SizedBox.shrink();
   }
 }
 
